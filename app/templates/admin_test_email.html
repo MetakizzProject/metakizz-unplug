@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Test Emails — Admin{% endblock %}
+
+{% block nav_right %}
+<a href="/admin/" class="text-sm text-gray-400 hover:text-brand-400 transition font-medium">Back to Admin</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto px-4 pt-8 pb-8">
+    <h1 class="text-xl font-display font-bold mb-6">Test Email Templates</h1>
+    <p class="text-gray-400 text-sm mb-6">Send any email template to yourself to preview how it looks. Uses the first ambassador's data as test content.</p>
+
+    <form method="POST" class="space-y-4">
+        <div>
+            <label for="email" class="block text-sm text-gray-400 mb-1 font-medium">Send to email</label>
+            <input
+                type="email"
+                id="email"
+                name="email"
+                required
+                placeholder="your@email.com"
+                class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+            >
+        </div>
+
+        <div class="space-y-2 pt-2">
+            <p class="text-sm text-gray-400 font-medium mb-2">Choose email to send:</p>
+
+            <button type="submit" name="type" value="welcome"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                1. Welcome — "You're in The Unplugging"
+            </button>
+
+            <button type="submit" name="type" value="first_referral"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                2. First Referral — "Your first dancer is unplugged!"
+            </button>
+
+            <button type="submit" name="type" value="referral"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                3. New Referral — "[Name] just got unplugged"
+            </button>
+
+            <button type="submit" name="type" value="milestone"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                4. Milestone — "You unlocked [Tier]!"
+            </button>
+
+            <button type="submit" name="type" value="almost_there"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                5. Almost There — "1 more dancer to unlock [Tier]"
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

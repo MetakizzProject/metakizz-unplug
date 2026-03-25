@@ -5,6 +5,13 @@ from flask import (
     flash, session, current_app, Response,
 )
 from app.models import db, Ambassador, Referral, RewardTier
+from app.email import (
+    send_welcome_email,
+    send_first_referral_email,
+    send_referral_notification_email,
+    send_milestone_email,
+    send_almost_there_email,
+)
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -147,6 +154,60 @@ def export_referrals():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=metakizz_referrals.csv"},
     )
+
+
+@admin_bp.route("/test-email", methods=["GET", "POST"])
+def test_email():
+    """Send test emails to verify all templates work."""
+    if request.method == "POST":
+        email_type = request.form.get("type")
+        to_email = request.form.get("email", "").strip()
+        app_url = current_app.config["APP_URL"]
+
+        if not to_email:
+            flash("Enter an email address.", "error")
+            return redirect(url_for("admin.test_email"))
+
+        # Use first ambassador as test data
+        ambassador = Ambassador.query.first()
+        if not ambassador:
+            flash("No ambassadors in database to use as test data.", "error")
+            return redirect(url_for("admin.test_email"))
+
+        # Temporarily override email for sending
+        original_email = ambassador.email
+        ambassador.email = to_email
+
+        tiers = RewardTier.query.filter_by(channel=ambassador.source).order_by(RewardTier.sort_order).all()
+        next_tier = ambassador.next_tier(tiers)
+        current_tier = ambassador.current_tier(tiers)
+
+        success = False
+        if email_type == "welcome":
+            success = send_welcome_email(ambassador, app_url)
+        elif email_type == "first_referral":
+            success = send_first_referral_email(ambassador, "Test Dancer", 1, next_tier, app_url)
+        elif email_type == "referral":
+            success = send_referral_notification_email(ambassador, "Test Dancer", next_tier, app_url)
+        elif email_type == "milestone" and current_tier:
+            success = send_milestone_email(ambassador, current_tier, next_tier, app_url)
+        elif email_type == "almost_there" and next_tier:
+            success = send_almost_there_email(ambassador, next_tier, app_url)
+        else:
+            flash("No tier data available for this email type.", "error")
+            ambassador.email = original_email
+            return redirect(url_for("admin.test_email"))
+
+        ambassador.email = original_email
+
+        if success:
+            flash(f"Test '{email_type}' email sent to {to_email}!", "success")
+        else:
+            flash(f"Failed to send '{email_type}' email. Check Resend dashboard.", "error")
+
+        return redirect(url_for("admin.test_email"))
+
+    return render_template("admin_test_email.html")
 
 
 @admin_bp.route("/logout")

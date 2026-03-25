@@ -36,7 +36,7 @@ def _send(to, subject, html):
             },
             timeout=10,
         )
-        if resp.status_code == 200:
+        if resp.status_code < 300:
             logger.info("Email sent to %s: %s", to, subject)
             return True
         else:
