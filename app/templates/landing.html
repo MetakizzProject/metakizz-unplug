@@ -3,18 +3,42 @@
 
 {% block title %}MetaKizz Masterclass — Free Registration{% endblock %}
 
+{% block meta %}
+<meta property="og:title" content="MetaKizz — See the Code Behind the Dance">
+<meta property="og:description" content="Join the MetaKizz masterclass and discover Urban Kiz with Jesus & Annie">
+<meta property="og:image" content="{{ url_for('static', filename='brand/organized/matrix-icon.png', _external=True) }}">
+<meta property="og:url" content="{{ request.url }}">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="MetaKizz — See the Code Behind the Dance">
+<meta name="twitter:description" content="Join the MetaKizz masterclass and discover Urban Kiz with Jesus & Annie">
+<meta name="twitter:image" content="{{ url_for('static', filename='brand/organized/matrix-icon.png', _external=True) }}">
+{% endblock %}
+
 {% block content %}
 <div class="max-w-lg mx-auto px-4 pt-12 pb-8">
     {% if registered %}
-    <div class="text-center py-16">
+    <div class="text-center py-12">
         <div class="w-16 h-16 mx-auto mb-6 rounded-full bg-brand-900/50 border border-brand-700 flex items-center justify-center">
             <svg class="w-8 h-8 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
             </svg>
         </div>
         <h1 class="text-2xl font-display font-bold mb-2">You're In!</h1>
-        <p class="text-gray-400 mb-6">You've been registered for the MetaKizz masterclass. Check your email for details.</p>
-        <p class="text-sm text-gray-500">Unplugged by <span class="text-brand-400 font-semibold">{{ ambassador.name }}</span></p>
+        <p class="text-gray-400 mb-3">You've been registered for the MetaKizz masterclass. We'll send you the details soon.</p>
+        <p class="text-sm text-gray-500 mb-8">Unplugged by <span class="text-brand-400 font-semibold">{{ ambassador.name }}</span></p>
+
+        <!-- Join the Challenge Invite -->
+        <div class="bg-gray-900/80 border border-brand-800/50 rounded-xl p-6 text-left">
+            <h2 class="font-display font-bold text-lg mb-2 text-center">Want to earn rewards?</h2>
+            <p class="text-gray-400 text-sm mb-4 text-center">Join The Unplugging challenge — share your own link, bring dancers, and unlock exclusive prizes.</p>
+            <a
+                href="{{ url_for('home.join') }}{% if registrant_name %}?name={{ registrant_name|urlencode }}&email={{ registrant_email|urlencode }}{% endif %}"
+                class="block w-full bg-brand-400 hover:bg-brand-300 text-black font-bold py-3 rounded-lg transition text-lg font-display text-center"
+            >
+                Join the Challenge
+            </a>
+        </div>
     </div>
 
     {% else %}
@@ -22,6 +46,9 @@
         <img src="{{ url_for('static', filename='brand/organized/matrix-icon.png') }}" alt="MetaKizz" class="w-20 h-20 mx-auto mb-5 rounded-xl">
         <h1 class="text-3xl font-display font-bold mb-3">MetaKizz Masterclass</h1>
         <p class="text-gray-400 text-lg font-body">Discover the world of Urban Kiz with Jesus & Annie</p>
+        {% if total_registered and total_registered > 10 %}
+        <p class="text-brand-400 text-sm font-medium mt-3">{{ total_registered }}+ dancers already registered</p>
+        {% endif %}
     </div>
 
     <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-6 mb-8">

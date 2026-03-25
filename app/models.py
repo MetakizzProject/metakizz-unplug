@@ -14,7 +14,7 @@ class Ambassador(db.Model):
     dashboard_code = db.Column(db.String(20), unique=True, nullable=False)
     source = db.Column(db.String(20), default="community")  # "community" or "public"
     instagram_handle = db.Column(db.String(100))
-    profile_picture_url = db.Column(db.String(500))
+    profile_picture_url = db.Column(db.String(1000))
     circle_member_id = db.Column(db.String(100))
     shared_on_instagram = db.Column(db.Boolean, default=False)
     instagram_proof_url = db.Column(db.String(500))

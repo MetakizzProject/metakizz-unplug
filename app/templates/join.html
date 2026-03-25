@@ -23,6 +23,7 @@
                 name="name"
                 required
                 placeholder="Maria"
+                value="{{ request.args.get('name', '') }}"
                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
             >
         </div>
@@ -34,6 +35,7 @@
                 name="email"
                 required
                 placeholder="maria@example.com"
+                value="{{ request.args.get('email', '') }}"
                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
             >
         </div>

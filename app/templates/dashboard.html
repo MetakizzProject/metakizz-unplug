@@ -74,6 +74,24 @@
             </button>
         </div>
 
+        <!-- Share Buttons -->
+        <div class="flex gap-2 mb-4">
+            <a
+                href="https://wa.me/?text={{ ('Check out this masterclass by MetaKizz! 🎶💃 ' + referral_url)|urlencode }}"
+                target="_blank"
+                class="flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-white text-sm font-medium px-4 py-2.5 rounded-lg transition text-center"
+            >
+                Share on WhatsApp
+            </a>
+            <button
+                onclick="nativeShare()"
+                id="share-btn"
+                class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition"
+            >
+                Share...
+            </button>
+        </div>
+
         <!-- QR Code -->
         <div class="text-center">
             <img
@@ -192,6 +210,19 @@ function copyLink() {
         btn.textContent = 'Copied!';
         setTimeout(() => btn.textContent = 'Copy', 2000);
     });
+}
+
+function nativeShare() {
+    const url = document.getElementById('referral-link').value;
+    if (navigator.share) {
+        navigator.share({
+            title: 'MetaKizz Masterclass',
+            text: 'Check out this masterclass by MetaKizz!',
+            url: url
+        });
+    } else {
+        copyLink();
+    }
 }
 </script>
 {% endblock %}
