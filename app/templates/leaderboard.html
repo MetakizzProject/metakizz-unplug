@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Leaderboard — MetaKizz Challenge{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 {% if embed %}pt-4{% else %}pt-8{% endif %} pb-8">
+    {% if not embed %}
+    <div class="text-center mb-8">
+        <h1 class="text-2xl font-display font-bold mb-2">Leaderboard</h1>
+    </div>
+    {% endif %}
+
+    {% if leaderboard %}
+    <!-- Top 3 Podium -->
+    {% if leaderboard|length >= 3 %}
+    <div class="flex items-end justify-center gap-3 mb-8">
+        <!-- 2nd Place -->
+        <div class="text-center flex-1 max-w-[120px]">
+            <div class="w-12 h-12 mx-auto mb-2 rounded-full bg-gray-700 border-2 border-gray-500 flex items-center justify-center overflow-hidden">
+                {% if leaderboard[1].profile_picture_url %}
+                <img src="{{ leaderboard[1].profile_picture_url }}" class="w-full h-full object-cover">
+                {% else %}
+                <span class="text-lg font-bold text-gray-300">{{ leaderboard[1].name[0]|upper }}</span>
+                {% endif %}
+            </div>
+            <div class="text-sm font-medium truncate">{{ leaderboard[1].name }}</div>
+            <div class="text-xs text-gray-400">{{ leaderboard[1].referral_count }} dancers</div>
+            <div class="bg-gray-800 rounded-t-lg mt-2 h-16 flex items-center justify-center">
+                <span class="text-2xl font-bold text-gray-400">2</span>
+            </div>
+        </div>
+        <!-- 1st Place -->
+        <div class="text-center flex-1 max-w-[120px]">
+            <div class="w-14 h-14 mx-auto mb-2 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 border-2 border-yellow-500 flex items-center justify-center overflow-hidden">
+                {% if leaderboard[0].profile_picture_url %}
+                <img src="{{ leaderboard[0].profile_picture_url }}" class="w-full h-full object-cover">
+                {% else %}
+                <span class="text-xl font-bold text-yellow-900">{{ leaderboard[0].name[0]|upper }}</span>
+                {% endif %}
+            </div>
+            <div class="text-sm font-semibold truncate">{{ leaderboard[0].name }}</div>
+            <div class="text-xs text-brand-400">{{ leaderboard[0].referral_count }} dancers</div>
+            <div class="bg-gradient-to-b from-brand-900/50 to-brand-800/30 border border-brand-700 rounded-t-lg mt-2 h-24 flex items-center justify-center">
+                <span class="text-3xl font-bold text-brand-400">1</span>
+            </div>
+        </div>
+        <!-- 3rd Place -->
+        <div class="text-center flex-1 max-w-[120px]">
+            <div class="w-11 h-11 mx-auto mb-2 rounded-full bg-gray-700 border-2 border-orange-800 flex items-center justify-center overflow-hidden">
+                {% if leaderboard[2].profile_picture_url %}
+                <img src="{{ leaderboard[2].profile_picture_url }}" class="w-full h-full object-cover">
+                {% else %}
+                <span class="text-lg font-bold text-gray-300">{{ leaderboard[2].name[0]|upper }}</span>
+                {% endif %}
+            </div>
+            <div class="text-sm font-medium truncate">{{ leaderboard[2].name }}</div>
+            <div class="text-xs text-gray-400">{{ leaderboard[2].referral_count }} dancers</div>
+            <div class="bg-gray-800 rounded-t-lg mt-2 h-12 flex items-center justify-center">
+                <span class="text-2xl font-bold text-orange-700">3</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Full List -->
+    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl overflow-hidden">
+        {% for entry in leaderboard %}
+        <div class="flex items-center gap-3 px-4 py-3 {% if not loop.last %}border-b border-gray-800{% endif %}
+            {% if entry.rank <= 3 %}bg-gray-900/50{% endif %}">
+            <span class="w-8 text-center text-sm font-bold
+                {% if entry.rank == 1 %}text-yellow-400
+                {% elif entry.rank == 2 %}text-gray-400
+                {% elif entry.rank == 3 %}text-orange-600
+                {% else %}text-gray-600{% endif %}">
+                {{ entry.rank }}
+            </span>
+            <div class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                {% if entry.profile_picture_url %}
+                <img src="{{ entry.profile_picture_url }}" class="w-full h-full object-cover">
+                {% else %}
+                <span class="text-sm font-bold text-gray-400">{{ entry.name[0]|upper }}</span>
+                {% endif %}
+            </div>
+            <span class="flex-1 text-sm font-medium truncate">{{ entry.name }}</span>
+            <span class="text-sm text-brand-400 font-semibold">{{ entry.referral_count }}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="text-center py-12 text-gray-500">
+        <p>No ambassadors in this challenge yet.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

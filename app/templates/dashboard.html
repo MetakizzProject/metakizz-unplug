@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Your Dashboard — MetaKizz Challenge{% endblock %}
+
+{% block nav_right %}
+<a href="/leaderboard/{{ ambassador.source }}" class="text-sm text-gray-400 hover:text-brand-400 transition font-medium">Leaderboard</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 pt-8 pb-8">
+    <!-- Profile Header -->
+    <div class="flex items-center gap-4 mb-8">
+        {% if ambassador.profile_picture_url %}
+        <img src="{{ ambassador.profile_picture_url }}" alt="{{ ambassador.name }}" class="w-14 h-14 rounded-full object-cover">
+        {% else %}
+        <div class="w-14 h-14 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-xl font-bold">
+            {{ ambassador.name[0]|upper }}
+        </div>
+        {% endif %}
+        <div>
+            <h1 class="text-xl font-display font-bold">{{ ambassador.name }}</h1>
+            <p class="text-sm text-gray-400">Rank #{{ rank }} of {{ total_ambassadors }}</p>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 gap-3 mb-8">
+        <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-4 text-center">
+            <div class="text-3xl font-bold text-brand-400">{{ ambassador.referral_count }}</div>
+            <div class="text-sm text-gray-400 mt-1">Dancers unplugged</div>
+        </div>
+        <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-4 text-center">
+            <div class="text-3xl font-bold">#{{ rank }}</div>
+            <div class="text-sm text-gray-400 mt-1">Your rank</div>
+        </div>
+    </div>
+
+    <!-- Progress to Next Tier -->
+    {% if next_tier %}
+    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-4 mb-8">
+        <div class="flex justify-between text-sm mb-2">
+            <span class="text-gray-400">Next milestone: <span class="text-white font-medium">{{ next_tier.name }}</span></span>
+            <span class="text-brand-400">{{ ambassador.referral_count }}/{{ next_tier.threshold }}</span>
+        </div>
+        <div class="w-full bg-gray-800 rounded-full h-3">
+            <div class="bg-gradient-to-r from-brand-600 to-brand-400 h-3 rounded-full transition-all duration-500" style="width: {{ progress_pct }}%"></div>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">Reward: {{ next_tier.reward }}</p>
+    </div>
+    {% elif current_tier %}
+    <div class="bg-green-900/30 border border-green-800 rounded-xl p-4 mb-8 text-center">
+        <p class="text-green-300 font-medium">You've reached the highest tier!</p>
+    </div>
+    {% endif %}
+
+    <!-- Your Referral Link -->
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-5 mb-6">
+        <h2 class="font-display font-semibold mb-3 text-sm uppercase tracking-wider text-brand-400">Your Link</h2>
+        <div class="flex gap-2 mb-4">
+            <input
+                type="text"
+                value="{{ referral_url }}"
+                readonly
+                id="referral-link"
+                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none"
+            >
+            <button
+                onclick="copyLink()"
+                id="copy-btn"
+                class="bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
+            >
+                Copy
+            </button>
+        </div>
+
+        <!-- QR Code -->
+        <div class="text-center">
+            <img
+                src="{{ url_for('static', filename='qrcodes/' + ambassador.referral_code + '.png') }}"
+                alt="QR Code"
+                class="w-40 h-40 mx-auto bg-white rounded-lg p-2"
+            >
+            <a
+                href="{{ url_for('static', filename='qrcodes/' + ambassador.referral_code + '.png') }}"
+                download="metakizz-qr-{{ ambassador.referral_code }}.png"
+                class="inline-block mt-2 text-sm text-brand-400 hover:text-brand-300"
+            >
+                Download QR Code
+            </a>
+        </div>
+    </div>
+
+    <!-- Reward Milestones -->
+    {% if tiers %}
+    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-5 mb-6">
+        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-gray-400 mb-4">Reward Milestones</h2>
+        <div class="space-y-3">
+            {% for tier in tiers %}
+            <div class="flex items-center gap-3 {% if ambassador.referral_count >= tier.threshold %}opacity-100{% else %}opacity-50{% endif %}">
+                <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0
+                    {% if ambassador.referral_count >= tier.threshold %}bg-green-900 border border-green-700 text-green-400
+                    {% else %}bg-gray-800 border border-gray-700 text-gray-500{% endif %}">
+                    {% if ambassador.referral_count >= tier.threshold %}&#10003;{% else %}{{ tier.threshold }}{% endif %}
+                </div>
+                <div>
+                    <div class="text-sm font-medium">{{ tier.name }}</div>
+                    <div class="text-xs text-gray-400">{{ tier.reward }} &middot; {{ tier.threshold }} dancers</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Instagram Share -->
+    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-5 mb-6">
+        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-gray-400 mb-2">Share on Instagram</h2>
+        {% if ambassador.shared_on_instagram %}
+        <p class="text-green-400 text-sm">&#10003; Instagram share recorded</p>
+        {% else %}
+        <p class="text-gray-400 text-sm mb-3">Shared our content on Instagram? Let us know!</p>
+        <form method="POST" class="flex gap-2">
+            <input type="hidden" name="instagram_share" value="1">
+            <input
+                type="text"
+                name="instagram_url"
+                placeholder="Instagram post URL (optional)"
+                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-500"
+            >
+            <button type="submit" class="bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+                I Shared
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    <!-- Ways to Bring More People -->
+    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-5 mb-6">
+        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-gray-400 mb-3">Ways to Unplug More Dancers</h2>
+        <div class="space-y-3">
+            <div class="flex items-start gap-3 text-sm">
+                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#9993;</span>
+                <span class="text-gray-300"><strong>Send a personal message</strong> to friends who dance — a DM on WhatsApp or Instagram goes a long way</span>
+            </div>
+            <div class="flex items-start gap-3 text-sm">
+                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#9742;</span>
+                <span class="text-gray-300"><strong>Give a friend a call</strong> — tell them about the free masterclass and why they should join</span>
+            </div>
+            <div class="flex items-start gap-3 text-sm">
+                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#128247;</span>
+                <span class="text-gray-300"><strong>Share your QR code</strong> in your Instagram stories — download it above</span>
+            </div>
+            <div class="flex items-start gap-3 text-sm">
+                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#127909;</span>
+                <span class="text-gray-300"><strong>Post a reel or story</strong> tagging @metakizz with your link in bio</span>
+            </div>
+            <div class="flex items-start gap-3 text-sm">
+                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#128172;</span>
+                <span class="text-gray-300"><strong>Share in dance groups</strong> on WhatsApp, Telegram, or Facebook</span>
+            </div>
+            <div class="flex items-start gap-3 text-sm">
+                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#127922;</span>
+                <span class="text-gray-300"><strong>Share MetaKizz content</strong> — repost our posts, stories, and reels to spread the word</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- People You've Brought In -->
+    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-5">
+        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-gray-400 mb-3">Dancers You've Unplugged <span class="text-gray-500">({{ referrals|length }})</span></h2>
+        {% if referrals %}
+        <div class="space-y-2">
+            {% for ref in referrals %}
+            <div class="flex items-center justify-between py-2 border-b border-gray-800 last:border-0">
+                <span class="text-sm text-gray-300">{{ ref.name }}</span>
+                <span class="text-xs text-gray-500">{{ ref.registered_at.strftime('%b %d') }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-500">No dancers unplugged yet. Share your link to get started!</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function copyLink() {
+    const input = document.getElementById('referral-link');
+    navigator.clipboard.writeText(input.value).then(() => {
+        const btn = document.getElementById('copy-btn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+    });
+}
+</script>
+{% endblock %}

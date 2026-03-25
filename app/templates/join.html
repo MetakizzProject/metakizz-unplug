@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Join the Challenge — MetaKizz{% endblock %}
+
+{% block nav_right %}
+<a href="/leaderboard/public" class="text-sm text-gray-400 hover:text-brand-400 transition font-medium">Leaderboard</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto px-4 pt-12 pb-8">
+    <div class="text-center mb-8">
+        <h1 class="text-2xl font-display font-bold mb-2">Join the Challenge</h1>
+        <p class="text-gray-400">Get your personal link and start earning rewards by unplugging dancers into the MetaKizz masterclass.</p>
+    </div>
+
+    <form method="POST" class="space-y-4">
+        <div>
+            <label for="name" class="block text-sm text-gray-400 mb-1">Your name</label>
+            <input
+                type="text"
+                id="name"
+                name="name"
+                required
+                placeholder="Maria"
+                class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+            >
+        </div>
+        <div>
+            <label for="email" class="block text-sm text-gray-400 mb-1">Email</label>
+            <input
+                type="email"
+                id="email"
+                name="email"
+                required
+                placeholder="maria@example.com"
+                class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+            >
+        </div>
+        <div>
+            <label for="instagram" class="block text-sm text-gray-400 mb-1">Instagram handle <span class="text-gray-600">(optional)</span></label>
+            <input
+                type="text"
+                id="instagram"
+                name="instagram"
+                placeholder="@maria_dances"
+                class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+            >
+        </div>
+        <button type="submit" class="w-full bg-brand-400 hover:bg-brand-300 text-black font-semibold py-3 rounded-lg transition mt-2">
+            Get My Link
+        </button>
+    </form>
+
+    <p class="text-center text-sm text-gray-500 mt-6">
+        Already have a dashboard? <a href="/" class="text-brand-400 hover:text-brand-300">Access it here</a>
+    </p>
+</div>
+{% endblock %}

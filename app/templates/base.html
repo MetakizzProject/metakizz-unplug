@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}MetaKizz Challenge{% endblock %}</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='brand/organized/icon-black.png') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;400;700;900&family=Raleway:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#edfcf5',
+                            100: '#d3f8e6',
+                            200: '#aaf0d1',
+                            300: '#73e4b6',
+                            400: '#2EDB99',
+                            500: '#27ba82',
+                            600: '#1a9668',
+                            700: '#157855',
+                            800: '#135f44',
+                            900: '#114e39',
+                        },
+                        accent: {
+                            400: '#c026d3',
+                            500: '#a21caf',
+                            600: '#86198f',
+                        }
+                    },
+                    fontFamily: {
+                        'display': ['Unbounded', 'system-ui', 'sans-serif'],
+                        'body': ['Raleway', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Raleway', system-ui, -apple-system, sans-serif; }
+        h1, h2, h3, .font-display { font-family: 'Unbounded', system-ui, sans-serif; }
+    </style>
+</head>
+<body class="bg-black text-white min-h-screen font-body">
+    {% if not embed %}
+    <nav class="border-b border-gray-800/50 bg-black/80 backdrop-blur-sm sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2">
+                <img src="{{ url_for('static', filename='brand/organized/logo-green.png') }}" alt="MetaKizz" class="h-5 w-auto">
+            </a>
+            {% block nav_right %}{% endblock %}
+        </div>
+    </nav>
+    {% endif %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="max-w-4xl mx-auto px-4 pt-4">
+        {% for category, message in messages %}
+        <div class="rounded-lg px-4 py-3 mb-2 text-sm font-medium
+            {% if category == 'error' %}bg-red-900/50 text-red-200 border border-red-800
+            {% elif category == 'success' %}bg-brand-900/50 text-brand-200 border border-brand-800
+            {% else %}bg-blue-900/50 text-blue-200 border border-blue-800{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    {% if not embed %}
+    <footer class="border-t border-gray-800/50 mt-16 py-6 text-center text-xs text-gray-600 font-body">
+        <img src="{{ url_for('static', filename='brand/organized/logo-white.png') }}" alt="MetaKizz" class="h-4 mx-auto mb-2 opacity-30">
+        MetaKizz Project
+    </footer>
+    {% endif %}
+</body>
+</html>

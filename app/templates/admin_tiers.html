@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Manage Reward Tiers — MetaKizz{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 pt-8 pb-8">
+    <div class="flex items-center justify-between mb-8">
+        <h1 class="text-2xl font-bold">Reward Tiers</h1>
+        <a href="{{ url_for('admin.index') }}" class="text-sm text-gray-400 hover:text-white transition">&larr; Back to Admin</a>
+    </div>
+
+    <!-- Add New Tier -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-8">
+        <h2 class="font-semibold mb-4">Add New Tier</h2>
+        <form method="POST" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input type="hidden" name="action" value="add">
+            <div>
+                <label class="block text-xs text-gray-400 mb-1">Tier Name</label>
+                <input type="text" name="name" required placeholder="e.g., Bronze"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-400 mb-1">Channel</label>
+                <select name="channel" required
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
+                    <option value="community">Community</option>
+                    <option value="public">Public</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-400 mb-1">Dancers to Unplug</label>
+                <input type="number" name="threshold" required min="1" placeholder="5"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-400 mb-1">Sort Order</label>
+                <input type="number" name="sort_order" value="0" placeholder="0"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500">
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-xs text-gray-400 mb-1">Reward Description</label>
+                <input type="text" name="reward" required placeholder="e.g., 1 free month in the community"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500">
+            </div>
+            <div class="sm:col-span-2">
+                <button type="submit" class="bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-6 py-2 rounded-lg transition">
+                    Add Tier
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Community Tiers -->
+    <div class="mb-8">
+        <h2 class="font-semibold mb-3 text-blue-300">Community Challenge Tiers</h2>
+        {% if community_tiers %}
+        <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            {% for tier in community_tiers %}
+            <div class="flex items-center justify-between px-4 py-3 {% if not loop.last %}border-b border-gray-800{% endif %}">
+                <div>
+                    <span class="font-medium text-sm">{{ tier.name }}</span>
+                    <span class="text-xs text-gray-400 ml-2">{{ tier.threshold }} dancers &rarr; {{ tier.reward }}</span>
+                </div>
+                <form method="POST" class="inline">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="tier_id" value="{{ tier.id }}">
+                    <button type="submit" class="text-xs text-red-400 hover:text-red-300 transition" onclick="return confirm('Delete this tier?')">Delete</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-500">No community tiers configured yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- Public Tiers -->
+    <div>
+        <h2 class="font-semibold mb-3 text-purple-300">Public Challenge Tiers</h2>
+        {% if public_tiers %}
+        <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            {% for tier in public_tiers %}
+            <div class="flex items-center justify-between px-4 py-3 {% if not loop.last %}border-b border-gray-800{% endif %}">
+                <div>
+                    <span class="font-medium text-sm">{{ tier.name }}</span>
+                    <span class="text-xs text-gray-400 ml-2">{{ tier.threshold }} dancers &rarr; {{ tier.reward }}</span>
+                </div>
+                <form method="POST" class="inline">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="tier_id" value="{{ tier.id }}">
+                    <button type="submit" class="text-xs text-red-400 hover:text-red-300 transition" onclick="return confirm('Delete this tier?')">Delete</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-500">No public tiers configured yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

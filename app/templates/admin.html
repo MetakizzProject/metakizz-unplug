@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Admin — MetaKizz Challenge{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 pt-8 pb-8">
+    <div class="flex items-center justify-between mb-8">
+        <h1 class="text-2xl font-bold">Admin Panel</h1>
+        <div class="flex gap-2">
+            <a href="{{ url_for('admin.tiers') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Manage Tiers</a>
+            <a href="{{ url_for('admin.logout') }}" class="text-sm text-gray-400 hover:text-white px-3 py-1.5 transition">Logout</a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-3 mb-8">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+            <div class="text-2xl font-bold text-brand-400">{{ total_referrals }}</div>
+            <div class="text-xs text-gray-400 mt-1">Total Dancers Unplugged</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+            <div class="text-2xl font-bold">{{ community_count }}</div>
+            <div class="text-xs text-gray-400 mt-1">Community Ambassadors</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+            <div class="text-2xl font-bold">{{ public_count }}</div>
+            <div class="text-xs text-gray-400 mt-1">Public Ambassadors</div>
+        </div>
+    </div>
+
+    <!-- Filter + Export -->
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex gap-2">
+            <a href="?channel=all" class="px-3 py-1.5 rounded-full text-sm transition {% if channel == 'all' %}bg-brand-600 text-white{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %}">All</a>
+            <a href="?channel=community" class="px-3 py-1.5 rounded-full text-sm transition {% if channel == 'community' %}bg-brand-600 text-white{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %}">Community</a>
+            <a href="?channel=public" class="px-3 py-1.5 rounded-full text-sm transition {% if channel == 'public' %}bg-brand-600 text-white{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %}">Public</a>
+        </div>
+        <div class="flex gap-2">
+            <a href="{{ url_for('admin.export_csv', channel=channel) }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Export Ambassadors</a>
+            <a href="{{ url_for('admin.export_referrals') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Export Referrals</a>
+        </div>
+    </div>
+
+    <!-- Ambassador Table -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="border-b border-gray-800 text-gray-400">
+                <tr>
+                    <th class="text-left px-4 py-3 font-medium">#</th>
+                    <th class="text-left px-4 py-3 font-medium">Name</th>
+                    <th class="text-left px-4 py-3 font-medium hidden sm:table-cell">Email</th>
+                    <th class="text-left px-4 py-3 font-medium hidden sm:table-cell">Source</th>
+                    <th class="text-center px-4 py-3 font-medium">Dancers</th>
+                    <th class="text-center px-4 py-3 font-medium hidden sm:table-cell">IG Shared</th>
+                    <th class="text-left px-4 py-3 font-medium">Dashboard</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for amb in ambassadors %}
+                <tr class="border-b border-gray-800 last:border-0 hover:bg-gray-800/50">
+                    <td class="px-4 py-3 text-gray-500">{{ loop.index }}</td>
+                    <td class="px-4 py-3 font-medium">{{ amb.name }}</td>
+                    <td class="px-4 py-3 text-gray-400 hidden sm:table-cell">{{ amb.email }}</td>
+                    <td class="px-4 py-3 hidden sm:table-cell">
+                        <span class="px-2 py-0.5 rounded-full text-xs {% if amb.source == 'community' %}bg-blue-900/50 text-blue-300{% else %}bg-purple-900/50 text-purple-300{% endif %}">
+                            {{ amb.source }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-center font-semibold text-brand-400">{{ amb.referral_count }}</td>
+                    <td class="px-4 py-3 text-center hidden sm:table-cell">
+                        {% if amb.shared_on_instagram %}
+                        <span class="text-green-400">&#10003;</span>
+                        {% else %}
+                        <span class="text-gray-600">&mdash;</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">
+                        <a href="{{ url_for('dashboard.show', code=amb.dashboard_code) }}" class="text-brand-400 hover:text-brand-300 text-xs">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

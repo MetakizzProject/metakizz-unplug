@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}MetaKizz Masterclass — Free Registration{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto px-4 pt-12 pb-8">
+    {% if registered %}
+    <div class="text-center py-16">
+        <div class="w-16 h-16 mx-auto mb-6 rounded-full bg-brand-900/50 border border-brand-700 flex items-center justify-center">
+            <svg class="w-8 h-8 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+        </div>
+        <h1 class="text-2xl font-display font-bold mb-2">You're In!</h1>
+        <p class="text-gray-400 mb-6">You've been registered for the MetaKizz masterclass. Check your email for details.</p>
+        <p class="text-sm text-gray-500">Unplugged by <span class="text-brand-400 font-semibold">{{ ambassador.name }}</span></p>
+    </div>
+
+    {% else %}
+    <div class="relative text-center mb-8">
+        <img src="{{ url_for('static', filename='brand/organized/matrix-icon.png') }}" alt="MetaKizz" class="w-20 h-20 mx-auto mb-5 rounded-xl">
+        <h1 class="text-3xl font-display font-bold mb-3">MetaKizz Masterclass</h1>
+        <p class="text-gray-400 text-lg font-body">Discover the world of Urban Kiz with Jesus & Annie</p>
+    </div>
+
+    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-6 mb-8">
+        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-brand-400 mb-4">What you'll learn</h2>
+        <ul class="space-y-2 text-gray-300">
+            <li class="flex items-start gap-2">
+                <span class="text-brand-400 mt-0.5">&#10003;</span>
+                <span>Foundations of Urban Kiz movement and connection</span>
+            </li>
+            <li class="flex items-start gap-2">
+                <span class="text-brand-400 mt-0.5">&#10003;</span>
+                <span>Techniques to level up your dancing</span>
+            </li>
+            <li class="flex items-start gap-2">
+                <span class="text-brand-400 mt-0.5">&#10003;</span>
+                <span>Access to the MetaKizz community of dancers worldwide</span>
+            </li>
+        </ul>
+    </div>
+
+    <form method="POST" class="space-y-4">
+        <div>
+            <label for="name" class="block text-sm text-gray-400 mb-1 font-medium">Your name</label>
+            <input
+                type="text"
+                id="name"
+                name="name"
+                required
+                placeholder="Your name"
+                class="w-full bg-gray-900/80 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400"
+            >
+        </div>
+        <div>
+            <label for="email" class="block text-sm text-gray-400 mb-1 font-medium">Email</label>
+            <input
+                type="email"
+                id="email"
+                name="email"
+                required
+                placeholder="your@email.com"
+                class="w-full bg-gray-900/80 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400"
+            >
+        </div>
+        <button type="submit" class="w-full bg-brand-400 hover:bg-brand-300 text-black font-bold py-3 rounded-lg transition text-lg font-display">
+            Register for Free
+        </button>
+    </form>
+
+    <p class="text-center text-xs text-gray-600 mt-4">
+        Unplugged by {{ ambassador.name }}
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
