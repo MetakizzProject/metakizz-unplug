@@ -9,9 +9,17 @@ def create_app():
     app = Flask(__name__)
 
     app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "metakizz.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
+        "DATABASE_URL",
+        "sqlite:///" + os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "metakizz.db"
+        ),
     )
+    # Render's Postgres uses "postgres://" but SQLAlchemy requires "postgresql://"
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgres://"):
+        app.config["SQLALCHEMY_DATABASE_URI"] = app.config["SQLALCHEMY_DATABASE_URI"].replace(
+            "postgres://", "postgresql://", 1
+        )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["APP_URL"] = os.getenv("APP_URL", "http://localhost:5000")
     app.config["ADMIN_PASSWORD"] = os.getenv("ADMIN_PASSWORD", "admin")

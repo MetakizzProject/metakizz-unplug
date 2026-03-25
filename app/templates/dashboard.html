@@ -77,12 +77,12 @@
         <!-- QR Code -->
         <div class="text-center">
             <img
-                src="{{ url_for('static', filename='qrcodes/' + ambassador.referral_code + '.png') }}"
+                src="{{ url_for('home.qr_image', referral_code=ambassador.referral_code) }}"
                 alt="QR Code"
                 class="w-40 h-40 mx-auto bg-white rounded-lg p-2"
             >
             <a
-                href="{{ url_for('static', filename='qrcodes/' + ambassador.referral_code + '.png') }}"
+                href="{{ url_for('home.qr_image', referral_code=ambassador.referral_code) }}"
                 download="metakizz-qr-{{ ambassador.referral_code }}.png"
                 class="inline-block mt-2 text-sm text-brand-400 hover:text-brand-300"
             >

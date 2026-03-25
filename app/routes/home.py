@@ -1,7 +1,7 @@
 import secrets
-import os
+from io import BytesIO
 import qrcode
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, send_file
 from app.models import db, Ambassador
 
 home_bp = Blueprint("home", __name__)
@@ -68,21 +68,22 @@ def join():
         db.session.add(ambassador)
         db.session.commit()
 
-        _generate_qr(ambassador, current_app.config["APP_URL"])
-
         return redirect(url_for("dashboard.show", code=ambassador.dashboard_code))
 
     return render_template("join.html")
 
 
-def _generate_qr(ambassador, app_url):
-    """Generate a QR code PNG for an ambassador's referral link."""
+@home_bp.route("/qr/<referral_code>.png")
+def qr_image(referral_code):
+    """Generate and serve a QR code on the fly (no file storage needed)."""
+    ambassador = Ambassador.query.filter_by(referral_code=referral_code).first_or_404()
+    app_url = current_app.config["APP_URL"]
     referral_url = f"{app_url}/r/{ambassador.referral_code}"
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
     qr.add_data(referral_url)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
-
-    qr_dir = os.path.join(current_app.root_path, "static", "qrcodes")
-    os.makedirs(qr_dir, exist_ok=True)
-    img.save(os.path.join(qr_dir, f"{ambassador.referral_code}.png"))
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return send_file(buf, mimetype="image/png", download_name=f"metakizz-qr-{referral_code}.png")
