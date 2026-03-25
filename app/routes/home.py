@@ -3,6 +3,7 @@ from io import BytesIO
 import qrcode
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, send_file
 from app.models import db, Ambassador
+from app.email import send_welcome_email
 
 home_bp = Blueprint("home", __name__)
 
@@ -67,6 +68,8 @@ def join():
         )
         db.session.add(ambassador)
         db.session.commit()
+
+        send_welcome_email(ambassador, current_app.config["APP_URL"])
 
         return redirect(url_for("dashboard.show", code=ambassador.dashboard_code))
 

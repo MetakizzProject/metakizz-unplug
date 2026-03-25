@@ -1,5 +1,11 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification
+from app.email import (
+    send_first_referral_email,
+    send_referral_notification_email,
+    send_milestone_email,
+    send_almost_there_email,
+)
 
 register_bp = Blueprint("register", __name__)
 
@@ -37,6 +43,31 @@ def landing(code):
         )
         db.session.add(referral)
         db.session.commit()
+
+        app_url = current_app.config["APP_URL"]
+        count = ambassador.referral_count
+
+        # Get tiers for email context
+        tiers = (
+            RewardTier.query
+            .filter_by(channel=ambassador.source)
+            .order_by(RewardTier.sort_order)
+            .all()
+        )
+        next_tier = ambassador.next_tier(tiers)
+
+        # Send appropriate referral email
+        if count == 1:
+            all_ambassadors = Ambassador.query.filter_by(source=ambassador.source).all()
+            sorted_ambs = sorted(all_ambassadors, key=lambda a: a.referral_count, reverse=True)
+            rank = next((i + 1 for i, a in enumerate(sorted_ambs) if a.id == ambassador.id), len(sorted_ambs))
+            send_first_referral_email(ambassador, name, rank, next_tier, app_url)
+        else:
+            send_referral_notification_email(ambassador, name, next_tier, app_url)
+
+        # Send "almost there" nudge if 1 away from next tier
+        if next_tier and next_tier.threshold - count == 1:
+            send_almost_there_email(ambassador, next_tier, app_url)
 
         # Check if ambassador hit a new milestone
         _check_new_milestones(ambassador)
@@ -77,5 +108,8 @@ def _check_new_milestones(ambassador):
                 )
                 db.session.add(notification)
                 db.session.commit()
-                # Email notification will be handled by tools/check_milestones.py
-                # or can be triggered here in Phase 2
+
+                # Send milestone email
+                app_url = current_app.config["APP_URL"]
+                next_tier = ambassador.next_tier(tiers)
+                send_milestone_email(ambassador, tier, next_tier, app_url)
