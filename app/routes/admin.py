@@ -168,42 +168,51 @@ def test_email():
             flash("Enter an email address.", "error")
             return redirect(url_for("admin.test_email"))
 
-        # Use first ambassador as test data
+        # Use first ambassador as test data but create a fake copy to avoid DB changes
         ambassador = Ambassador.query.first()
         if not ambassador:
             flash("No ambassadors in database to use as test data.", "error")
             return redirect(url_for("admin.test_email"))
 
-        # Temporarily override email for sending
-        original_email = ambassador.email
-        ambassador.email = to_email
+        # Create a lightweight copy so we don't touch the DB
+        class FakeAmbassador:
+            pass
+
+        fake = FakeAmbassador()
+        fake.name = ambassador.name
+        fake.email = to_email
+        fake.referral_code = ambassador.referral_code
+        fake.dashboard_code = ambassador.dashboard_code
+        fake.referral_count = max(ambassador.referral_count, 3)  # Ensure some count for display
 
         tiers = RewardTier.query.filter_by(channel=ambassador.source).order_by(RewardTier.sort_order).all()
-        next_tier = ambassador.next_tier(tiers)
-        current_tier = ambassador.current_tier(tiers)
 
-        success = False
-        if email_type == "welcome":
-            success = send_welcome_email(ambassador, app_url)
-        elif email_type == "first_referral":
-            success = send_first_referral_email(ambassador, "Test Dancer", 1, next_tier, app_url)
-        elif email_type == "referral":
-            success = send_referral_notification_email(ambassador, "Test Dancer", next_tier, app_url)
-        elif email_type == "milestone" and current_tier:
-            success = send_milestone_email(ambassador, current_tier, next_tier, app_url)
-        elif email_type == "almost_there" and next_tier:
-            success = send_almost_there_email(ambassador, next_tier, app_url)
-        else:
-            flash("No tier data available for this email type.", "error")
-            ambassador.email = original_email
-            return redirect(url_for("admin.test_email"))
+        # For testing, use first and second tier
+        first_tier = tiers[0] if tiers else None
+        second_tier = tiers[1] if len(tiers) > 1 else None
 
-        ambassador.email = original_email
+        try:
+            success = False
+            if email_type == "welcome":
+                success = send_welcome_email(fake, app_url)
+            elif email_type == "first_referral":
+                success = send_first_referral_email(fake, "Test Dancer", 1, first_tier, app_url)
+            elif email_type == "referral":
+                success = send_referral_notification_email(fake, "Test Dancer", first_tier, app_url)
+            elif email_type == "milestone" and first_tier:
+                success = send_milestone_email(fake, first_tier, second_tier, app_url)
+            elif email_type == "almost_there" and first_tier:
+                success = send_almost_there_email(fake, first_tier, app_url)
+            else:
+                flash("No tier data available for this email type. Add tiers in admin first.", "error")
+                return redirect(url_for("admin.test_email"))
 
-        if success:
-            flash(f"Test '{email_type}' email sent to {to_email}!", "success")
-        else:
-            flash(f"Failed to send '{email_type}' email. Check Resend dashboard.", "error")
+            if success:
+                flash(f"Test '{email_type}' email sent to {to_email}!", "success")
+            else:
+                flash(f"Failed to send email. Check RESEND_API_KEY env var and Resend dashboard.", "error")
+        except Exception as e:
+            flash(f"Error: {str(e)}", "error")
 
         return redirect(url_for("admin.test_email"))
 
