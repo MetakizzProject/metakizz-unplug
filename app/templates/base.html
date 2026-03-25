@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>{% block title %}MetaKizz Challenge{% endblock %}</title>
     {% block meta %}{% endblock %}
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='brand/organized/icon-black.png') }}">
@@ -42,7 +42,7 @@
         }
     </script>
     <style>
-        body { font-family: 'Raleway', system-ui, -apple-system, sans-serif; }
+        body { font-family: 'Raleway', system-ui, -apple-system, sans-serif; padding-bottom: env(safe-area-inset-bottom); }
         h1, h2, h3, .font-display { font-family: 'Unbounded', system-ui, sans-serif; }
     </style>
 </head>

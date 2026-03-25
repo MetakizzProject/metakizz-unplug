@@ -8,36 +8,204 @@
 {% endblock %}
 
 {% block content %}
-<div class="relative min-h-[80vh] flex items-center justify-center">
-    <!-- Matrix texture background -->
-    <div class="absolute inset-0 overflow-hidden">
-        <img src="{{ url_for('static', filename='brand/organized/matrix-texture-top.jpg') }}" alt="" class="w-full h-full object-cover opacity-20">
-        <div class="absolute inset-0 bg-gradient-to-b from-black/60 via-black/80 to-black"></div>
+<div class="max-w-lg mx-auto px-4 pt-2 pb-10 text-center">
+
+    <!-- Globe -->
+    <div id="globe-wrap" style="width:100%;max-width:280px;margin:0 auto 8px;position:relative;">
+        <div style="padding-bottom:100%;"></div>
+        <canvas id="cobe-globe" style="position:absolute;top:0;left:0;width:100%;height:100%;cursor:grab;touch-action:none;"></canvas>
     </div>
 
-    <div class="relative max-w-md mx-auto px-4 py-16 text-center">
-        <div class="mb-10">
-            <img src="{{ url_for('static', filename='brand/organized/matrix-icon.png') }}" alt="MetaKizz" class="w-24 h-24 mx-auto mb-6 rounded-2xl">
-            <h1 class="text-3xl font-display font-bold mb-3 tracking-tight">The Unplugging</h1>
-            <p class="text-gray-400 font-body">Unplug dancers into the masterclass. Earn rewards. Compete for the top spot.</p>
-        </div>
-
-        <form method="POST" class="mb-6">
-            <label for="email" class="block text-sm text-gray-400 mb-2 text-left font-medium">Enter your email to access your dashboard</label>
-            <div class="flex gap-2">
-                <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    required
-                    placeholder="your@email.com"
-                    class="flex-1 bg-gray-900/80 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400 font-body"
-                >
-                <button type="submit" class="bg-brand-400 hover:bg-brand-300 text-black font-semibold px-6 py-3 rounded-lg transition font-body">
-                    Go
-                </button>
+    <!-- Ticker counter -->
+    <div class="flex items-center justify-center gap-3 mb-3">
+        <div class="flex items-center gap-0.5" id="ticker" data-count="{{ total_count }}">
+            {% for digit in total_count|string %}
+            <div class="ticker-digit">
+                <div class="ticker-roll" style="--target:{{ digit }};">
+                    {% for n in range(10) %}<span>{{ n }}</span>{% endfor %}
+                </div>
             </div>
-        </form>
+            {% endfor %}
+        </div>
+        <div class="text-left">
+            <p class="text-brand-400 text-xs sm:text-sm font-bold leading-tight">dancers joined</p>
+            <p class="text-gray-500 text-[10px] leading-tight">across 27 nationalities</p>
+        </div>
+    </div>
+
+    <!-- Headline -->
+    <h1 class="text-xl sm:text-3xl font-display font-bold mb-1 tracking-tight">MetaKizz <span class="text-brand-400">Unplugging</span></h1>
+    <p class="text-gray-300 font-body text-xs sm:text-sm leading-relaxed mb-3">Invite your friends to see the code behind the dance. <span class="text-white font-semibold">Earn rewards for every friend who joins.</span></p>
+
+    <!-- Email Form — above the fold on mobile -->
+    <form method="POST" class="mb-5">
+        <p class="text-[10px] sm:text-xs text-gray-500 mb-1.5 font-medium">Already in the community? Enter your email to access your dashboard.</p>
+        <div class="flex gap-2">
+            <input type="email" id="email" name="email" required placeholder="your@email.com"
+                class="flex-1 bg-gray-900/80 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400 font-body">
+            <button type="submit" class="bg-brand-400 hover:bg-brand-300 text-black font-semibold px-5 py-2.5 rounded-lg transition text-sm font-body">Go</button>
+        </div>
+    </form>
+
+    <!-- City labels -->
+    <div class="flex flex-wrap justify-center gap-1 mb-4 px-2">
+        {% for city in ['Madrid','Paris','Lisbon','London','Berlin','New York','Lagos','Dakar','Barcelona','Miami','São Paulo','Dubai'] %}
+        <span class="text-[9px] sm:text-[10px] text-gray-500 bg-gray-900/80 border border-gray-800 px-1.5 py-0.5 rounded-full">{{ city }}</span>
+        {% endfor %}
+    </div>
+
+    <!-- 3-step explainer -->
+    <div class="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4 mb-4 text-left space-y-3">
+        <div class="flex gap-2.5">
+            <div class="w-7 h-7 rounded-full bg-brand-400/20 border border-brand-400/40 flex items-center justify-center flex-shrink-0">
+                <span class="text-brand-400 text-xs font-bold">1</span>
+            </div>
+            <div>
+                <p class="text-white font-semibold text-xs sm:text-sm">Share your personal link</p>
+                <p class="text-gray-400 text-xs">Send it to friends who deserve to see the code behind the dance.</p>
+            </div>
+        </div>
+        <div class="flex gap-2.5">
+            <div class="w-7 h-7 rounded-full bg-brand-400/20 border border-brand-400/40 flex items-center justify-center flex-shrink-0">
+                <span class="text-brand-400 text-xs font-bold">2</span>
+            </div>
+            <div>
+                <p class="text-white font-semibold text-xs sm:text-sm">They register for the masterclass</p>
+                <p class="text-gray-400 text-xs">One click — they're in. It counts for you automatically.</p>
+            </div>
+        </div>
+        <div class="flex gap-2.5">
+            <div class="w-7 h-7 rounded-full bg-brand-400/20 border border-brand-400/40 flex items-center justify-center flex-shrink-0">
+                <span class="text-brand-400 text-xs font-bold">3</span>
+            </div>
+            <div>
+                <p class="text-white font-semibold text-xs sm:text-sm">You earn rewards</p>
+                <p class="text-gray-400 text-xs">Free community months, ambassador status, exclusive access — the more you share, the more you unlock.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rewards highlight -->
+    <div class="bg-brand-400/10 border border-brand-400/30 rounded-xl p-3 mb-4 flex items-center gap-3">
+        <span class="text-2xl">&#127942;</span>
+        <p class="text-brand-400 text-xs sm:text-sm font-semibold text-left">Every friend you bring = progress toward your next reward. Start with just 5 friends.</p>
     </div>
 </div>
+
+<script type="module">
+import createGlobe from 'https://esm.sh/cobe@0.6.3?bundle';
+
+const canvas = document.getElementById('cobe-globe');
+if (canvas) {
+    requestAnimationFrame(() => {
+        const rect = canvas.getBoundingClientRect();
+        const w = Math.round(rect.width);
+        const h = Math.round(rect.height);
+        if (w < 10) return;
+
+        let phi = 0;
+        const globe = createGlobe(canvas, {
+            devicePixelRatio: 2,
+            width: w * 2,
+            height: h * 2,
+            phi: 0,
+            theta: 0.15,
+            dark: 1,
+            diffuse: 1.2,
+            mapSamples: 16000,
+            mapBrightness: 8,
+            baseColor: [0.05, 0.15, 0.1],
+            markerColor: [0.18, 0.86, 0.6],
+            glowColor: [0.06, 0.3, 0.2],
+            markers: [
+                {location:[40.4168,-3.7038],size:0.05},{location:[48.8566,2.3522],size:0.05},
+                {location:[38.7223,-9.1393],size:0.05},{location:[51.5074,-0.1278],size:0.04},
+                {location:[41.3874,2.1686],size:0.04},{location:[52.52,13.405],size:0.03},
+                {location:[45.4642,9.19],size:0.03},{location:[50.8503,4.3517],size:0.03},
+                {location:[41.0082,28.9784],size:0.03},{location:[6.5244,3.3792],size:0.04},
+                {location:[14.6928,-17.4467],size:0.04},{location:[-33.9249,18.4241],size:0.03},
+                {location:[33.5731,-7.5898],size:0.03},{location:[-23.5505,-46.6333],size:0.04},
+                {location:[40.7128,-74.006],size:0.04},{location:[25.7617,-80.1918],size:0.03},
+                {location:[-22.9068,-43.1729],size:0.03},{location:[25.2048,55.2708],size:0.03},
+                {location:[35.6762,139.6503],size:0.02},{location:[-33.8688,151.2093],size:0.02},
+            ],
+            arcs: [
+                {from:[40.4168,-3.7038],to:[48.8566,2.3522]},
+                {from:[48.8566,2.3522],to:[51.5074,-0.1278]},
+                {from:[38.7223,-9.1393],to:[40.4168,-3.7038]},
+                {from:[41.3874,2.1686],to:[48.8566,2.3522]},
+                {from:[52.52,13.405],to:[48.8566,2.3522]},
+                {from:[51.5074,-0.1278],to:[52.52,13.405]},
+                {from:[38.7223,-9.1393],to:[14.6928,-17.4467]},
+                {from:[48.8566,2.3522],to:[6.5244,3.3792]},
+                {from:[38.7223,-9.1393],to:[-23.5505,-46.6333]},
+                {from:[51.5074,-0.1278],to:[40.7128,-74.006]},
+                {from:[40.7128,-74.006],to:[25.7617,-80.1918]},
+                {from:[41.0082,28.9784],to:[25.2048,55.2708]},
+            ],
+            arcColor: [0.18, 0.86, 0.6],
+            arcWidth: 0.4,
+            arcHeight: 0.3,
+            onRender: function(state) {
+                state.phi = phi;
+                phi += 0.002;
+            }
+        });
+        canvas.style.opacity = '1';
+    });
+}
+</script>
+
+<style>
+#cobe-globe { opacity: 0; transition: opacity 1s ease; }
+
+.ticker-digit {
+    width: 28px;
+    height: 40px;
+    background: #0a0a0a;
+    border: 1px solid #1a3a2a;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 0 8px rgba(46,219,153,0.1), inset 0 1px 2px rgba(0,0,0,0.5);
+}
+.ticker-digit::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.3) 100%);
+    pointer-events: none;
+}
+.ticker-roll {
+    display: flex;
+    flex-direction: column;
+    animation: tickerRoll 1.5s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+    animation-delay: 0.3s;
+}
+.ticker-roll span {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Unbounded', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    color: #2EDB99;
+    text-shadow: 0 0 6px rgba(46,219,153,0.4);
+    flex-shrink: 0;
+}
+@keyframes tickerRoll {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(calc(var(--target) * -40px)); }
+}
+
+@media (max-width: 380px) {
+    .ticker-digit { width: 24px; height: 34px; }
+    .ticker-roll span { height: 34px; font-size: 18px; }
+    @keyframes tickerRoll {
+        0% { transform: translateY(0); }
+        100% { transform: translateY(calc(var(--target) * -34px)); }
+    }
+}
+</style>
 {% endblock %}

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Rewards — Admin{% endblock %}
+
+{% block nav_right %}
+<a href="/admin/" class="text-sm text-gray-400 hover:text-brand-400 transition font-medium">Back to Admin</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 pt-8 pb-8">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold">Rewards</h1>
+        <div class="flex gap-2">
+            <a href="{{ url_for('admin.index') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Dashboard</a>
+            <a href="{{ url_for('admin.tiers') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Manage Tiers</a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-3 mb-6">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+            <div class="text-2xl font-bold text-brand-400">{{ total_earned }}</div>
+            <div class="text-xs text-gray-400 mt-1">Prizes Earned</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+            <div class="text-2xl font-bold text-green-400">{{ total_delivered }}</div>
+            <div class="text-xs text-gray-400 mt-1">Delivered</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+            <div class="text-2xl font-bold text-yellow-400">{{ total_pending }}</div>
+            <div class="text-xs text-gray-400 mt-1">Pending</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex gap-2 mb-6 flex-wrap">
+        <div class="flex gap-1 bg-gray-900 rounded-lg p-1">
+            <a href="{{ url_for('admin.rewards', channel='all', status=status) }}"
+               class="text-xs px-3 py-1.5 rounded-md transition {% if channel == 'all' %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-white{% endif %}">All</a>
+            <a href="{{ url_for('admin.rewards', channel='community', status=status) }}"
+               class="text-xs px-3 py-1.5 rounded-md transition {% if channel == 'community' %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-white{% endif %}">Community</a>
+            <a href="{{ url_for('admin.rewards', channel='public', status=status) }}"
+               class="text-xs px-3 py-1.5 rounded-md transition {% if channel == 'public' %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-white{% endif %}">Public</a>
+        </div>
+        <div class="flex gap-1 bg-gray-900 rounded-lg p-1">
+            <a href="{{ url_for('admin.rewards', channel=channel, status='all') }}"
+               class="text-xs px-3 py-1.5 rounded-md transition {% if status == 'all' %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-white{% endif %}">All Status</a>
+            <a href="{{ url_for('admin.rewards', channel=channel, status='pending') }}"
+               class="text-xs px-3 py-1.5 rounded-md transition {% if status == 'pending' %}bg-yellow-900/50 text-yellow-300{% else %}text-gray-400 hover:text-white{% endif %}">Pending</a>
+            <a href="{{ url_for('admin.rewards', channel=channel, status='delivered') }}"
+               class="text-xs px-3 py-1.5 rounded-md transition {% if status == 'delivered' %}bg-green-900/50 text-green-300{% else %}text-gray-400 hover:text-white{% endif %}">Delivered</a>
+        </div>
+    </div>
+
+    <!-- Rewards Table -->
+    {% if results %}
+    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b border-gray-800 text-gray-400 text-xs uppercase tracking-wider">
+                    <th class="px-4 py-3 text-left">Ambassador</th>
+                    <th class="px-4 py-3 text-left">Tier</th>
+                    <th class="px-4 py-3 text-left">Prize</th>
+                    <th class="px-4 py-3 text-left">Earned</th>
+                    <th class="px-4 py-3 text-left">Status</th>
+                    <th class="px-4 py-3 text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for notification, ambassador, tier in results %}
+                <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                    <td class="px-4 py-3">
+                        <div class="font-medium text-white">{{ ambassador.name }}</div>
+                        <div class="text-xs text-gray-500">{{ ambassador.email }}</div>
+                        <span class="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded
+                            {% if ambassador.source == 'community' %}bg-blue-900/50 text-blue-300
+                            {% else %}bg-purple-900/50 text-purple-300{% endif %}">
+                            {{ ambassador.source }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="text-brand-400 font-medium">{{ tier.name }}</span>
+                        <div class="text-xs text-gray-500">{{ tier.threshold }} dancers</div>
+                    </td>
+                    <td class="px-4 py-3 text-gray-300">{{ tier.reward }}</td>
+                    <td class="px-4 py-3 text-gray-400 text-xs">
+                        {{ notification.sent_at.strftime('%b %d, %Y') if notification.sent_at else '—' }}
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if notification.delivered %}
+                        <span class="text-green-400 text-xs font-medium">
+                            Delivered {{ notification.delivered_at.strftime('%b %d') if notification.delivered_at else '' }}
+                        </span>
+                        {% else %}
+                        <span class="text-yellow-400 text-xs font-medium">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                        {% if notification.delivered %}
+                        <form method="POST" action="{{ url_for('admin.undeliver_reward', channel=channel, status=status) }}" class="inline">
+                            <input type="hidden" name="notification_id" value="{{ notification.id }}">
+                            <button type="submit" class="text-xs text-gray-500 hover:text-red-400 transition">Undo</button>
+                        </form>
+                        {% else %}
+                        <form method="POST" action="{{ url_for('admin.deliver_reward', channel=channel, status=status) }}" class="inline">
+                            <input type="hidden" name="notification_id" value="{{ notification.id }}">
+                            <button type="submit" class="text-xs bg-brand-600 hover:bg-brand-500 text-white px-3 py-1 rounded-md transition">
+                                Mark Delivered
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
+        <p class="text-gray-500">No rewards earned yet.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

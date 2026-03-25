@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification
-from app.email import (
+from app.mailer import (
     send_first_referral_email,
     send_referral_notification_email,
     send_milestone_email,

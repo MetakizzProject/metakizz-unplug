@@ -2,8 +2,8 @@ import secrets
 from io import BytesIO
 import qrcode
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, send_file
-from app.models import db, Ambassador
-from app.email import send_welcome_email
+from app.models import db, Ambassador, Referral
+from app.mailer import send_welcome_email
 
 home_bp = Blueprint("home", __name__)
 
@@ -21,7 +21,8 @@ def community():
         email = request.form.get("email", "").strip().lower()
         if not email:
             flash("Please enter your email.", "error")
-            return render_template("community.html")
+            total_count = Ambassador.query.count() + Referral.query.count()
+            return render_template("community.html", total_count=total_count)
 
         ambassador = Ambassador.query.filter_by(email=email).first()
         if ambassador:
@@ -30,7 +31,8 @@ def community():
             flash("No dashboard found for that email. Join the challenge instead!", "info")
             return redirect(url_for("home.join"))
 
-    return render_template("community.html")
+    total_count = Ambassador.query.count() + Referral.query.count()
+    return render_template("community.html", total_count=total_count)
 
 
 @home_bp.route("/join", methods=["GET", "POST"])

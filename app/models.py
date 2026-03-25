@@ -66,5 +66,7 @@ class MilestoneNotification(db.Model):
     ambassador_id = db.Column(db.Integer, db.ForeignKey("ambassadors.id"), nullable=False)
     reward_tier_id = db.Column(db.Integer, db.ForeignKey("reward_tiers.id"), nullable=False)
     sent_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    delivered = db.Column(db.Boolean, default=False)
+    delivered_at = db.Column(db.DateTime, nullable=True)
 
     reward_tier = db.relationship("RewardTier")

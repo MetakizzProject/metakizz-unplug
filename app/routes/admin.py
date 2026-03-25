@@ -4,8 +4,9 @@ from flask import (
     Blueprint, render_template, request, redirect, url_for,
     flash, session, current_app, Response,
 )
-from app.models import db, Ambassador, Referral, RewardTier
-from app.email import (
+from datetime import datetime, timezone
+from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification
+from app.mailer import (
     send_welcome_email,
     send_first_referral_email,
     send_referral_notification_email,
@@ -49,6 +50,8 @@ def index():
     total_referrals = Referral.query.count()
     community_count = Ambassador.query.filter_by(source="community").count()
     public_count = Ambassador.query.filter_by(source="public").count()
+    prizes_earned = MilestoneNotification.query.count()
+    prizes_pending = MilestoneNotification.query.filter_by(delivered=False).count()
 
     return render_template(
         "admin.html",
@@ -56,6 +59,8 @@ def index():
         total_referrals=total_referrals,
         community_count=community_count,
         public_count=public_count,
+        prizes_earned=prizes_earned,
+        prizes_pending=prizes_pending,
         channel=channel,
     )
 
@@ -90,6 +95,67 @@ def tiers():
     public_tiers = RewardTier.query.filter_by(channel="public").order_by(RewardTier.sort_order).all()
 
     return render_template("admin_tiers.html", community_tiers=community_tiers, public_tiers=public_tiers)
+
+
+@admin_bp.route("/rewards")
+def rewards():
+    """View all earned rewards with delivery tracking."""
+    channel = request.args.get("channel", "all")
+    status = request.args.get("status", "all")
+
+    query = (
+        db.session.query(MilestoneNotification, Ambassador, RewardTier)
+        .join(Ambassador, MilestoneNotification.ambassador_id == Ambassador.id)
+        .join(RewardTier, MilestoneNotification.reward_tier_id == RewardTier.id)
+    )
+
+    if channel != "all":
+        query = query.filter(Ambassador.source == channel)
+    if status == "pending":
+        query = query.filter(MilestoneNotification.delivered == False)
+    elif status == "delivered":
+        query = query.filter(MilestoneNotification.delivered == True)
+
+    results = query.order_by(MilestoneNotification.sent_at.desc()).all()
+
+    # Stats
+    total_earned = MilestoneNotification.query.count()
+    total_delivered = MilestoneNotification.query.filter_by(delivered=True).count()
+    total_pending = total_earned - total_delivered
+
+    return render_template(
+        "admin_rewards.html",
+        results=results,
+        total_earned=total_earned,
+        total_delivered=total_delivered,
+        total_pending=total_pending,
+        channel=channel,
+        status=status,
+    )
+
+
+@admin_bp.route("/rewards/deliver", methods=["POST"])
+def deliver_reward():
+    """Mark a reward as delivered."""
+    notification_id = int(request.form["notification_id"])
+    notification = MilestoneNotification.query.get_or_404(notification_id)
+    notification.delivered = True
+    notification.delivered_at = datetime.now(timezone.utc)
+    db.session.commit()
+    flash("Reward marked as delivered!", "success")
+    return redirect(url_for("admin.rewards", channel=request.args.get("channel", "all"), status=request.args.get("status", "all")))
+
+
+@admin_bp.route("/rewards/undeliver", methods=["POST"])
+def undeliver_reward():
+    """Undo delivery marking."""
+    notification_id = int(request.form["notification_id"])
+    notification = MilestoneNotification.query.get_or_404(notification_id)
+    notification.delivered = False
+    notification.delivered_at = None
+    db.session.commit()
+    flash("Delivery status reverted.", "success")
+    return redirect(url_for("admin.rewards", channel=request.args.get("channel", "all"), status=request.args.get("status", "all")))
 
 
 @admin_bp.route("/export")
