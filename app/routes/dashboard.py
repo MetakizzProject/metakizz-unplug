@@ -60,8 +60,8 @@ def show(code):
                 int(((ambassador.referral_count - prev_threshold) / range_size) * 100),
             )
 
-    app_url = current_app.config["APP_URL"]
-    referral_url = f"{app_url}/r/{ambassador.referral_code}"
+    landing_url = current_app.config["LANDING_URL"].rstrip("/")
+    referral_url = f"{landing_url}?ref={ambassador.referral_code}"
 
     return render_template(
         "dashboard.html",

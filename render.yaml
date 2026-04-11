@@ -9,7 +9,13 @@ services:
         generateValue: true
       - key: APP_URL
         sync: false
+      - key: LANDING_URL
+        sync: false
       - key: ADMIN_PASSWORD
+        sync: false
+      - key: GHL_WEBHOOK_SECRET
+        sync: false
+      - key: WHATSAPP_GROUP_URL
         sync: false
       - key: DATABASE_URL
         fromDatabase:

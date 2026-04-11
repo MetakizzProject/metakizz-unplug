@@ -12,6 +12,22 @@ logger = logging.getLogger(__name__)
 RESEND_API_URL = "https://api.resend.com/emails"
 
 
+def _landing_url():
+    """Public landing URL where ambassadors send their referrals (Lovable PLF page)."""
+    return os.getenv("LANDING_URL", "").rstrip("/")
+
+
+def _whatsapp_group_url():
+    """Optional WhatsApp group invite link shown in welcome emails."""
+    return os.getenv("WHATSAPP_GROUP_URL", "").strip()
+
+
+def _share_url(ambassador):
+    """Build the public share URL for an ambassador (points to the Lovable landing)."""
+    base = _landing_url()
+    return f"{base}?ref={ambassador.referral_code}"
+
+
 def _send(to, subject, html):
     """Send an email via Resend. Returns True on success."""
     api_key = os.getenv("RESEND_API_KEY")
@@ -106,8 +122,22 @@ def _stats_card(stats_html):
 
 def send_welcome_email(ambassador, app_url):
     """Send welcome email after joining the challenge."""
-    referral_url = f"{app_url}/r/{ambassador.referral_code}"
+    referral_url = _share_url(ambassador)
     dashboard_url = f"{app_url}/dashboard/{ambassador.dashboard_code}"
+    whatsapp_group = _whatsapp_group_url()
+
+    whatsapp_section = ""
+    if whatsapp_group:
+        whatsapp_section = f"""
+<hr style="border:none;border-top:1px solid #2D2D44;margin:28px 0;">
+
+<p style="color:#2EDB99;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin:0 0 8px 0;">Join the Crew</p>
+<p style="color:#9CA3AF;font-size:14px;line-height:1.6;margin:0 0 4px 0;">
+Hop into our WhatsApp group — that's where the action happens, where we share wins, and where you'll get the inside scoop on the masterclass.
+</p>
+
+{_button("Join the WhatsApp Group", whatsapp_group, color="#25D366", text_color="#FFFFFF")}
+"""
 
     content = f"""
 <h1 style="color:#FFFFFF;font-size:22px;margin:0 0 8px 0;">Hey {ambassador.name}!</h1>
@@ -127,7 +157,7 @@ You're officially an ambassador. Your mission: unplug dancers into the MetaKizz 
 {dashboard_url}
 </p>
 <p style="color:#6B7280;font-size:12px;margin:4px 0 0 0;">Bookmark this — it's your personal HQ.</p>
-
+{whatsapp_section}
 <hr style="border:none;border-top:1px solid #2D2D44;margin:28px 0;">
 
 <p style="color:#2EDB99;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px 0;">Start Unplugging Now</p>
@@ -286,7 +316,7 @@ You've unplugged {count} dancers and unlocked:
 def send_almost_there_email(ambassador, next_tier, app_url):
     """Send nudge when ambassador is 1 referral away from next tier."""
     dashboard_url = f"{app_url}/dashboard/{ambassador.dashboard_code}"
-    referral_url = f"{app_url}/r/{ambassador.referral_code}"
+    referral_url = _share_url(ambassador)
     count = ambassador.referral_count
     whatsapp_url = f"https://wa.me/?text={http_requests.utils.quote(f'Check out this masterclass by MetaKizz! {referral_url}')}"
 

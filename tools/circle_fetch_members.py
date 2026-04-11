@@ -72,7 +72,7 @@ def fetch_circle_members():
 
 def create_ambassadors(members):
     app = create_app()
-    app_url = app.config["APP_URL"]
+    landing_url = app.config["LANDING_URL"].rstrip("/")
 
     with app.app_context():
         created = 0
@@ -131,15 +131,15 @@ def create_ambassadors(members):
             db.session.flush()
 
             # Generate QR code
-            _generate_qr(ambassador, app_url, app.root_path)
+            _generate_qr(ambassador, landing_url, app.root_path)
             created += 1
 
         db.session.commit()
         print(f"\nDone! Created {created} ambassadors, skipped {skipped} (already exist or no email).")
 
 
-def _generate_qr(ambassador, app_url, app_root):
-    referral_url = f"{app_url}/r/{ambassador.referral_code}"
+def _generate_qr(ambassador, landing_url, app_root):
+    referral_url = f"{landing_url}?ref={ambassador.referral_code}"
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
     qr.add_data(referral_url)
     qr.make(fit=True)

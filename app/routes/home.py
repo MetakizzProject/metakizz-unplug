@@ -82,8 +82,8 @@ def join():
 def qr_image(referral_code):
     """Generate and serve a QR code on the fly (no file storage needed)."""
     ambassador = Ambassador.query.filter_by(referral_code=referral_code).first_or_404()
-    app_url = current_app.config["APP_URL"]
-    referral_url = f"{app_url}/r/{ambassador.referral_code}"
+    landing_url = current_app.config["LANDING_URL"].rstrip("/")
+    referral_url = f"{landing_url}?ref={ambassador.referral_code}"
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
     qr.add_data(referral_url)
     qr.make(fit=True)
