@@ -72,7 +72,12 @@ def join():
         db.session.add(ambassador)
         db.session.commit()
 
-        send_welcome_email(ambassador, current_app.config["APP_URL"])
+        try:
+            if send_welcome_email(ambassador, current_app.config["APP_URL"]):
+                ambassador.welcome_sent_at = datetime.now(timezone.utc)
+                db.session.commit()
+        except Exception:
+            current_app.logger.exception("welcome email failed for %s via /join", email)
 
         return redirect(url_for("dashboard.show", code=ambassador.dashboard_code))
 

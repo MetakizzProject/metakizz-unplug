@@ -32,6 +32,11 @@ class Ambassador(db.Model):
     unsubscribe_token = db.Column(db.String(64), unique=True, default=_generate_unsubscribe_token)
     unsubscribed_at = db.Column(db.DateTime, nullable=True)
 
+    # Welcome email idempotency. Set after a successful welcome send.
+    # Used so existing community members imported from Circle receive the welcome
+    # the FIRST time they register through the landing — but not twice.
+    welcome_sent_at = db.Column(db.DateTime, nullable=True)
+
     referrals = db.relationship("Referral", backref="ambassador", lazy=True)
     notifications = db.relationship("MilestoneNotification", backref="ambassador", lazy=True)
 

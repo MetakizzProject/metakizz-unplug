@@ -12,9 +12,14 @@ logger = logging.getLogger(__name__)
 
 def _ensure_unsubscribe_columns(db):
     """
-    Idempotent migration: add unsubscribe_token + unsubscribed_at columns
-    to the ambassadors table if they don't exist yet, then backfill tokens
-    for any existing rows. Works on both SQLite (dev) and Postgres (prod).
+    Idempotent migration: add new ambassadors columns if missing, backfill where
+    relevant. Works on both SQLite (dev) and Postgres (prod).
+
+    Columns managed:
+    - unsubscribe_token (VARCHAR 64): random secret for opt-out links, backfilled.
+    - unsubscribed_at (TIMESTAMP nullable): set when user opts out.
+    - welcome_sent_at (TIMESTAMP nullable): idempotency for the welcome email so
+      community members imported pre-launch receive the welcome only once.
     """
     engine = db.engine
     inspector = inspect(engine)
@@ -27,6 +32,9 @@ def _ensure_unsubscribe_columns(db):
         if "unsubscribed_at" not in cols:
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN unsubscribed_at TIMESTAMP"))
             logger.info("added column ambassadors.unsubscribed_at")
+        if "welcome_sent_at" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN welcome_sent_at TIMESTAMP"))
+            logger.info("added column ambassadors.welcome_sent_at")
 
         # Backfill tokens for any rows that don't have one yet (existing ambassadors).
         rows = conn.execute(text("SELECT id FROM ambassadors WHERE unsubscribe_token IS NULL")).fetchall()

@@ -10,6 +10,7 @@ create_signup() encapsulates:
 
 import secrets
 import logging
+from datetime import datetime, timezone
 from flask import current_app
 from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification
 from app.mailer import (
@@ -40,6 +41,10 @@ def create_signup(name, email, ref_code=None):
     Create (or return existing) Ambassador for a PLF signup, and credit the referrer.
 
     Returns: tuple(ambassador, was_new) where was_new is True if a new Ambassador was created.
+
+    Existing community members imported from Circle still get the welcome email the
+    FIRST time they register through the landing (they need their dashboard link),
+    gated by the welcome_sent_at idempotency flag.
     """
     name = (name or "").strip()
     email = (email or "").strip().lower()
@@ -48,9 +53,20 @@ def create_signup(name, email, ref_code=None):
     if not name or not email:
         raise ValueError("name and email are required")
 
-    # 1. Dedup by email — if already an Ambassador, return it (no double credit).
+    # 1. Dedup by email — if already an Ambassador, send welcome (if owed) and return.
     existing = Ambassador.query.filter_by(email=email).first()
     if existing:
+        app_url = current_app.config["APP_URL"]
+        # Send welcome to existing ambassadors who haven't received it yet.
+        # Most often: community members imported from Circle who land here via
+        # the public landing. They need their dashboard link too.
+        if existing.welcome_sent_at is None and existing.unsubscribed_at is None:
+            try:
+                if send_welcome_email(existing, app_url):
+                    existing.welcome_sent_at = datetime.now(timezone.utc)
+                    db.session.commit()
+            except Exception:
+                logger.exception("welcome (to existing) failed for %s", email)
         return existing, False
 
     # 2. Look up the referring ambassador (if ref_code provided).
@@ -87,7 +103,9 @@ def create_signup(name, email, ref_code=None):
     # 5. Send welcome email to the new ambassador (with their personal share link).
     app_url = current_app.config["APP_URL"]
     try:
-        send_welcome_email(new_ambassador, app_url)
+        if send_welcome_email(new_ambassador, app_url):
+            new_ambassador.welcome_sent_at = datetime.now(timezone.utc)
+            db.session.commit()
     except Exception:
         logger.exception("welcome email failed for %s", email)
 
