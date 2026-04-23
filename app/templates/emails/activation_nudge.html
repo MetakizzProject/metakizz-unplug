@@ -1,0 +1,123 @@
+{% extends "emails/_shell.html" %}
+
+{% block title %}A drafted message — copy-paste if you want{% endblock %}
+{% block preheader %}Send to one dancer who should be at this training.{% endblock %}
+{% block header_left %}METAKIZZ // NUDGE.001{% endblock %}
+{% block header_right %}REFERRALS: <span style="color:#FFC857;">0</span>{% endblock %}
+
+{% block content %}
+
+<!-- Hero greeting -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:32px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0 0 8px 0;">
+      &gt; Hey <span style="color:#FFFFFF;">{{ first_name }}</span>_
+    </p>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.6;margin:14px 0 0 0;">
+      Your link's been live for <strong>2 days</strong>. Quiet so far.
+    </p>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.65;margin:14px 0 0 0;">
+      In case you're not sure what to write, here's a message you can copy and paste to one dancer who should be at this training:
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- Pre-written message card -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:18px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d1610" style="background-color:#0d1610;border:1px dashed #2EDB99;border-radius:8px;">
+    <tr>
+      <td style="padding:16px 18px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 10px 0;">
+          // Copy-paste this
+        </p>
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.55;margin:0;word-break:break-word;">
+          Hey, just registered for a free Urbankiz training with Jesus &amp; Anni (MetaKizz). 2 videos + 1 live. Thought of you. <span style="color:#2EDB99;">{{ referral_url }}</span>
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- One message done -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:18px 32px 0 32px;">
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#FFFFFF;font-size:14px;letter-spacing:1.5px;text-transform:uppercase;margin:0;">
+      That's it. <span style="color:#2EDB99;">One message. One dancer. Done.</span>
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- CTAs (primary WhatsApp + secondary dashboard) -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:24px 32px 0 32px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr>
+      <td align="center" bgcolor="#25D366" style="background:#25D366;border:2px solid #25D366;border-radius:8px;box-shadow:0 0 20px rgba(37,211,102,0.4);">
+        <a href="{{ whatsapp_url }}" class="mob-cta-text" style="display:inline-block;padding:18px 36px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:14px;letter-spacing:2.5px;text-transform:uppercase;color:#FFFFFF;text-decoration:none;">
+          ▶ Share on WhatsApp
+        </a>
+      </td>
+    </tr>
+    </table>
+    <p style="margin:14px 0 0 0;">
+      <a href="{{ dashboard_url }}" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;text-decoration:underline;">
+        Open my dashboard →
+      </a>
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- Deadline banner -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a1407" style="background:#1a1407;border:1px solid #8a6a2a;border-radius:6px;">
+    <tr>
+      <td align="center" style="padding:14px 18px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:12px;letter-spacing:3.5px;text-transform:uppercase;margin:0;">
+          ⧗ Closes May 7 · 19:00 Madrid
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Sign-off -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 32px 32px;">
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      MetaKizz Team
+    </p>
+  </td>
+</tr>
+</table>
+
+{% endblock %}
+
+{% block prominent_unsubscribe %}
+<tr>
+  <td style="padding:18px 0 0 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid #2D2D44;border-radius:10px;">
+    <tr>
+      <td align="center" style="padding:18px 20px;">
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;margin:0 0 6px 0;">Don't want to keep receiving these emails?</p>
+        <p style="margin:0;"><a href="{{ unsubscribe_url }}" style="color:#2EDB99;text-decoration:underline;font-size:14px;font-weight:bold;">Click here to stop them.</a></p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+{% endblock %}

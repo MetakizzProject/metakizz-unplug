@@ -3,9 +3,7 @@
 
 {% block title %}MetaKizz Ambassador Challenge{% endblock %}
 
-{% block nav_right %}
-<a href="/leaderboard/community" class="text-sm text-gray-400 hover:text-brand-400 transition font-medium">Leaderboard</a>
-{% endblock %}
+{% block nav_right %}{% endblock %}
 
 {% block content %}
 <div class="max-w-lg mx-auto px-4 pt-2 pb-10 text-center">
@@ -35,7 +33,7 @@
 
     <!-- Headline -->
     <h1 class="text-xl sm:text-3xl font-display font-bold mb-1 tracking-tight">MetaKizz <span class="text-brand-400">Unplugging</span></h1>
-    <p class="text-gray-300 font-body text-xs sm:text-sm leading-relaxed mb-3">Invite your friends to see the code behind the dance. <span class="text-white font-semibold">Earn rewards for every friend who joins.</span></p>
+    <p class="text-gray-300 font-body text-xs sm:text-sm leading-relaxed mb-3">Invite your friends to <span class="text-brand-400 font-semibold">Hacking the Urbankiz Code</span>. <span class="text-white font-semibold">It's 100% free for them</span>, and you earn rewards every time one of them registers.</p>
 
     <!-- Email Form — above the fold on mobile -->
     <form method="POST" class="mb-5">
@@ -70,8 +68,8 @@
                 <span class="text-brand-400 text-xs font-bold">2</span>
             </div>
             <div>
-                <p class="text-white font-semibold text-xs sm:text-sm">They register for the masterclass</p>
-                <p class="text-gray-400 text-xs">One click — they're in. It counts for you automatically.</p>
+                <p class="text-white font-semibold text-xs sm:text-sm">They register for Hacking the Urbankiz Code</p>
+                <p class="text-gray-400 text-xs">One click — they're in. It's free for them, counts for you.</p>
             </div>
         </div>
         <div class="flex gap-2.5">
@@ -80,15 +78,38 @@
             </div>
             <div>
                 <p class="text-white font-semibold text-xs sm:text-sm">You earn rewards</p>
-                <p class="text-gray-400 text-xs">Free community months, ambassador status, exclusive access — the more you share, the more you unlock.</p>
+                <p class="text-gray-400 text-xs">A guaranteed reward at 5 invites. Bigger rewards for the top 3 most active.</p>
             </div>
         </div>
     </div>
 
-    <!-- Rewards highlight -->
-    <div class="bg-brand-400/10 border border-brand-400/30 rounded-xl p-3 mb-4 flex items-center gap-3">
-        <span class="text-2xl">&#127942;</span>
-        <p class="text-brand-400 text-xs sm:text-sm font-semibold text-left">Every friend you bring = progress toward your next reward. Start with just 5 friends.</p>
+    <!-- What you can win -->
+    <div class="bg-brand-400/5 border border-brand-400/30 rounded-xl p-4 mb-4 text-left">
+        <h2 class="font-display font-semibold text-[11px] uppercase tracking-[0.2em] text-brand-400 mb-3 text-center">────  Here's What You Can Win  ────</h2>
+
+        <!-- Guaranteed prize card -->
+        <div class="bg-brand-900/30 border-2 border-brand-400/60 rounded-lg p-3 mb-3 text-center" style="box-shadow: 0 0 16px rgba(46,219,153,0.15);">
+            <p class="text-[10px] text-brand-400 uppercase tracking-wider font-bold mb-1.5">Invite 5 dancers <span class="text-white">→</span></p>
+            <p class="text-white font-display font-bold text-sm sm:text-base leading-tight">1 month free of MetaDancers</p>
+            <p class="text-gray-500 text-[10px] mt-1.5 italic">Locked the moment you hit 5. No ranking, no luck.</p>
+        </div>
+
+        <!-- Top 3 -->
+        <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-2 text-center">Plus, prizes for the top 3 most active</p>
+        <ul class="text-xs space-y-1.5">
+            <li class="flex gap-2 items-start">
+                <span class="bg-brand-400 text-black text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5">1ST</span>
+                <span class="text-gray-300">1 year of MetaDancers, free <span class="text-gray-500">· €1,000+ value</span></span>
+            </li>
+            <li class="flex gap-2 items-start">
+                <span class="bg-brand-400/20 border border-brand-400/50 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5">2ND</span>
+                <span class="text-gray-300">Video feedback on your dancing <span class="text-gray-500">· €150+ value</span></span>
+            </li>
+            <li class="flex gap-2 items-start">
+                <span class="bg-brand-400/10 border border-brand-400/30 text-gray-300 text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5">3RD</span>
+                <span class="text-gray-300">Personalized MetaKizz hoodie</span>
+            </li>
+        </ul>
     </div>
 </div>
 

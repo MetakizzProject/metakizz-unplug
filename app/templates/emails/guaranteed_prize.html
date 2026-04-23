@@ -1,0 +1,208 @@
+{% extends "emails/_shell.html" %}
+
+{% block title %}5 unplugs. Your reward is locked.{% endblock %}
+{% block preheader %}Nothing can take this away. Here's what's next.{% endblock %}
+{% block header_left %}METAKIZZ // MILESTONE.05{% endblock %}
+{% block header_right %}REWARD: <span style="color:#2EDB99;">LOCKED</span>{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:36px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:10px;letter-spacing:4px;text-transform:uppercase;margin:0 0 14px 0;opacity:0.7;">
+      // Threshold reached
+    </p>
+    <h1 class="mob-h1" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:32px;line-height:1.1;color:#FFFFFF;margin:0 0 8px 0;letter-spacing:1.5px;text-transform:uppercase;text-shadow:0 0 24px rgba(46,219,153,0.5);">
+      <span style="color:#2EDB99;">5 unplugs.</span><br>Locked.
+    </h1>
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:18px 0 0 0;">
+      &gt; Hey <span style="color:#2EDB99;">{{ first_name }}</span>_
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- Reward locked card -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d2118" style="background-color:#0d2118;border:2px solid #2EDB99;border-radius:10px;box-shadow:0 0 24px rgba(46,219,153,0.18);">
+    <tr>
+      <td align="center" style="padding:22px 22px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 10px 0;">
+          Your reward
+        </p>
+        {% if community %}
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:20px;line-height:1.3;letter-spacing:0.5px;margin:0;text-transform:uppercase;text-shadow:0 0 14px rgba(46,219,153,0.4);">
+          1 month free <span style="color:#2EDB99;">of MetaDancers</span>
+        </p>
+        {% else %}
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:20px;line-height:1.3;letter-spacing:0.5px;margin:0 0 6px 0;text-transform:uppercase;text-shadow:0 0 14px rgba(46,219,153,0.4);">
+          Live musicality <span style="color:#2EDB99;">masterclass</span>
+        </p>
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:13px;letter-spacing:1px;margin:0;">
+          with Jesus &amp; Anni · &euro;97 value
+        </p>
+        {% endif %}
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:13px;line-height:1.5;margin:14px 0 0 0;font-style:italic;">
+          Nothing can take this away now.
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Top 3 transition -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.6;margin:0 0 14px 0;">
+      From here, every extra unplug moves you toward the <strong style="color:#2EDB99;">top 3</strong>:
+    </p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d1610" style="background-color:#0d1610;border:1px solid #1a7a55;border-radius:10px;">
+    <tr>
+      <td style="padding:16px 18px;">
+        {% if community %}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td valign="top" width="56" style="padding:8px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr><td bgcolor="#2EDB99" style="background:#2EDB99;padding:5px 10px;border-radius:4px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#000000;font-size:13px;letter-spacing:1.5px;">1<span style="font-size:9px;">ST</span></td></tr>
+            </table>
+          </td>
+          <td valign="middle" style="padding:8px 0 8px 12px;font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.4;">
+            1 year of MetaDancers, free <span style="color:#9CA3AF;font-size:11px;">· €1,000+ value</span>
+          </td>
+        </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px dashed #1a7a55;height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr></table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td valign="top" width="56" style="padding:8px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr><td bgcolor="#0d2118" style="background:#0d2118;border:1px solid #1a7a55;padding:5px 10px;border-radius:4px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:12px;letter-spacing:1.5px;">2<span style="font-size:9px;">ND</span></td></tr>
+            </table>
+          </td>
+          <td valign="middle" style="padding:8px 0 8px 12px;font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.4;">
+            Video feedback on your dancing <span style="color:#9CA3AF;font-size:11px;">· €150+ value</span>
+          </td>
+        </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px dashed #1a7a55;height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr></table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td valign="top" width="56" style="padding:8px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr><td bgcolor="#0d1610" style="background:#0d1610;border:1px solid #1a7a55;padding:5px 10px;border-radius:4px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#C9CFD4;font-size:12px;letter-spacing:1.5px;">3<span style="font-size:9px;">RD</span></td></tr>
+            </table>
+          </td>
+          <td valign="middle" style="padding:8px 0 8px 12px;font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.4;">
+            Personalized MetaKizz hoodie
+          </td>
+        </tr>
+        </table>
+        {% else %}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td valign="top" width="56" style="padding:8px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr><td bgcolor="#2EDB99" style="background:#2EDB99;padding:5px 10px;border-radius:4px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#000000;font-size:13px;letter-spacing:1.5px;">1<span style="font-size:9px;">ST</span></td></tr>
+            </table>
+          </td>
+          <td valign="middle" style="padding:8px 0 8px 12px;font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.4;">
+            Video feedback on your dancing <span style="color:#9CA3AF;font-size:11px;">· €150+ value</span>
+          </td>
+        </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px dashed #1a7a55;height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr></table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td valign="top" width="56" style="padding:8px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr><td bgcolor="#0d2118" style="background:#0d2118;border:1px solid #1a7a55;padding:5px 10px;border-radius:4px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:12px;letter-spacing:1.5px;">2<span style="font-size:9px;">ND</span></td></tr>
+            </table>
+          </td>
+          <td valign="middle" style="padding:8px 0 8px 12px;font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.4;">
+            Personalized MetaKizz hoodie
+          </td>
+        </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px dashed #1a7a55;height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr></table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td valign="top" width="56" style="padding:8px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr><td bgcolor="#0d1610" style="background:#0d1610;border:1px solid #1a7a55;padding:5px 10px;border-radius:4px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#C9CFD4;font-size:12px;letter-spacing:1.5px;">3<span style="font-size:9px;">RD</span></td></tr>
+            </table>
+          </td>
+          <td valign="middle" style="padding:8px 0 8px 12px;font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.4;">
+            Personalized MetaKizz t-shirt
+          </td>
+        </tr>
+        </table>
+        {% endif %}
+      </td>
+    </tr>
+    </table>
+
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:13px;letter-spacing:1px;text-transform:uppercase;margin:14px 0 0 0;text-align:center;">
+      Your position right now: <strong style="color:#2EDB99;">#{{ position }}</strong>
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- CTAs -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:24px 32px 0 32px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr>
+      <td align="center" bgcolor="#2EDB99" style="background:#2EDB99;border:2px solid #2EDB99;border-radius:8px;box-shadow:0 0 20px rgba(46,219,153,0.4);">
+        <a href="{{ leaderboard_url }}" class="mob-cta-text" style="display:inline-block;padding:16px 30px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:13px;letter-spacing:2.5px;text-transform:uppercase;color:#000000;text-decoration:none;">
+          See the leaderboard →
+        </a>
+      </td>
+    </tr>
+    </table>
+    <p style="margin:12px 0 0 0;">
+      <a href="{{ share_url }}" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;text-decoration:underline;">
+        Share my link →
+      </a>
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- Deadline -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a1407" style="background:#1a1407;border:1px solid #8a6a2a;border-radius:6px;">
+    <tr><td align="center" style="padding:12px 18px;">
+      <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin:0;">
+        ⧗ Closes May 7 · 19:00 Madrid
+      </p>
+    </td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Sign-off -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 32px 32px;">
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      MetaKizz Team
+    </p>
+  </td>
+</tr>
+</table>
+
+{% endblock %}

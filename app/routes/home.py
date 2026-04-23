@@ -1,4 +1,5 @@
 import secrets
+from datetime import datetime, timezone
 from io import BytesIO
 import qrcode
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, send_file
@@ -76,6 +77,25 @@ def join():
         return redirect(url_for("dashboard.show", code=ambassador.dashboard_code))
 
     return render_template("join.html")
+
+
+@home_bp.route("/unsubscribe/<token>", methods=["GET", "POST"])
+def unsubscribe(token):
+    """One-click email opt-out. GET shows confirmation, POST records the opt-out."""
+    ambassador = Ambassador.query.filter_by(unsubscribe_token=token).first()
+    if ambassador is None:
+        return render_template("unsubscribe.html", state="invalid"), 404
+
+    if request.method == "POST":
+        if ambassador.unsubscribed_at is None:
+            ambassador.unsubscribed_at = datetime.now(timezone.utc)
+            db.session.commit()
+        return render_template("unsubscribe.html", state="done", ambassador=ambassador)
+
+    if ambassador.unsubscribed_at is not None:
+        return render_template("unsubscribe.html", state="already", ambassador=ambassador)
+
+    return render_template("unsubscribe.html", state="confirm", ambassador=ambassador)
 
 
 @home_bp.route("/qr/<referral_code>.png")

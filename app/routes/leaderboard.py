@@ -20,16 +20,20 @@ def show(channel):
 
     ambassadors = Ambassador.query.filter_by(source=channel).all()
 
+    # Sort by referral count desc, breaking ties by who joined first.
+    # Cap to top 10 — that's all we publicly show on the leaderboard.
     sorted_ambassadors = sorted(
         ambassadors,
         key=lambda a: (-a.referral_count, a.created_at),
-    )
+    )[:10]
 
     leaderboard = []
     for i, amb in enumerate(sorted_ambassadors):
+        # First name only, per leaderboard display rules.
+        first_name = amb.name.strip().split()[0] if amb.name and amb.name.strip() else "?"
         leaderboard.append({
             "rank": i + 1,
-            "name": amb.name,
+            "name": first_name,
             "profile_picture_url": amb.profile_picture_url,
             "referral_count": amb.referral_count,
         })

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% set embed = false %}
 
-{% block title %}Your Dashboard — MetaKizz Challenge{% endblock %}
+{% block title %}Your Dashboard — MetaKizz Unplugging{% endblock %}
 
 {% block nav_right %}
 <a href="/leaderboard/{{ ambassador.source }}" class="text-sm text-gray-400 hover:text-brand-400 transition font-medium">Leaderboard</a>
@@ -9,8 +9,9 @@
 
 {% block content %}
 <div class="max-w-2xl mx-auto px-4 pt-8 pb-8">
-    <!-- Profile Header -->
-    <div class="flex items-center gap-4 mb-8">
+
+    <!-- ─── PROFILE HEADER (always visible) ─── -->
+    <div class="flex items-center gap-4 mb-6">
         {% if ambassador.profile_picture_url %}
         <img src="{{ ambassador.profile_picture_url }}" alt="{{ ambassador.name }}" class="w-14 h-14 rounded-full object-cover">
         {% else %}
@@ -20,12 +21,12 @@
         {% endif %}
         <div>
             <h1 class="text-xl font-display font-bold">{{ ambassador.name }}</h1>
-            <p class="text-sm text-gray-400">Rank #{{ rank }} of {{ total_ambassadors }}</p>
+            <p class="text-sm text-gray-400">Rank #{{ rank }} of {{ total_ambassadors }} · {{ ambassador.source }}</p>
         </div>
     </div>
 
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-2 gap-3 mb-8">
+    <!-- ─── STATS CARDS (always visible) ─── -->
+    <div class="grid grid-cols-2 gap-3 mb-4">
         <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-4 text-center">
             <div class="text-3xl font-bold text-brand-400">{{ ambassador.referral_count }}</div>
             <div class="text-sm text-gray-400 mt-1">Dancers unplugged</div>
@@ -36,193 +37,303 @@
         </div>
     </div>
 
-    <!-- Progress to Next Tier -->
-    {% if next_tier %}
-    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-4 mb-8">
-        <div class="flex justify-between text-sm mb-2">
-            <span class="text-gray-400">Next milestone: <span class="text-white font-medium">{{ next_tier.name }}</span></span>
-            <span class="text-brand-400">{{ ambassador.referral_count }}/{{ next_tier.threshold }}</span>
+    <!-- ─── PROGRESS / NEXT MILESTONE (always visible) ─── -->
+    <div class="bg-gray-900/80 border border-brand-400/30 rounded-xl p-4 mb-6" style="box-shadow: 0 0 16px rgba(46,219,153,0.1);">
+        <div class="flex justify-between items-center text-sm mb-2">
+            <span class="text-gray-400">Next: <span class="text-white font-medium">{{ progress_label }}</span></span>
+            {% if progress_target %}
+            <span class="text-brand-400 font-bold">{{ ambassador.referral_count }}/{{ progress_target }}</span>
+            {% else %}
+            <span class="text-brand-400 font-bold">✓ LOCKED</span>
+            {% endif %}
         </div>
-        <div class="w-full bg-gray-800 rounded-full h-3">
-            <div class="bg-gradient-to-r from-brand-600 to-brand-400 h-3 rounded-full transition-all duration-500" style="width: {{ progress_pct }}%"></div>
+        <div class="w-full bg-gray-800 rounded-full h-2.5 mb-2">
+            <div class="bg-gradient-to-r from-brand-600 to-brand-400 h-2.5 rounded-full transition-all duration-500" style="width: {{ progress_pct }}%; box-shadow: 0 0 8px rgba(46,219,153,0.5);"></div>
         </div>
-        <p class="text-xs text-gray-500 mt-2">Reward: {{ next_tier.reward }}</p>
+        <p class="text-xs text-gray-400">{{ progress_message }}</p>
     </div>
-    {% elif current_tier %}
-    <div class="bg-green-900/30 border border-green-800 rounded-xl p-4 mb-8 text-center">
-        <p class="text-green-300 font-medium">You've reached the highest tier!</p>
+
+    <!-- ─── TABS NAV ─── -->
+    <div class="flex gap-1 mb-4 overflow-x-auto pb-1" id="dash-tabs" role="tablist">
+        <button data-tab="link" class="dash-tab whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition flex-shrink-0">My Link</button>
+        <button data-tab="prizes" class="dash-tab whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition flex-shrink-0">Prizes</button>
+        <button data-tab="share" class="dash-tab whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition flex-shrink-0">How to Share</button>
+        <button data-tab="referrals" class="dash-tab whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition flex-shrink-0">Referrals <span class="text-gray-500">({{ referrals|length }})</span></button>
     </div>
-    {% endif %}
 
-    <!-- Your Referral Link -->
-    <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-5 mb-6">
-        <h2 class="font-display font-semibold mb-3 text-sm uppercase tracking-wider text-brand-400">Your Link</h2>
-        <div class="flex gap-2 mb-4">
-            <input
-                type="text"
-                value="{{ referral_url }}"
-                readonly
-                id="referral-link"
-                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none"
-            >
-            <button
-                onclick="copyLink()"
-                id="copy-btn"
-                class="bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
-            >
-                Copy
-            </button>
-        </div>
+    <!-- ═══════════════════════════════════════════════════════════
+         TAB: MY LINK (default)
+         ═══════════════════════════════════════════════════════════ -->
+    <div class="dash-panel" data-panel="link">
+        <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-5 mb-6">
+            <h2 class="font-display font-semibold mb-3 text-sm uppercase tracking-wider text-brand-400">Your Link</h2>
+            <div class="flex gap-2 mb-4">
+                <input type="text" value="{{ referral_url }}" readonly id="referral-link"
+                    class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none">
+                <button onclick="copyLink()" id="copy-btn"
+                    class="bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+                    Copy
+                </button>
+            </div>
 
-        <!-- Share Buttons -->
-        <div class="flex gap-2 mb-4">
-            <a
-                href="https://wa.me/?text={{ ('Check out this masterclass by MetaKizz! 🎶💃 ' + referral_url)|urlencode }}"
-                target="_blank"
-                class="flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-white text-sm font-medium px-4 py-2.5 rounded-lg transition text-center"
-            >
-                Share on WhatsApp
-            </a>
-            <button
-                onclick="nativeShare()"
-                id="share-btn"
-                class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition"
-            >
-                Share...
-            </button>
-        </div>
+            <!-- Share buttons -->
+            <div class="flex gap-2 mb-4">
+                <a
+                    href="https://wa.me/?text={{ ('Hey, just registered for a free Urbankiz training week with Jesus & Anni (MetaKizz). 2 videos + 1 live. Thought of you. ' + referral_url)|urlencode }}"
+                    target="_blank"
+                    class="flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-white text-sm font-medium px-4 py-2.5 rounded-lg transition text-center">
+                    Share on WhatsApp
+                </a>
+                <button onclick="nativeShare()" id="share-btn"
+                    class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition">
+                    Share...
+                </button>
+            </div>
 
-        <!-- QR Code -->
-        <div class="text-center">
-            <img
-                src="{{ url_for('home.qr_image', referral_code=ambassador.referral_code) }}"
-                alt="QR Code"
-                class="w-40 h-40 mx-auto bg-white rounded-lg p-2"
-            >
-            <a
-                href="{{ url_for('home.qr_image', referral_code=ambassador.referral_code) }}"
-                download="metakizz-qr-{{ ambassador.referral_code }}.png"
-                class="inline-block mt-2 text-sm text-brand-400 hover:text-brand-300"
-            >
-                Download QR Code
-            </a>
+            <!-- QR Code -->
+            <div class="text-center">
+                <img src="{{ url_for('home.qr_image', referral_code=ambassador.referral_code) }}"
+                    alt="QR Code"
+                    class="w-40 h-40 mx-auto bg-white rounded-lg p-2">
+                <a href="{{ url_for('home.qr_image', referral_code=ambassador.referral_code) }}"
+                    download="metakizz-qr-{{ ambassador.referral_code }}.png"
+                    class="inline-block mt-2 text-sm text-brand-400 hover:text-brand-300">
+                    Download QR Code
+                </a>
+            </div>
         </div>
     </div>
 
-    <!-- Reward Milestones -->
-    {% if tiers %}
-    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-5 mb-6">
-        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-gray-400 mb-4">Reward Milestones</h2>
-        <div class="space-y-3">
-            {% for tier in tiers %}
-            <div class="flex items-center gap-3 {% if ambassador.referral_count >= tier.threshold %}opacity-100{% else %}opacity-50{% endif %}">
-                <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0
-                    {% if ambassador.referral_count >= tier.threshold %}bg-green-900 border border-green-700 text-green-400
-                    {% else %}bg-gray-800 border border-gray-700 text-gray-500{% endif %}">
-                    {% if ambassador.referral_count >= tier.threshold %}&#10003;{% else %}{{ tier.threshold }}{% endif %}
+    <!-- ═══════════════════════════════════════════════════════════
+         TAB: PRIZES (new prize structure)
+         ═══════════════════════════════════════════════════════════ -->
+    <div class="dash-panel hidden" data-panel="prizes">
+        <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-5 mb-6">
+            <h2 class="font-display font-semibold mb-4 text-sm uppercase tracking-wider text-brand-400 text-center">────  Here's What You Can Win  ────</h2>
+
+            <!-- Guaranteed prize -->
+            <div class="bg-brand-900/30 border-2 border-brand-400/60 rounded-lg p-4 mb-4 text-center" style="box-shadow: 0 0 20px rgba(46,219,153,0.18);">
+                <p class="text-[10px] text-brand-400 uppercase tracking-[0.2em] font-bold mb-2">Invite 5 dancers <span class="text-white">→</span></p>
+                <p class="text-white font-display font-bold text-base sm:text-lg leading-tight">{{ guaranteed_reward }}</p>
+                <p class="text-gray-500 text-xs mt-2 italic">Locked the moment you hit 5. No ranking, no luck.</p>
+            </div>
+
+            <!-- Top 3 -->
+            <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-3 text-center">Plus, prizes for the top 3 most active</p>
+            <div class="bg-gray-800/40 border border-gray-700/50 rounded-lg p-3 space-y-3">
+                {% for prize in top3_prizes %}
+                <div class="flex items-start gap-3 {% if not loop.last %}pb-3 border-b border-dashed border-gray-700/50{% endif %}">
+                    <span class="text-xs font-bold px-2 py-1 rounded flex-shrink-0
+                        {% if loop.index == 1 %}bg-brand-400 text-black
+                        {% elif loop.index == 2 %}bg-brand-400/20 border border-brand-400/50 text-white
+                        {% else %}bg-brand-400/10 border border-brand-400/30 text-gray-300{% endif %}">
+                        {{ prize.place }}
+                    </span>
+                    <div class="flex-1">
+                        <p class="text-sm text-white font-medium">{{ prize.name }}</p>
+                        {% if prize.value %}
+                        <p class="text-xs text-gray-500 mt-0.5">{{ prize.value }}</p>
+                        {% endif %}
+                    </div>
                 </div>
-                <div>
-                    <div class="text-sm font-medium">{{ tier.name }}</div>
-                    <div class="text-xs text-gray-400">{{ tier.reward }} &middot; {{ tier.threshold }} dancers</div>
+                {% endfor %}
+            </div>
+
+            <p class="text-xs text-gray-500 text-center mt-4 italic">
+                Top 3 winners get this <strong class="text-brand-400 not-italic">on top of</strong> the guaranteed prize.
+            </p>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         TAB: HOW TO SHARE (visual ideas grid)
+         ═══════════════════════════════════════════════════════════ -->
+    <div class="dash-panel hidden" data-panel="share">
+
+        <div class="mb-4">
+            <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-brand-400 mb-1">Some ideas to unplug more dancers...</h2>
+            <p class="text-xs text-gray-500">Pick what feels natural. Personal beats broadcast, every time.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+
+            <!-- Card 1: Personal DM -->
+            <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-4 hover:border-brand-400/40 transition">
+                <div class="flex items-start gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-[#25D366]/15 border border-[#25D366]/40 flex items-center justify-center flex-shrink-0">
+                        <span class="text-xl">💬</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-sm font-bold text-white mb-1 leading-tight">Send a personal DM</h3>
+                        <p class="text-xs text-gray-400 leading-relaxed">WhatsApp or Instagram. One friend at a time.</p>
+                    </div>
                 </div>
             </div>
-            {% endfor %}
+
+            <!-- Card 2: Call a friend -->
+            <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-4 hover:border-brand-400/40 transition">
+                <div class="flex items-start gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-brand-400/15 border border-brand-400/40 flex items-center justify-center flex-shrink-0">
+                        <span class="text-xl">📞</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-sm font-bold text-white mb-1 leading-tight">Call a dancer friend</h3>
+                        <p class="text-xs text-gray-400 leading-relaxed">Two minutes telling them about Hacking the Urbankiz Code.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 3: QR on IG stories -->
+            <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-4 hover:border-brand-400/40 transition">
+                <div class="flex items-start gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-pink-500/15 border border-pink-500/40 flex items-center justify-center flex-shrink-0">
+                        <span class="text-xl">📱</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-sm font-bold text-white mb-1 leading-tight">QR on Instagram stories</h3>
+                        <p class="text-xs text-gray-400 leading-relaxed">Download from <strong class="text-brand-400">My Link</strong> tab. Drop it + caption. 90 seconds.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 4: Reel + tag -->
+            <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-4 hover:border-brand-400/40 transition">
+                <div class="flex items-start gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-purple-500/15 border border-purple-500/40 flex items-center justify-center flex-shrink-0">
+                        <span class="text-xl">🎬</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-sm font-bold text-white mb-1 leading-tight">Post a reel, tag @metakizz</h3>
+                        <p class="text-xs text-gray-400 leading-relaxed">Put your link in bio. Best reels get reposted by us.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 5: Dance groups -->
+            <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-4 hover:border-brand-400/40 transition">
+                <div class="flex items-start gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-blue-500/15 border border-blue-500/40 flex items-center justify-center flex-shrink-0">
+                        <span class="text-xl">👥</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-sm font-bold text-white mb-1 leading-tight">Share in dance groups</h3>
+                        <p class="text-xs text-gray-400 leading-relaxed">WhatsApp, Telegram, Facebook. Where your circle already hangs.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 6: Repost MetaKizz -->
+            <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-4 hover:border-brand-400/40 transition">
+                <div class="flex items-start gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center flex-shrink-0">
+                        <span class="text-xl">🔁</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-sm font-bold text-white mb-1 leading-tight">Repost MetaKizz content</h3>
+                        <p class="text-xs text-gray-400 leading-relaxed">Boost what we post. Your link in bio catches the curious.</p>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
-    {% endif %}
 
-    <!-- Instagram Share -->
-    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-5 mb-6">
-        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-gray-400 mb-2">Share on Instagram</h2>
-        {% if ambassador.shared_on_instagram %}
-        <p class="text-green-400 text-sm">&#10003; Instagram share recorded</p>
-        {% else %}
-        <p class="text-gray-400 text-sm mb-3">Shared our content on Instagram? Let us know!</p>
-        <form method="POST" class="flex gap-2">
-            <input type="hidden" name="instagram_share" value="1">
-            <input
-                type="text"
-                name="instagram_url"
-                placeholder="Instagram post URL (optional)"
-                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-500"
-            >
-            <button type="submit" class="bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
-                I Shared
-            </button>
-        </form>
-        {% endif %}
-    </div>
-
-    <!-- Ways to Bring More People -->
-    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-5 mb-6">
-        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-gray-400 mb-3">Ways to Unplug More Dancers</h2>
-        <div class="space-y-3">
-            <div class="flex items-start gap-3 text-sm">
-                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#9993;</span>
-                <span class="text-gray-300"><strong>Send a personal message</strong> to friends who dance — a DM on WhatsApp or Instagram goes a long way</span>
+    <!-- ═══════════════════════════════════════════════════════════
+         TAB: REFERRALS
+         ═══════════════════════════════════════════════════════════ -->
+    <div class="dash-panel hidden" data-panel="referrals">
+        <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-5">
+            <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-brand-400 mb-3">
+                Dancers You've Unplugged <span class="text-gray-500 font-normal normal-case">({{ referrals|length }})</span>
+            </h2>
+            {% if referrals %}
+            <div class="space-y-2">
+                {% for ref in referrals %}
+                <div class="flex items-center justify-between py-2.5 border-b border-gray-800 last:border-0">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-brand-400/15 border border-brand-400/30 flex items-center justify-center text-xs text-brand-400 font-bold">
+                            {{ ref.name[0]|upper }}
+                        </div>
+                        <span class="text-sm text-gray-200">{{ ref.name }}</span>
+                    </div>
+                    <span class="text-xs text-gray-500">{{ ref.registered_at.strftime('%b %d') }}</span>
+                </div>
+                {% endfor %}
             </div>
-            <div class="flex items-start gap-3 text-sm">
-                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#9742;</span>
-                <span class="text-gray-300"><strong>Give a friend a call</strong> — tell them about the free masterclass and why they should join</span>
-            </div>
-            <div class="flex items-start gap-3 text-sm">
-                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#128247;</span>
-                <span class="text-gray-300"><strong>Share your QR code</strong> in your Instagram stories — download it above</span>
-            </div>
-            <div class="flex items-start gap-3 text-sm">
-                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#127909;</span>
-                <span class="text-gray-300"><strong>Post a reel or story</strong> tagging @metakizz with your link in bio</span>
-            </div>
-            <div class="flex items-start gap-3 text-sm">
-                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#128172;</span>
-                <span class="text-gray-300"><strong>Share in dance groups</strong> on WhatsApp, Telegram, or Facebook</span>
-            </div>
-            <div class="flex items-start gap-3 text-sm">
-                <span class="text-brand-400 mt-0.5 flex-shrink-0">&#127922;</span>
-                <span class="text-gray-300"><strong>Share MetaKizz content</strong> — repost our posts, stories, and reels to spread the word</span>
-            </div>
+            {% else %}
+            <p class="text-sm text-gray-500 italic">No dancers unplugged yet. Share your link from the My Link tab to get started.</p>
+            {% endif %}
         </div>
     </div>
 
-    <!-- People You've Brought In -->
-    <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-5">
-        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-gray-400 mb-3">Dancers You've Unplugged <span class="text-gray-500">({{ referrals|length }})</span></h2>
-        {% if referrals %}
-        <div class="space-y-2">
-            {% for ref in referrals %}
-            <div class="flex items-center justify-between py-2 border-b border-gray-800 last:border-0">
-                <span class="text-sm text-gray-300">{{ ref.name }}</span>
-                <span class="text-xs text-gray-500">{{ ref.registered_at.strftime('%b %d') }}</span>
-            </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <p class="text-sm text-gray-500">No dancers unplugged yet. Share your link to get started!</p>
-        {% endif %}
-    </div>
 </div>
 
-<script>
-function copyLink() {
-    const input = document.getElementById('referral-link');
-    navigator.clipboard.writeText(input.value).then(() => {
-        const btn = document.getElementById('copy-btn');
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = 'Copy', 2000);
-    });
-}
-
-function nativeShare() {
-    const url = document.getElementById('referral-link').value;
-    if (navigator.share) {
-        navigator.share({
-            title: 'MetaKizz Masterclass',
-            text: 'Check out this masterclass by MetaKizz!',
-            url: url
-        });
-    } else {
-        copyLink();
+<style>
+    /* Tab styling */
+    .dash-tab {
+        background: rgb(31 41 55);
+        color: rgb(156 163 175);
+        border: 1px solid rgb(31 41 55);
     }
-}
+    .dash-tab:hover {
+        color: rgb(255 255 255);
+        background: rgb(55 65 81);
+    }
+    .dash-tab.active {
+        background: rgb(46 219 153);
+        color: #000;
+        border-color: rgb(46 219 153);
+        box-shadow: 0 0 14px rgba(46,219,153,0.3);
+    }
+</style>
+
+<script>
+    // Tabs toggle
+    (function() {
+        const tabs = document.querySelectorAll('.dash-tab');
+        const panels = document.querySelectorAll('.dash-panel');
+
+        function activate(name) {
+            tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+            panels.forEach(p => p.classList.toggle('hidden', p.dataset.panel !== name));
+            // remember selection across reloads
+            try { localStorage.setItem('dash-tab', name); } catch(e) {}
+            // update URL hash without scrolling
+            history.replaceState(null, '', '#' + name);
+        }
+
+        tabs.forEach(t => t.addEventListener('click', () => activate(t.dataset.tab)));
+
+        // initial tab: URL hash > localStorage > "link"
+        let initial = (location.hash || '').replace('#', '');
+        if (!initial) {
+            try { initial = localStorage.getItem('dash-tab') || 'link'; } catch(e) { initial = 'link'; }
+        }
+        const validTabs = ['link', 'prizes', 'share', 'referrals'];
+        if (!validTabs.includes(initial)) initial = 'link';
+        activate(initial);
+    })();
+
+    function copyLink() {
+        const input = document.getElementById('referral-link');
+        navigator.clipboard.writeText(input.value).then(() => {
+            const btn = document.getElementById('copy-btn');
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Copy', 2000);
+        });
+    }
+
+    function nativeShare() {
+        const url = document.getElementById('referral-link').value;
+        if (navigator.share) {
+            navigator.share({
+                title: 'Hacking the Urbankiz Code',
+                text: 'Free Urbankiz training week with Jesus & Anni',
+                url: url
+            });
+        } else {
+            copyLink();
+        }
+    }
 </script>
 {% endblock %}

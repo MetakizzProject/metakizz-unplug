@@ -1,5 +1,6 @@
 import csv
 import io
+import logging
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
     flash, session, current_app, Response,
@@ -8,6 +9,15 @@ from datetime import datetime, timezone
 from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification
 from app.mailer import (
     send_welcome_email,
+    send_activation_nudge_email,
+    send_first_unplug_email,
+    send_guaranteed_prize_email,
+    send_midway_reminder_email,
+    send_final_48h_email,
+    send_last_6h_email,
+    send_results_announcement_email,
+    send_you_won_email,
+    # legacy:
     send_first_referral_email,
     send_referral_notification_email,
     send_milestone_email,
@@ -15,6 +25,7 @@ from app.mailer import (
 )
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+logger = logging.getLogger(__name__)
 
 
 @admin_bp.before_request
@@ -240,49 +251,192 @@ def test_email():
             flash("No ambassadors in database to use as test data.", "error")
             return redirect(url_for("admin.test_email"))
 
-        # Create a lightweight copy so we don't touch the DB
+        # Create a lightweight copy so we don't touch the DB.
+        # The fake mirrors the Ambassador interface used by the new mailer functions.
         class FakeAmbassador:
             pass
 
         fake = FakeAmbassador()
-        fake.name = ambassador.name
+        fake.name = ambassador.name or "Tester"
         fake.email = to_email
         fake.referral_code = ambassador.referral_code
         fake.dashboard_code = ambassador.dashboard_code
-        fake.referral_count = max(ambassador.referral_count, 3)  # Ensure some count for display
+        fake.source = ambassador.source or "public"
+        fake.referral_count = 1  # for first_unplug test
+        fake.unsubscribe_token = ambassador.unsubscribe_token
+        fake.unsubscribed_at = None
 
-        tiers = RewardTier.query.filter_by(channel=ambassador.source).order_by(RewardTier.sort_order).all()
+        # Variant override: query param ?source=community/public lets you preview both
+        variant = request.form.get("source") or request.args.get("source")
+        if variant in ("community", "public"):
+            fake.source = variant
 
-        # For testing, use first and second tier
-        first_tier = tiers[0] if tiers else None
-        second_tier = tiers[1] if len(tiers) > 1 else None
+        # Dummy stats used by the results email
+        top3_demo = [
+            {"name": "Maria", "count": 23},
+            {"name": "Pedro", "count": 19},
+            {"name": "Laura", "count": 14},
+        ]
 
         try:
             success = False
+
             if email_type == "welcome":
+                fake.referral_count = 0
                 success = send_welcome_email(fake, app_url)
-            elif email_type == "first_referral":
-                success = send_first_referral_email(fake, "Test Dancer", 1, first_tier, app_url)
-            elif email_type == "referral":
-                success = send_referral_notification_email(fake, "Test Dancer", first_tier, app_url)
-            elif email_type == "milestone" and first_tier:
-                success = send_milestone_email(fake, first_tier, second_tier, app_url)
-            elif email_type == "almost_there" and first_tier:
-                success = send_almost_there_email(fake, first_tier, app_url)
+
+            elif email_type == "activation_nudge":
+                fake.referral_count = 0
+                success = send_activation_nudge_email(fake, app_url)
+
+            elif email_type == "first_unplug":
+                fake.referral_count = 1
+                success = send_first_unplug_email(fake, "Maria Lopez", app_url)
+
+            elif email_type == "guaranteed_prize":
+                fake.referral_count = 5
+                success = send_guaranteed_prize_email(fake, position=4, app_url=app_url)
+
+            elif email_type == "midway_reminder":
+                fake.referral_count = 3
+                success = send_midway_reminder_email(fake, position=12, days_left=7, app_url=app_url)
+
+            elif email_type == "final_48h":
+                fake.referral_count = 4
+                success = send_final_48h_email(fake, position=8, gap_to_top3=2, app_url=app_url)
+
+            elif email_type == "last_6h":
+                fake.referral_count = 4
+                success = send_last_6h_email(fake, app_url)
+
+            elif email_type == "results":
+                fake.referral_count = 7
+                success = send_results_announcement_email(
+                    fake, total_ambassadors=196, total_unplugs=380, total_countries=27,
+                    top3=top3_demo, app_url=app_url,
+                )
+
+            elif email_type == "you_won_guaranteed":
+                fake.referral_count = 8
+                success = send_you_won_email(fake, position=None, app_url=app_url)  # rama 1
+
+            elif email_type == "you_won_top3_guaranteed":
+                fake.referral_count = 14
+                success = send_you_won_email(fake, position=2, app_url=app_url)  # rama 2
+
+            elif email_type == "you_won_top3_only":
+                fake.referral_count = 4
+                success = send_you_won_email(fake, position=3, app_url=app_url)  # rama 3 edge case
+
             else:
-                flash("No tier data available for this email type. Add tiers in admin first.", "error")
+                flash(f"Unknown email type: {email_type}", "error")
                 return redirect(url_for("admin.test_email"))
 
             if success:
-                flash(f"Test '{email_type}' email sent to {to_email}!", "success")
+                flash(f"Test '{email_type}' email sent to {to_email} (source={fake.source})!", "success")
             else:
-                flash(f"Failed to send email. Check RESEND_API_KEY env var and Resend dashboard.", "error")
+                flash("Failed to send email. Check RESEND_API_KEY env var and Resend dashboard.", "error")
         except Exception as e:
+            logger.exception("test email failed")
             flash(f"Error: {str(e)}", "error")
 
         return redirect(url_for("admin.test_email"))
 
     return render_template("admin_test_email.html")
+
+
+@admin_bp.route("/ambassadors/<int:ambassador_id>/reset", methods=["POST"])
+def reset_ambassador(ambassador_id):
+    """Per-ambassador reset: delete only this ambassador's referrals + milestone notifs.
+    Keeps the ambassador row itself. Their counter goes back to 0.
+    """
+    amb = Ambassador.query.get_or_404(ambassador_id)
+    n_refs = Referral.query.filter_by(ambassador_id=amb.id).count()
+    n_notifs = MilestoneNotification.query.filter_by(ambassador_id=amb.id).count()
+    MilestoneNotification.query.filter_by(ambassador_id=amb.id).delete()
+    Referral.query.filter_by(ambassador_id=amb.id).delete()
+    db.session.commit()
+    flash(f"Reset {amb.name}: deleted {n_refs} referrals, {n_notifs} milestone notifs.", "success")
+    logger.warning("ADMIN per-user RESET: ambassador_id=%d (%s)", amb.id, amb.email)
+    return redirect(url_for("admin.index", channel=request.args.get("channel", "all")))
+
+
+@admin_bp.route("/ambassadors/<int:ambassador_id>/delete", methods=["POST"])
+def delete_ambassador(ambassador_id):
+    """Per-ambassador delete: removes the ambassador entirely (and their referrals + notifs).
+    Use with care — irreversible.
+    """
+    amb = Ambassador.query.get_or_404(ambassador_id)
+    name = amb.name
+    email = amb.email
+    n_refs = Referral.query.filter_by(ambassador_id=amb.id).count()
+    MilestoneNotification.query.filter_by(ambassador_id=amb.id).delete()
+    Referral.query.filter_by(ambassador_id=amb.id).delete()
+    db.session.delete(amb)
+    db.session.commit()
+    flash(f"Deleted {name} <{email}> ({n_refs} referrals removed too).", "success")
+    logger.warning("ADMIN per-user DELETE: ambassador_id=%d (%s)", ambassador_id, email)
+    return redirect(url_for("admin.index", channel=request.args.get("channel", "all")))
+
+
+@admin_bp.route("/reset-test-data", methods=["GET", "POST"])
+def reset_test_data():
+    """Wipe test data: all referrals, all milestone notifications, all public ambassadors.
+    Keeps community ambassadors (the Circle import) and any unsubscribe opt-outs.
+
+    Use this AFTER deploy and BEFORE launch to clean any test pollution from prod.
+    Requires the confirmation phrase to be typed exactly to prevent accidents.
+    """
+    CONFIRM_PHRASE = "YES_DELETE_ALL_TESTS"
+
+    if request.method == "POST":
+        if request.form.get("confirm", "").strip() != CONFIRM_PHRASE:
+            flash(f'Confirmation phrase incorrect. Type exactly: {CONFIRM_PHRASE}', "error")
+            return redirect(url_for("admin.reset_test_data"))
+
+        before_referrals = Referral.query.count()
+        before_milestones = MilestoneNotification.query.count()
+        before_public = Ambassador.query.filter_by(source="public").count()
+
+        # Order matters: clear FK-referencing tables first.
+        MilestoneNotification.query.delete()
+        Referral.query.delete()
+        Ambassador.query.filter_by(source="public").delete()
+        db.session.commit()
+
+        flash(
+            f"Reset complete. Deleted: {before_referrals} referrals, "
+            f"{before_milestones} milestone notifications, "
+            f"{before_public} public ambassadors. "
+            f"Community ambassadors preserved.",
+            "success",
+        )
+        logger.warning(
+            "ADMIN RESET: deleted %d referrals, %d milestones, %d public ambassadors",
+            before_referrals, before_milestones, before_public,
+        )
+        return redirect(url_for("admin.reset_test_data"))
+
+    counts = {
+        "total_amb": Ambassador.query.count(),
+        "community": Ambassador.query.filter_by(source="community").count(),
+        "public": Ambassador.query.filter_by(source="public").count(),
+        "referrals": Referral.query.count(),
+        "milestones": MilestoneNotification.query.count(),
+        "unsubscribed": Ambassador.query.filter(Ambassador.unsubscribed_at.isnot(None)).count(),
+    }
+    public_ambs = (
+        Ambassador.query
+        .filter_by(source="public")
+        .order_by(Ambassador.created_at.desc())
+        .all()
+    )
+    return render_template(
+        "admin_reset.html",
+        counts=counts,
+        public_ambs=public_ambs,
+        confirm_phrase=CONFIRM_PHRASE,
+    )
 
 
 @admin_bp.route("/logout")

@@ -1,8 +1,43 @@
 import os
+import logging
+import secrets
 from flask import Flask
 from dotenv import load_dotenv
+from sqlalchemy import text, inspect
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_unsubscribe_columns(db):
+    """
+    Idempotent migration: add unsubscribe_token + unsubscribed_at columns
+    to the ambassadors table if they don't exist yet, then backfill tokens
+    for any existing rows. Works on both SQLite (dev) and Postgres (prod).
+    """
+    engine = db.engine
+    inspector = inspect(engine)
+    cols = {c["name"] for c in inspector.get_columns("ambassadors")}
+
+    with engine.begin() as conn:
+        if "unsubscribe_token" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN unsubscribe_token VARCHAR(64)"))
+            logger.info("added column ambassadors.unsubscribe_token")
+        if "unsubscribed_at" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN unsubscribed_at TIMESTAMP"))
+            logger.info("added column ambassadors.unsubscribed_at")
+
+        # Backfill tokens for any rows that don't have one yet (existing ambassadors).
+        rows = conn.execute(text("SELECT id FROM ambassadors WHERE unsubscribe_token IS NULL")).fetchall()
+        for row in rows:
+            token = secrets.token_urlsafe(24)
+            conn.execute(
+                text("UPDATE ambassadors SET unsubscribe_token = :tok WHERE id = :id"),
+                {"tok": token, "id": row[0]},
+            )
+        if rows:
+            logger.info("backfilled unsubscribe_token for %d existing ambassadors", len(rows))
 
 
 def create_app():
@@ -33,6 +68,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _ensure_unsubscribe_columns(db)
 
     from app.routes.home import home_bp
     from app.routes.dashboard import dashboard_bp

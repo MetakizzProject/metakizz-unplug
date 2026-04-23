@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Unsubscribe — MetaKizz{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto px-4 pt-16 pb-8 text-center">
+
+    {% if state == "invalid" %}
+    <h1 class="text-2xl font-display font-bold mb-3">Link not found</h1>
+    <p class="text-gray-400 text-sm leading-relaxed mb-6">
+        This unsubscribe link doesn't match anyone in our system. It may have been edited or already used.
+    </p>
+    <a href="/" class="inline-block bg-brand-400 text-black font-bold px-6 py-3 rounded-lg text-sm hover:bg-brand-300 transition">Back to MetaKizz</a>
+
+    {% elif state == "already" %}
+    <h1 class="text-2xl font-display font-bold mb-3">You're already out.</h1>
+    <p class="text-gray-400 text-sm leading-relaxed mb-6">
+        We unsubscribed <strong class="text-white">{{ ambassador.email }}</strong> on
+        {{ ambassador.unsubscribed_at.strftime("%b %d, %Y") }}. No further emails will reach you.
+    </p>
+    <a href="/" class="inline-block bg-gray-800 text-white font-medium px-6 py-3 rounded-lg text-sm hover:bg-gray-700 transition">Back to MetaKizz</a>
+
+    {% elif state == "confirm" %}
+    <h1 class="text-2xl font-display font-bold mb-3">Stop receiving emails?</h1>
+    <p class="text-gray-400 text-sm leading-relaxed mb-6">
+        We'll stop sending you Hacking the Urbankiz Code emails to
+        <strong class="text-white">{{ ambassador.email }}</strong>.
+        This includes training updates and Ambassador Program reminders.
+    </p>
+    <form method="POST" class="space-y-3">
+        <button type="submit" class="w-full bg-brand-400 text-black font-bold px-6 py-3 rounded-lg text-sm hover:bg-brand-300 transition">
+            Yes, stop emails
+        </button>
+        <a href="/" class="block w-full bg-gray-800 text-white font-medium px-6 py-3 rounded-lg text-sm hover:bg-gray-700 transition">
+            Keep me in
+        </a>
+    </form>
+
+    {% elif state == "done" %}
+    <h1 class="text-2xl font-display font-bold mb-3">You're out.</h1>
+    <p class="text-gray-400 text-sm leading-relaxed mb-6">
+        We won't send any more emails to <strong class="text-white">{{ ambassador.email }}</strong>.
+        Your training access stays active. Hope to see you on the floor.
+    </p>
+    <a href="/" class="inline-block bg-gray-800 text-white font-medium px-6 py-3 rounded-lg text-sm hover:bg-gray-700 transition">Back to MetaKizz</a>
+    {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,164 @@
+{% extends "emails/_shell.html" %}
+
+{% block title %}{% if rama == 1 %}You won {% if community %}1 month of MetaDancers{% else %}the musicality masterclass{% endif %}.{% elif rama == 2 %}You finished {{ position_text }}. Two rewards to claim.{% else %}You finished {{ position_text }} in The Unplugging.{% endif %}{% endblock %}
+{% block preheader %}{% if rama == 1 %}{{ count }} dancers unplugged. Here's how to claim it.{% elif rama == 2 %}{{ count }} unplugs. Guaranteed reward + ranking reward.{% else %}Your ranking reward is yours. One short reply to claim.{% endif %}{% endblock %}
+{% block header_left %}METAKIZZ // PRIZE.CLAIM{% endblock %}
+{% block header_right %}STATUS: <span style="color:#2EDB99;">WINNER</span>{% endblock %}
+
+{% block content %}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:36px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0 0 12px 0;">
+      &gt; Hey <span style="color:#FFFFFF;">{{ first_name }}</span>_
+    </p>
+
+    {% if rama == 1 %}
+    <h1 class="mob-h1" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:26px;line-height:1.15;color:#FFFFFF;margin:0;letter-spacing:1px;text-transform:uppercase;">
+      You ended with<br><span style="color:#2EDB99;">{{ count }} dancers unplugged</span>.
+    </h1>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.6;margin:14px 0 0 0;">
+      {{ count }} more people inside the training because of you.
+    </p>
+    {% elif rama == 2 %}
+    <h1 class="mob-h1" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:26px;line-height:1.15;color:#FFFFFF;margin:0;letter-spacing:1px;text-transform:uppercase;">
+      You finished <span style="color:#2EDB99;">{{ position_text }}</span><br>with {{ count }} unplugs.
+    </h1>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:14px 0 0 0;">
+      <strong style="color:#2EDB99;">Two rewards</strong> to claim:
+    </p>
+    {% else %}
+    <h1 class="mob-h1" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:26px;line-height:1.15;color:#FFFFFF;margin:0;letter-spacing:1px;text-transform:uppercase;">
+      You finished <span style="color:#2EDB99;">{{ position_text }}</span><br>in The Unplugging.
+    </h1>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.6;margin:14px 0 0 0;">
+      With <strong style="color:#FFFFFF;">{{ count }} unplugs</strong>. Your ranking reward is yours.
+    </p>
+    {% endif %}
+  </td>
+</tr>
+</table>
+
+<!-- Guaranteed reward (rama 1 + 2) -->
+{% if rama in [1, 2] %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    {% if rama == 2 %}
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 8px 0;">
+      // Reward 1 · Guaranteed
+    </p>
+    {% endif %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d2118" style="background:#0d2118;border:2px solid #2EDB99;border-radius:10px;box-shadow:0 0 18px rgba(46,219,153,0.18);">
+    <tr><td align="center" style="padding:20px 22px;">
+      {% if community %}
+      <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:18px;line-height:1.3;letter-spacing:0.5px;margin:0 0 8px 0;text-transform:uppercase;">
+        1 month free <span style="color:#2EDB99;">of MetaDancers</span>
+      </p>
+      <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:13px;line-height:1.5;margin:0;">
+        We'll activate your account within 48h. <strong style="color:#FFFFFF;">No action needed.</strong>
+      </p>
+      {% else %}
+      <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:18px;line-height:1.3;letter-spacing:0.5px;margin:0 0 8px 0;text-transform:uppercase;">
+        Live musicality <span style="color:#2EDB99;">masterclass</span>
+      </p>
+      <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:13px;line-height:1.5;margin:0;">
+        with Jesus &amp; Anni · €97 value. We'll send the date plus Zoom link in the next email. <strong style="color:#FFFFFF;">No action needed.</strong>
+      </p>
+      {% endif %}
+    </td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+{% endif %}
+
+<!-- Ranking reward (rama 2 + 3) -->
+{% if rama in [2, 3] %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    {% if rama == 2 %}
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 8px 0;">
+      // Reward 2 · {{ position_text }} place
+    </p>
+    {% else %}
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 8px 0;">
+      // Your ranking reward
+    </p>
+    {% endif %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d1610" style="background:#0d1610;border:1px solid #2EDB99;border-radius:10px;">
+    <tr><td align="center" style="padding:20px 22px;">
+      <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:18px;line-height:1.3;letter-spacing:0.5px;margin:0 0 6px 0;text-transform:uppercase;">
+        {{ ranking_reward_name }}
+      </p>
+      {% if ranking_reward_value %}
+      <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:12px;letter-spacing:1px;margin:0;">
+        {{ ranking_reward_value }}
+      </p>
+      {% endif %}
+    </td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Next step instruction -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 10px 0;">
+      // Next step
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a1407" style="background:#1a1407;border:1px solid #8a6a2a;border-radius:8px;">
+    <tr><td style="padding:16px 18px;">
+      <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:0;">
+        {{ next_step_instruction }}
+      </p>
+    </td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+{% endif %}
+
+<!-- Thanks -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    {% if rama == 1 %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.65;margin:0;font-style:italic;">
+      Seriously, thank you. <strong style="color:#2EDB99;">You moved this.</strong>
+    </p>
+    {% elif rama == 2 %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.65;margin:0;font-style:italic;">
+      <strong style="color:#2EDB99;">{{ count }} more dancers</strong> found this training because of you. Honestly, thank you.
+    </p>
+    {% else %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.65;margin:0;font-style:italic;">
+      Thanks for showing up.
+    </p>
+    {% endif %}
+  </td>
+</tr>
+</table>
+
+<!-- Sign-off (Jesus & Anni for rama 2 1st place; MetaKizz Team otherwise) -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 32px 32px;">
+    {% if rama == 2 and position == 1 %}
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      Jesus &amp; Anni
+    </p>
+    {% else %}
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      MetaKizz Team
+    </p>
+    {% endif %}
+  </td>
+</tr>
+</table>
+
+{% endblock %}

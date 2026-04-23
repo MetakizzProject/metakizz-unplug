@@ -6,7 +6,8 @@
 <div class="max-w-2xl mx-auto px-4 {% if embed %}pt-4{% else %}pt-8{% endif %} pb-8">
     {% if not embed %}
     <div class="text-center mb-8">
-        <h1 class="text-2xl font-display font-bold mb-2">Leaderboard</h1>
+        <h1 class="text-2xl font-display font-bold mb-1">Leaderboard</h1>
+        <p class="text-xs text-gray-500 uppercase tracking-wider">Top 10 · {{ channel }}</p>
     </div>
     {% endif %}
 

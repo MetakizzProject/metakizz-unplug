@@ -8,3 +8,7 @@ __pycache__/
 *.db
 app/static/qrcodes/*.png
 venv/
+.claude/
+.mcp.json
+.playwright-mcp/
+welcome_*.png

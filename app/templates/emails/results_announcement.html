@@ -1,0 +1,170 @@
+{% extends "emails/_shell.html" %}
+
+{% block title %}The Unplugging is closed. Here's what happened.{% endblock %}
+{% block preheader %}{{ total_unplugs }} dancers in. One message for everyone.{% endblock %}
+{% block header_left %}METAKIZZ // CLOSED{% endblock %}
+{% block header_right %}STATUS: <span style="color:#FFC857;">FINAL</span>{% endblock %}
+
+{% block content %}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:36px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0 0 12px 0;">
+      &gt; Hey <span style="color:#FFFFFF;">{{ first_name }}</span>_
+    </p>
+    <h1 class="mob-h1" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:30px;line-height:1.1;color:#FFFFFF;margin:0 0 6px 0;letter-spacing:1.5px;text-transform:uppercase;text-shadow:0 0 24px rgba(46,219,153,0.4);">
+      The Unplugging<br><span style="color:#2EDB99;">is closed.</span>
+    </h1>
+  </td>
+</tr>
+</table>
+
+<!-- Collective stats -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 12px 0;">
+      // The numbers
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d2118" style="background:#0d2118;border:1px solid #2EDB99;border-radius:10px;">
+    <tr>
+      <td align="center" width="33%" style="padding:18px 6px;border-right:1px dashed #1a7a55;">
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:30px;margin:0;text-shadow:0 0 14px rgba(46,219,153,0.4);">{{ total_ambassadors }}</p>
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:4px 0 0 0;">Ambassadors</p>
+      </td>
+      <td align="center" width="33%" style="padding:18px 6px;border-right:1px dashed #1a7a55;">
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:30px;margin:0;text-shadow:0 0 14px rgba(46,219,153,0.4);">{{ total_unplugs }}</p>
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:4px 0 0 0;">Unplugged</p>
+      </td>
+      <td align="center" width="33%" style="padding:18px 6px;">
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:30px;margin:0;text-shadow:0 0 14px rgba(46,219,153,0.4);">{{ total_countries }}</p>
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:4px 0 0 0;">Countries</p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Top 3 -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 12px 0;">
+      // Top 3 ambassadors
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d1610" style="background:#0d1610;border:1px solid #1a7a55;border-radius:10px;">
+    <tr><td style="padding:14px 18px;">
+      {% for amb in top3 %}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td valign="middle" width="56" style="padding:10px 0;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+          <tr><td bgcolor="{% if loop.index == 1 %}#2EDB99{% else %}#0d2118{% endif %}" style="background:{% if loop.index == 1 %}#2EDB99{% else %}#0d2118{% endif %};{% if loop.index != 1 %}border:1px solid #1a7a55;{% endif %}padding:5px 10px;border-radius:4px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:{% if loop.index == 1 %}#000000{% else %}#FFFFFF{% endif %};font-size:13px;letter-spacing:1.5px;">
+            {{ loop.index }}<span style="font-size:9px;">{% if loop.index == 1 %}ST{% elif loop.index == 2 %}ND{% else %}RD{% endif %}</span>
+          </td></tr>
+          </table>
+        </td>
+        <td valign="middle" style="padding:10px 0 10px 12px;font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.4;font-weight:bold;">
+          {{ amb.name }}
+        </td>
+        <td valign="middle" align="right" style="padding:10px 0;font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:14px;">
+          {{ amb.count }}
+        </td>
+      </tr>
+      </table>
+      {% if not loop.last %}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px dashed #1a7a55;height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr></table>
+      {% endif %}
+      {% endfor %}
+    </td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Recognition for everyone else -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.65;margin:0 0 12px 0;">
+      But the top 3 isn't really the story.
+    </p>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.65;margin:0;">
+      The story is the <strong style="color:#2EDB99;">{{ ambassadors_minus_3 }} other ambassadors</strong> who shared a link, posted a story, mentioned this in a class, sent a quiet WhatsApp. Each one of those small moves added up. <strong style="color:#FFFFFF;">{{ total_unplugs }} more dancers</strong> are walking into Hacking the Urbankiz Code because of all of you.
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- Personal result -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d1610" style="background:#0d1610;border:1px solid #1a7a55;border-radius:8px;">
+    <tr><td style="padding:16px 18px;">
+      <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 6px 0;">
+        Your personal result
+      </p>
+      <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:24px;letter-spacing:1px;margin:0 0 10px 0;">
+        {{ count }} <span style="color:#9CA3AF;font-size:14px;font-weight:400;">unplugs</span>
+      </p>
+      {% if count >= 5 %}
+      <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:13px;line-height:1.5;margin:0;">
+        Your guaranteed reward is being processed. You'll get a separate email with details within 24 hours.
+      </p>
+      {% else %}
+      <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:13px;line-height:1.5;margin:0;">
+        No guaranteed reward this round. But every dancer you helped land here is one more person inside the training next week. <strong style="color:#FFFFFF;">That counts more than the number does.</strong>
+      </p>
+      {% endif %}
+    </td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- About the training -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.65;margin:0;">
+      About the training: <strong style="color:#2EDB99;">Hacking the Urbankiz Code</strong> kicks off soon. We'll send the schedule (videos + live session date + Zoom link) in a separate email.
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- Philosophical closer -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 12px 0;">
+      // One last thing
+    </p>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.65;margin:0 0 8px 0;font-style:italic;">
+      This was never really about points or positions. It was about getting more dancers to the table where the actual code gets shared. So the Urbankiz floor everywhere starts feeling a little better.
+    </p>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.65;margin:0;">
+      <strong style="color:#2EDB99;">{{ total_unplugs }} more dancers</strong> will hit that table thanks to all of you.
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- Sign-off -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 32px 32px;">
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;margin:0 0 12px 0;">
+      See you in the training.
+    </p>
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      MetaKizz Team
+    </p>
+  </td>
+</tr>
+</table>
+
+{% endblock %}

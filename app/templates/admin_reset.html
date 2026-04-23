@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Reset Test Data — Admin{% endblock %}
+
+{% block nav_right %}
+<a href="/admin/" class="text-sm text-gray-400 hover:text-brand-400 transition font-medium">Back to Admin</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 pt-8 pb-8">
+
+    <h1 class="text-xl font-display font-bold mb-2 text-red-400">Reset Test Data</h1>
+    <p class="text-gray-400 text-sm mb-6">
+        Wipe test pollution before launch. <strong class="text-white">Permanent. Irreversible.</strong>
+    </p>
+
+    <!-- Current state -->
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-5 mb-6">
+        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-gray-400 mb-3">Current state</h2>
+        <div class="grid grid-cols-2 gap-3 text-sm">
+            <div class="bg-gray-800/50 rounded-lg p-3">
+                <div class="text-2xl font-bold text-white">{{ counts.total_amb }}</div>
+                <div class="text-xs text-gray-400 mt-1">Total ambassadors</div>
+            </div>
+            <div class="bg-gray-800/50 rounded-lg p-3">
+                <div class="text-2xl font-bold text-brand-400">{{ counts.community }}</div>
+                <div class="text-xs text-gray-400 mt-1">Community (kept)</div>
+            </div>
+            <div class="bg-gray-800/50 rounded-lg p-3">
+                <div class="text-2xl font-bold text-red-400">{{ counts.public }}</div>
+                <div class="text-xs text-gray-400 mt-1">Public (will delete)</div>
+            </div>
+            <div class="bg-gray-800/50 rounded-lg p-3">
+                <div class="text-2xl font-bold text-red-400">{{ counts.referrals }}</div>
+                <div class="text-xs text-gray-400 mt-1">Referrals (will delete)</div>
+            </div>
+            <div class="bg-gray-800/50 rounded-lg p-3">
+                <div class="text-2xl font-bold text-red-400">{{ counts.milestones }}</div>
+                <div class="text-xs text-gray-400 mt-1">Milestone notifs (will delete)</div>
+            </div>
+            <div class="bg-gray-800/50 rounded-lg p-3">
+                <div class="text-2xl font-bold text-gray-300">{{ counts.unsubscribed }}</div>
+                <div class="text-xs text-gray-400 mt-1">Unsubscribed (kept)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- What will be deleted -->
+    <div class="bg-red-950/30 border border-red-900/50 rounded-xl p-5 mb-6">
+        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-red-400 mb-3">⚠ Will be deleted</h2>
+        <ul class="text-sm text-gray-300 space-y-2 list-disc pl-5">
+            <li>All <strong class="text-red-400">{{ counts.referrals }}</strong> referral records</li>
+            <li>All <strong class="text-red-400">{{ counts.milestones }}</strong> milestone notifications (legacy tier system)</li>
+            <li>All <strong class="text-red-400">{{ counts.public }}</strong> public ambassadors:
+                {% if public_ambs %}
+                <ul class="mt-2 space-y-1 text-xs text-gray-400 list-none pl-0">
+                    {% for amb in public_ambs %}
+                    <li>· <strong class="text-white">{{ amb.name }}</strong> &lt;{{ amb.email }}&gt; · joined {{ amb.created_at.strftime("%Y-%m-%d") }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </li>
+        </ul>
+    </div>
+
+    <!-- What will be kept -->
+    <div class="bg-brand-900/20 border border-brand-700/40 rounded-xl p-5 mb-6">
+        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-brand-400 mb-3">✓ Will be kept</h2>
+        <ul class="text-sm text-gray-300 space-y-2 list-disc pl-5">
+            <li><strong class="text-brand-400">{{ counts.community }}</strong> community ambassadors (the Circle import)</li>
+            <li><strong class="text-brand-400">{{ counts.unsubscribed }}</strong> unsubscribe opt-outs (legal/intent)</li>
+        </ul>
+    </div>
+
+    <!-- Confirmation form -->
+    <form method="POST" class="bg-gray-900/80 border border-red-800/50 rounded-xl p-5">
+        <h2 class="font-display font-semibold text-sm uppercase tracking-wider text-red-400 mb-3">Confirm</h2>
+        <p class="text-sm text-gray-400 mb-3">
+            To proceed, type the phrase below exactly:
+        </p>
+        <p class="text-sm font-mono bg-gray-800 rounded px-3 py-2 mb-3 text-red-300">
+            {{ confirm_phrase }}
+        </p>
+        <input
+            type="text"
+            name="confirm"
+            placeholder="Paste / type the phrase here"
+            required
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 mb-4 font-mono"
+        >
+        <button
+            type="submit"
+            class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg transition text-sm uppercase tracking-wider"
+        >
+            🗑 Reset (Permanent)
+        </button>
+    </form>
+
+</div>
+{% endblock %}

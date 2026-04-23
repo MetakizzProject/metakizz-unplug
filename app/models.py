@@ -1,7 +1,13 @@
+import secrets
 from datetime import datetime, timezone
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
+
+
+def _generate_unsubscribe_token():
+    """Random URL-safe token for one-click unsubscribe links."""
+    return secrets.token_urlsafe(24)
 
 
 class Ambassador(db.Model):
@@ -19,6 +25,12 @@ class Ambassador(db.Model):
     shared_on_instagram = db.Column(db.Boolean, default=False)
     instagram_proof_url = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Email opt-out (legal compliance + deliverability).
+    # unsubscribe_token: random secret used in /unsubscribe/<token> links.
+    # unsubscribed_at: nullable timestamp; if set, no further emails are sent.
+    unsubscribe_token = db.Column(db.String(64), unique=True, default=_generate_unsubscribe_token)
+    unsubscribed_at = db.Column(db.DateTime, nullable=True)
 
     referrals = db.relationship("Referral", backref="ambassador", lazy=True)
     notifications = db.relationship("MilestoneNotification", backref="ambassador", lazy=True)

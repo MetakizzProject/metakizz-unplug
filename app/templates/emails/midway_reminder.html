@@ -1,0 +1,153 @@
+{% extends "emails/_shell.html" %}
+
+{% block title %}Halfway through. Here's where you stand.{% endblock %}
+{% block preheader %}{{ days_left }} days left. One tactic worth trying this week.{% endblock %}
+{% block header_left %}METAKIZZ // CHECKPOINT{% endblock %}
+{% block header_right %}DAYS LEFT: <span style="color:#2EDB99;">{{ days_left }}</span>{% endblock %}
+
+{% block content %}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:32px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0 0 12px 0;">
+      &gt; Hey <span style="color:#FFFFFF;">{{ first_name }}</span>_
+    </p>
+    <h1 class="mob-h1" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:24px;line-height:1.2;color:#FFFFFF;margin:0 0 8px 0;letter-spacing:1px;text-transform:uppercase;">
+      Halfway through<br><span style="color:#2EDB99;">The Unplugging</span>
+    </h1>
+  </td>
+</tr>
+</table>
+
+<!-- Stats card -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d1610" style="background:#0d1610;border:1px solid #1a7a55;border-radius:10px;">
+    <tr>
+      <td style="padding:18px 20px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td valign="middle" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;padding:6px 0;">Unplugs</td>
+          <td valign="middle" align="right" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:22px;padding:6px 0;text-shadow:0 0 12px rgba(46,219,153,0.4);">{{ count }}</td>
+        </tr>
+        <tr><td colspan="2" style="border-top:1px dashed #1a7a55;height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr>
+        <tr>
+          <td valign="middle" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;padding:6px 0;">Position</td>
+          <td valign="middle" align="right" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:22px;padding:6px 0;">#{{ position }}</td>
+        </tr>
+        <tr><td colspan="2" style="border-top:1px dashed #1a7a55;height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr>
+        <tr>
+          <td valign="middle" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;padding:6px 0;">Days left</td>
+          <td valign="middle" align="right" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFC857;font-size:22px;padding:6px 0;text-shadow:0 0 10px rgba(255,200,87,0.3);">{{ days_left }}</td>
+        </tr>
+        </table>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- State message -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:22px 32px 0 32px;">
+    {% if count == 0 %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:0;">
+      Your link is still quiet. The next 7 days are when most ambassadors get their first unplug.
+    </p>
+    {% elif count < 5 %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:0;">
+      <strong style="color:#2EDB99;">{{ count }} in.</strong> {{ remaining_to_5 }} more to lock your guaranteed reward.
+    </p>
+    {% else %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:0;">
+      <strong style="color:#2EDB99;">Reward locked.</strong> From here, every extra unplug moves you toward the top 3.
+    </p>
+    {% endif %}
+  </td>
+</tr>
+</table>
+
+<!-- Tactic suggestion -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:22px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 10px 0;">
+      // One tactic worth trying this week
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d1610" style="background:#0d1610;border:1px dashed #1a7a55;border-radius:8px;">
+    <tr>
+      <td style="padding:14px 16px;">
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.55;margin:0;">
+          Post your QR code on an Instagram story with this caption: <em style="color:#C9CFD4;">"free Urbankiz training week with Jesus &amp; Anni. Drop a 🐇 if you want the link."</em>
+        </p>
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin:10px 0 0 0;">
+          90 seconds · Decent reach · Doesn't feel like asking
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- CTA -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:24px 32px 0 32px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr>
+      <td align="center" bgcolor="#2EDB99" style="background:#2EDB99;border:2px solid #2EDB99;border-radius:8px;box-shadow:0 0 20px rgba(46,219,153,0.4);">
+        <a href="{{ dashboard_url }}" class="mob-cta-text" style="display:inline-block;padding:16px 32px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:13px;letter-spacing:2.5px;text-transform:uppercase;color:#000000;text-decoration:none;">
+          Open my dashboard →
+        </a>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Deadline -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a1407" style="background:#1a1407;border:1px solid #8a6a2a;border-radius:6px;">
+    <tr><td align="center" style="padding:12px 18px;">
+      <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin:0;">
+        ⧗ Closes May 7 · 19:00 Madrid
+      </p>
+    </td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Sign-off -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 32px 32px;">
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      MetaKizz Team
+    </p>
+  </td>
+</tr>
+</table>
+
+{% endblock %}
+
+{% block prominent_unsubscribe %}
+<tr>
+  <td style="padding:18px 0 0 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid #2D2D44;border-radius:10px;">
+    <tr><td align="center" style="padding:18px 20px;">
+      <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;margin:0 0 6px 0;">Don't want to keep receiving these emails?</p>
+      <p style="margin:0;"><a href="{{ unsubscribe_url }}" style="color:#2EDB99;text-decoration:underline;font-size:14px;font-weight:bold;">Click here to stop them.</a></p>
+    </td></tr>
+    </table>
+  </td>
+</tr>
+{% endblock %}

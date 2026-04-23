@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<meta name="format-detection" content="telephone=no, address=no, email=no, date=no, url=no">
+<title>{% block title %}MetaKizz · The Unplugging Protocol{% endblock %}</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style type="text/css">
+  :root { color-scheme: dark; supported-color-schemes: dark; }
+  body { margin:0 !important; padding:0 !important; background:#000000 !important; color:#FFFFFF !important; }
+  table { border-collapse:collapse; mso-table-lspace:0; mso-table-rspace:0; }
+  img { border:0; outline:none; -ms-interpolation-mode:bicubic; display:block; }
+  a { text-decoration:none; }
+  @media (prefers-color-scheme: dark) {
+    body, .body-bg { background-color:#000000 !important; }
+    .card-bg { background-color:#0A0F0A !important; }
+  }
+  a[x-apple-data-detectors] {
+    color: inherit !important;
+    text-decoration: none !important;
+    font-size: inherit !important;
+    font-family: inherit !important;
+    font-weight: inherit !important;
+    line-height: inherit !important;
+  }
+  @media screen and (max-width: 540px) {
+    .mob-pad { padding-left:18px !important; padding-right:18px !important; }
+    .mob-h1 { font-size:24px !important; line-height:1.15 !important; letter-spacing:1px !important; }
+    .mob-cta-text { font-size:14px !important; padding:18px 24px !important; }
+    .mob-num { font-size:56px !important; }
+  }
+</style>
+{% block extra_head %}{% endblock %}
+</head>
+<body bgcolor="#000000" class="body-bg" style="margin:0;padding:0;background-color:#000000;font-family:'Share Tech Mono','Space Mono','Courier New',monospace;">
+
+<!-- preheader -->
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#000000;opacity:0;">
+{% block preheader %}{% endblock %}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" class="body-bg" style="background-color:#000000;">
+<tr>
+<td align="center" style="padding:32px 16px 48px 16px;">
+
+<table role="presentation" width="540" cellpadding="0" cellspacing="0" border="0" style="max-width:540px;width:100%;">
+
+  <!-- TERMINAL HEADER STRIP -->
+  <tr>
+    <td style="padding:0 0 12px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td align="left" valign="middle" style="font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:3px;color:#2EDB99;text-transform:uppercase;opacity:0.7;">
+          <span style="color:#2EDB99;">▌</span> {% block header_left %}METAKIZZ // PROTOCOL{% endblock %}
+        </td>
+        <td align="right" valign="middle" style="font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:2px;color:#4B5563;text-transform:uppercase;">
+          {% block header_right %}STATUS: <span style="color:#2EDB99;">ACTIVE</span>{% endblock %}
+        </td>
+      </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- MAIN CARD -->
+  <tr>
+    <td bgcolor="#0A0F0A" class="card-bg" style="background-color:#0A0F0A;border:1px solid #1a7a55;border-radius:14px;padding:0;">
+      <!-- top accent bar -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td style="height:3px;background-color:#2EDB99;border-radius:14px 14px 0 0;line-height:3px;font-size:0;">&nbsp;</td>
+      </tr>
+      </table>
+
+      {% block content %}{% endblock %}
+
+    </td>
+  </tr>
+
+  {% block prominent_unsubscribe %}{% endblock %}
+
+  <!-- FOOTER -->
+  <tr>
+    <td style="padding:14px 0 0 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td align="center" style="font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:3px;color:#4B5563;text-transform:uppercase;padding:8px 0;">
+          MetaKizz · The Unplugging Protocol
+        </td>
+      </tr>
+      <tr>
+        <td align="center" style="padding:6px 12px 0 12px;">
+          <p style="font-family:'Share Tech Mono','Courier New',monospace;font-size:11px;color:#6B7280;margin:0;">
+            Not feeling this? <a href="{{ unsubscribe_url }}" style="color:#9CA3AF;text-decoration:underline;">Unsubscribe</a>
+          </p>
+        </td>
+      </tr>
+      </table>
+    </td>
+  </tr>
+
+</table>
+
+</td>
+</tr>
+</table>
+
+</body>
+</html>

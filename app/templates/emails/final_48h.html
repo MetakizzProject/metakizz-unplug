@@ -1,0 +1,152 @@
+{% extends "emails/_shell.html" %}
+
+{% block title %}48 hours to close.{% endblock %}
+{% block preheader %}Closes May 7 · 19:00 Madrid. Where you stand right now.{% endblock %}
+{% block header_left %}METAKIZZ // FINAL.STRETCH{% endblock %}
+{% block header_right %}T-MINUS: <span style="color:#FFC857;">48H</span>{% endblock %}
+
+{% block content %}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:32px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0 0 12px 0;">
+      &gt; Hey <span style="color:#FFFFFF;">{{ first_name }}</span>_
+    </p>
+    <h1 class="mob-h1" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:30px;line-height:1.1;color:#FFFFFF;margin:0 0 6px 0;letter-spacing:1.5px;text-transform:uppercase;text-shadow:0 0 20px rgba(255,200,87,0.4);">
+      <span style="color:#FFC857;">48 hours</span><br>to close.
+    </h1>
+  </td>
+</tr>
+</table>
+
+<!-- Stats -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.5;margin:0;text-align:center;">
+      Where you stand: <strong style="color:#2EDB99;">{{ count }} unplugs</strong>, position <strong style="color:#2EDB99;">#{{ position }}</strong>.
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- State message -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:18px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d1610" style="background:#0d1610;border:1px solid #1a7a55;border-radius:8px;">
+    <tr><td style="padding:14px 16px;">
+      {% if count < 5 %}
+      <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:0;">
+        <strong style="color:#2EDB99;">{{ remaining_to_5 }} more unplugs</strong> and your guaranteed reward locks. Reachable in 48h with one focused push.
+      </p>
+      {% elif position > 3 %}
+      <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:0;">
+        Guaranteed reward locked. Top 3 is <strong style="color:#2EDB99;">{{ gap_to_top3 }} unplugs</strong> ahead. Within reach if you push now.
+      </p>
+      {% else %}
+      <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:0;">
+        You're currently <strong style="color:#2EDB99;">#{{ position }}</strong>. Holding that spot takes one more share.
+      </p>
+      {% endif %}
+    </td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Action prompt -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:18px 32px 0 32px;">
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#FFFFFF;font-size:14px;letter-spacing:1.5px;text-transform:uppercase;margin:0;">
+      <span style="color:#2EDB99;">One push today.</span> One push tomorrow.
+    </p>
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;margin:6px 0 0 0;">
+      That's the window.
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- Pre-written WA message -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:22px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 8px 0;">
+      // The message that's working
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d1610" style="background:#0d1610;border:1px dashed #2EDB99;border-radius:8px;">
+    <tr><td style="padding:14px 16px;">
+      <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.55;margin:0;word-break:break-word;">
+        Hey, free Urbankiz training week with Jesus &amp; Anni. 2 videos + 1 live. Closes in 48h. Thought of you. <span style="color:#2EDB99;">{{ referral_url }}</span>
+      </p>
+    </td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- CTAs -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:24px 32px 0 32px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr>
+      <td align="center" bgcolor="#25D366" style="background:#25D366;border:2px solid #25D366;border-radius:8px;box-shadow:0 0 20px rgba(37,211,102,0.4);">
+        <a href="{{ whatsapp_url }}" class="mob-cta-text" style="display:inline-block;padding:18px 36px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:14px;letter-spacing:2.5px;text-transform:uppercase;color:#FFFFFF;text-decoration:none;">
+          ▶ Share on WhatsApp
+        </a>
+      </td>
+    </tr>
+    </table>
+    <p style="margin:12px 0 0 0;">
+      <a href="{{ dashboard_url }}" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;text-decoration:underline;">
+        Open my dashboard →
+      </a>
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- Deadline (more urgent for this email) -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#2a1a0a" style="background:#2a1a0a;border:1px solid #FFC857;border-radius:6px;box-shadow:0 0 18px rgba(255,200,87,0.18);">
+    <tr><td align="center" style="padding:14px 18px;">
+      <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:13px;letter-spacing:3.5px;text-transform:uppercase;margin:0;">
+        ⧗ Closes May 7 · 19:00 Madrid
+      </p>
+    </td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Sign-off -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 32px 32px;">
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      MetaKizz Team
+    </p>
+  </td>
+</tr>
+</table>
+
+{% endblock %}
+
+{% block prominent_unsubscribe %}
+<tr>
+  <td style="padding:18px 0 0 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid #2D2D44;border-radius:10px;">
+    <tr><td align="center" style="padding:18px 20px;">
+      <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;margin:0 0 6px 0;">Don't want to keep receiving these emails?</p>
+      <p style="margin:0;"><a href="{{ unsubscribe_url }}" style="color:#2EDB99;text-decoration:underline;font-size:14px;font-weight:bold;">Click here to stop them.</a></p>
+    </td></tr>
+    </table>
+  </td>
+</tr>
+{% endblock %}

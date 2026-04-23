@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<!-- Tell email clients (Apple Mail iOS especially) this email is intentionally dark,
+     so they don't auto-invert it into a broken light scheme. -->
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<!-- Stop iOS from auto-detecting plain emails/dates and styling them as blue links. -->
+<meta name="format-detection" content="telephone=no, address=no, email=no, date=no, url=no">
+<title>Welcome to Hacking the Urbankiz Code</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style type="text/css">
+  :root { color-scheme: dark; supported-color-schemes: dark; }
+  body { margin:0 !important; padding:0 !important; background:#000000 !important; color:#FFFFFF !important; }
+  table { border-collapse:collapse; mso-table-lspace:0; mso-table-rspace:0; }
+  img { border:0; outline:none; -ms-interpolation-mode:bicubic; display:block; }
+  a { text-decoration:none; }
+  /* Force dark mode in clients that honor prefers-color-scheme (signals "we handle dark"). */
+  @media (prefers-color-scheme: dark) {
+    body, .body-bg { background-color:#000000 !important; }
+    .card-bg { background-color:#0A0F0A !important; }
+    .text-white { color:#FFFFFF !important; }
+  }
+  /* iOS auto-link override: kill the default blue underline on detected addresses. */
+  a[x-apple-data-detectors] {
+    color: inherit !important;
+    text-decoration: none !important;
+    font-size: inherit !important;
+    font-family: inherit !important;
+    font-weight: inherit !important;
+    line-height: inherit !important;
+  }
+
+  /* mobile tweaks */
+  @media screen and (max-width: 540px) {
+    .mob-pad { padding-left:18px !important; padding-right:18px !important; }
+    .mob-h1 { font-size:24px !important; line-height:1.15 !important; letter-spacing:1px !important; }
+    .mob-hero { font-size:22px !important; letter-spacing:1px !important; }
+    .mob-step-num { font-size:32px !important; }
+    .mob-step-label { font-size:13px !important; }
+    .mob-trophy-num { font-size:48px !important; }
+    .mob-cta-text { font-size:14px !important; padding:18px 24px !important; }
+    .mob-stack { display:block !important; width:100% !important; padding:6px 0 !important; }
+  }
+
+  /* the terminal-blink decorative cursor (works in webmail; falls back gracefully) */
+  @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+  .blink-cursor { animation: blink 1.1s infinite steps(1); }
+</style>
+</head>
+<body bgcolor="#000000" class="body-bg" style="margin:0;padding:0;background-color:#000000;font-family:'Share Tech Mono','Space Mono','Courier New',monospace;">
+
+<!-- preheader (hidden, fills inbox preview) -->
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#000000;opacity:0;">
+[MUST READ] Important instructions inside · Your access code, your link, and how to use them. Send your link. They register. You earn.&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" class="body-bg" style="background-color:#000000;">
+<tr>
+<td align="center" style="padding:32px 16px 48px 16px;">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     OUTER CARD — terminal-window aesthetic with corner brackets
+     ═══════════════════════════════════════════════════════════════ -->
+<table role="presentation" width="540" cellpadding="0" cellspacing="0" border="0" style="max-width:540px;width:100%;">
+
+  <!-- TERMINAL HEADER STRIP -->
+  <tr>
+    <td style="padding:0 0 12px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td align="left" valign="middle" style="font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:3px;color:#2EDB99;text-transform:uppercase;opacity:0.7;">
+          <span style="color:#2EDB99;">▌</span> METAKIZZ // PROTOCOL.001
+        </td>
+        <td align="right" valign="middle" style="font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:2px;color:#4B5563;text-transform:uppercase;">
+          STATUS: <span style="color:#2EDB99;">ACTIVE</span>
+        </td>
+      </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- MAIN EMAIL CARD -->
+  <tr>
+    <td bgcolor="#0A0F0A" class="card-bg" style="background-color:#0A0F0A;border:1px solid #1a7a55;border-radius:14px;padding:0;">
+
+      <!-- Top accent bar -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td style="height:3px;background-color:#2EDB99;border-radius:14px 14px 0 0;line-height:3px;font-size:0;">&nbsp;</td>
+      </tr>
+      </table>
+
+      <!-- ─── HERO HEADER ─── -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="mob-pad" align="center" style="padding:36px 32px 8px 32px;">
+
+          <!-- system tag -->
+          <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:10px;letter-spacing:4px;text-transform:uppercase;margin:0 0 14px 0;opacity:0.7;">
+            // INCOMING TRANSMISSION
+          </p>
+
+          <!-- the hero title -->
+          <h1 class="mob-h1" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:30px;line-height:1.1;color:#FFFFFF;margin:0 0 6px 0;letter-spacing:1.5px;text-transform:uppercase;text-shadow:0 0 24px rgba(46,219,153,0.4);">
+            Welcome to<br>
+            <span style="color:#2EDB99;">Hacking the<br>Urbankiz Code</span>
+          </h1>
+
+          <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:18px 0 0 0;">
+            > Hey <span style="color:#2EDB99;">{{first_name}}</span><span class="blink-cursor" style="color:#2EDB99;">_</span>
+          </p>
+
+        </td>
+      </tr>
+      </table>
+
+      <!-- ─── MUST READ ALERT (access code instruction) ─── -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="mob-pad" style="padding:24px 32px 0 32px;">
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a1407" style="background-color:#1a1407;border:1px solid #8a6a2a;border-radius:8px;">
+          <tr>
+            <td style="padding:18px 20px;">
+
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:8px;">
+              <tr>
+                <td style="background-color:#FFC857;padding:3px 10px;border-radius:3px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:10px;letter-spacing:2px;color:#000000;text-transform:uppercase;">
+                  ⚠ MUST READ
+                </td>
+              </tr>
+              </table>
+
+              <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:8px 0 12px 0;">
+                Your Access Code
+              </p>
+
+              <!-- the email shown as a code/key box -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(0,0,0,0.45);border:1px dashed rgba(255,200,87,0.55);border-radius:6px;margin:0 0 14px 0;">
+              <tr>
+                <td style="padding:14px 16px;">
+                  <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:0 0 4px 0;">
+                    🔑 Your email
+                  </p>
+                  <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFC857;font-size:17px;font-weight:bold;line-height:1.3;margin:0;word-break:break-all;letter-spacing:0.3px;">
+                    <a href="mailto:{{email}}" style="color:#FFC857 !important;text-decoration:none !important;font-family:'Share Tech Mono','Space Mono',monospace;font-size:17px;font-weight:bold;">{{email}}</a>
+                  </p>
+                </td>
+              </tr>
+              </table>
+
+              <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.65;margin:0;">
+                This is <strong style="color:#FFC857;">your key</strong> to unlock every video and resource we send. <strong style="color:#FFC857;">Remember which one you used.</strong>
+              </p>
+
+            </td>
+          </tr>
+          </table>
+
+        </td>
+      </tr>
+      </table>
+
+      <!-- ─── BRIDGE TEXT ─── -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="mob-pad" style="padding:32px 32px 0 32px;">
+          <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.7;margin:0 0 12px 0;">
+            While you wait for the training to start, here's a way to make it more fun.
+          </p>
+          <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.7;margin:0;">
+            Invite your dancer friends to <strong style="color:#2EDB99;">Hacking the Urbankiz Code</strong> and earn rewards every time one of them registers. <strong style="color:#FFFFFF;">It's 100% free and fun!</strong> You get a dashboard, there is a leaderboard... enjoy 😎
+          </p>
+        </td>
+      </tr>
+      </table>
+
+      <!-- ─── HERO PROTOCOL: 3 STEPS ─── -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="mob-pad" style="padding:32px 32px 0 32px;">
+
+          <!-- protocol label -->
+          <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:14px;letter-spacing:3.5px;text-transform:uppercase;margin:0 0 4px 0;text-align:center;">
+            How it works?
+          </p>
+          <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0 0 22px 0;text-align:center;">
+            3 simple steps...
+          </p>
+
+          <!-- THE 3 STEPS — table with 3 cells (stacks on mobile via .mob-stack) -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+
+            <!-- STEP 01 -->
+            <td class="mob-stack" valign="top" width="33%" style="padding:0 6px 0 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(46,219,153,0.05);border:1px solid rgba(46,219,153,0.3);border-radius:8px;">
+              <tr><td align="center" style="padding:18px 10px 16px 10px;">
+                <p class="mob-step-num" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:36px;line-height:1;margin:0 0 8px 0;letter-spacing:0;text-shadow:0 0 18px rgba(46,219,153,0.6);">
+                  01
+                </p>
+                <p class="mob-step-label" style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFFFFF;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;margin:0;line-height:1.3;">
+                  Send<br>your link
+                </p>
+              </td></tr>
+              </table>
+            </td>
+
+            <!-- STEP 02 -->
+            <td class="mob-stack" valign="top" width="34%" style="padding:0 3px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(46,219,153,0.05);border:1px solid rgba(46,219,153,0.3);border-radius:8px;">
+              <tr><td align="center" style="padding:18px 10px 16px 10px;">
+                <p class="mob-step-num" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:36px;line-height:1;margin:0 0 8px 0;letter-spacing:0;text-shadow:0 0 18px rgba(46,219,153,0.6);">
+                  02
+                </p>
+                <p class="mob-step-label" style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFFFFF;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;margin:0;line-height:1.3;">
+                  They<br>register
+                </p>
+              </td></tr>
+              </table>
+            </td>
+
+            <!-- STEP 03 -->
+            <td class="mob-stack" valign="top" width="33%" style="padding:0 0 0 6px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(46,219,153,0.08);border:2px solid #2EDB99;border-radius:8px;box-shadow:0 0 20px rgba(46,219,153,0.18);">
+              <tr><td align="center" style="padding:18px 10px 16px 10px;">
+                <p class="mob-step-num" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:36px;line-height:1;margin:0 0 8px 0;letter-spacing:0;text-shadow:0 0 18px rgba(46,219,153,0.85);">
+                  03
+                </p>
+                <p class="mob-step-label" style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;margin:0;line-height:1.3;font-weight:bold;">
+                  You<br>earn
+                </p>
+              </td></tr>
+              </table>
+            </td>
+
+          </tr>
+          </table>
+
+        </td>
+      </tr>
+      </table>
+
+      <!-- ─── REWARDS TITLE ─── -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="mob-pad" style="padding:40px 32px 0 32px;" align="center">
+          <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:14px;letter-spacing:3.5px;text-transform:uppercase;margin:0;text-align:center;">
+            ────  Here's What You Can Win  ────
+          </p>
+        </td>
+      </tr>
+      </table>
+
+      <!-- ─── GUARANTEED PRIZE — single line with arrow ─── -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="mob-pad" style="padding:22px 32px 0 32px;">
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(46,219,153,0.08);border:2px solid #2EDB99;border-radius:10px;box-shadow:0 0 24px rgba(46,219,153,0.16);">
+          <tr>
+            <td align="center" style="padding:20px 22px;">
+
+              <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.5;margin:0 0 10px 0;">
+                Invite <strong style="color:#2EDB99;">5 dancers</strong>
+                <span style="color:#2EDB99;font-size:18px;">  →  </span>
+              </p>
+
+              {% if community %}
+              <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:18px;line-height:1.3;letter-spacing:0.5px;margin:0;text-transform:uppercase;text-shadow:0 0 14px rgba(46,219,153,0.4);">
+                1 month free <span style="color:#2EDB99;">of MetaDancers</span>
+              </p>
+              {% else %}
+              <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:18px;line-height:1.3;letter-spacing:0.5px;margin:0 0 6px 0;text-transform:uppercase;text-shadow:0 0 14px rgba(46,219,153,0.4);">
+                Live musicality <span style="color:#2EDB99;">masterclass</span>
+              </p>
+              <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:13px;letter-spacing:1px;margin:0;">
+                with Jesus &amp; Anni · &euro;97 value
+              </p>
+              {% endif %}
+
+            </td>
+          </tr>
+          </table>
+
+        </td>
+      </tr>
+      </table>
+
+      <!-- ─── TOP 3 — clean numbered list ─── -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="mob-pad" style="padding:22px 32px 0 32px;">
+
+          <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.5;margin:0 0 12px 0;text-align:center;">
+            Plus, prizes for the <strong style="color:#2EDB99;">top 3 ambassadors</strong>:
+          </p>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(46,219,153,0.04);border:1px solid rgba(46,219,153,0.4);border-radius:10px;">
+          <tr>
+            <td style="padding:18px 20px;">
+
+              {% if community %}
+              <!-- 1st -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="top" width="60" style="padding:10px 0;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr><td style="background:#2EDB99;padding:6px 10px;border-radius:5px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#000000;font-size:14px;letter-spacing:1.5px;">
+                    1<span style="font-size:10px;">ST</span>
+                  </td></tr>
+                  </table>
+                </td>
+                <td valign="middle" style="padding:10px 0 10px 12px;">
+                  <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.4;margin:0 0 3px 0;font-weight:bold;">
+                    1 year of MetaDancers, free
+                  </p>
+                  <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:12px;letter-spacing:1px;margin:0;">
+                    &euro;1,000+ value
+                  </p>
+                </td>
+              </tr>
+              </table>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px dashed rgba(46,219,153,0.28);height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr></table>
+              <!-- 2nd -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="top" width="60" style="padding:10px 0;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr><td style="background:rgba(46,219,153,0.15);border:1px solid rgba(46,219,153,0.5);padding:6px 10px;border-radius:5px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:13px;letter-spacing:1.5px;">
+                    2<span style="font-size:10px;">ND</span>
+                  </td></tr>
+                  </table>
+                </td>
+                <td valign="middle" style="padding:10px 0 10px 12px;">
+                  <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.4;margin:0 0 3px 0;font-weight:bold;">
+                    Video feedback on your dancing
+                  </p>
+                  <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:12px;letter-spacing:1px;margin:0;">
+                    direct from Jesus &amp; Anni · &euro;150+ value
+                  </p>
+                </td>
+              </tr>
+              </table>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px dashed rgba(46,219,153,0.28);height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr></table>
+              <!-- 3rd -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="top" width="60" style="padding:10px 0;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr><td style="background:rgba(46,219,153,0.08);border:1px solid rgba(46,219,153,0.35);padding:6px 10px;border-radius:5px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#C9CFD4;font-size:13px;letter-spacing:1.5px;">
+                    3<span style="font-size:10px;">RD</span>
+                  </td></tr>
+                  </table>
+                </td>
+                <td valign="middle" style="padding:10px 0 10px 12px;">
+                  <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.4;margin:0;font-weight:bold;">
+                    Personalized MetaKizz hoodie
+                  </p>
+                </td>
+              </tr>
+              </table>
+              {% else %}
+              <!-- public 1st -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="top" width="60" style="padding:10px 0;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr><td style="background:#2EDB99;padding:6px 10px;border-radius:5px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#000000;font-size:14px;letter-spacing:1.5px;">
+                    1<span style="font-size:10px;">ST</span>
+                  </td></tr>
+                  </table>
+                </td>
+                <td valign="middle" style="padding:10px 0 10px 12px;">
+                  <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.4;margin:0 0 3px 0;font-weight:bold;">
+                    Video feedback on your dancing
+                  </p>
+                  <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:12px;letter-spacing:1px;margin:0;">
+                    direct from Jesus &amp; Anni · &euro;150+ value
+                  </p>
+                </td>
+              </tr>
+              </table>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px dashed rgba(46,219,153,0.28);height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr></table>
+              <!-- public 2nd -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="top" width="60" style="padding:10px 0;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr><td style="background:rgba(46,219,153,0.15);border:1px solid rgba(46,219,153,0.5);padding:6px 10px;border-radius:5px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:13px;letter-spacing:1.5px;">
+                    2<span style="font-size:10px;">ND</span>
+                  </td></tr>
+                  </table>
+                </td>
+                <td valign="middle" style="padding:10px 0 10px 12px;">
+                  <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.4;margin:0;font-weight:bold;">
+                    Personalized MetaKizz hoodie
+                  </p>
+                </td>
+              </tr>
+              </table>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px dashed rgba(46,219,153,0.28);height:1px;line-height:1px;font-size:0;">&nbsp;</td></tr></table>
+              <!-- public 3rd -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="top" width="60" style="padding:10px 0;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr><td style="background:rgba(46,219,153,0.08);border:1px solid rgba(46,219,153,0.35);padding:6px 10px;border-radius:5px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#C9CFD4;font-size:13px;letter-spacing:1.5px;">
+                    3<span style="font-size:10px;">RD</span>
+                  </td></tr>
+                  </table>
+                </td>
+                <td valign="middle" style="padding:10px 0 10px 12px;">
+                  <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.4;margin:0;font-weight:bold;">
+                    Personalized MetaKizz t-shirt
+                  </p>
+                </td>
+              </tr>
+              </table>
+              {% endif %}
+
+            </td>
+          </tr>
+          </table>
+
+        </td>
+      </tr>
+      </table>
+
+      <!-- ─── YOUR LINK ─── -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="mob-pad" style="padding:36px 32px 0 32px;">
+
+          <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:10px;letter-spacing:3px;text-transform:uppercase;margin:0 0 8px 0;">
+            // Your Link · Send This
+          </p>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(46,219,153,0.06);border:1px dashed #2EDB99;border-radius:6px;">
+          <tr>
+            <td style="padding:14px 16px;font-family:'Share Tech Mono','Space Mono',monospace;font-size:13px;color:#2EDB99;word-break:break-all;letter-spacing:0.3px;">
+              {{referral_url}}
+            </td>
+          </tr>
+          </table>
+
+        </td>
+      </tr>
+      </table>
+
+      <!-- ─── MASSIVE CTA ─── -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="mob-pad" align="center" style="padding:24px 32px 0 32px;">
+
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+          <tr>
+            <td align="center" style="background:#2EDB99;border:2px solid #2EDB99;border-radius:8px;box-shadow:0 0 24px rgba(46,219,153,0.45);">
+              <a href="{{dashboard_url}}" class="mob-cta-text" style="display:inline-block;padding:20px 44px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:15px;letter-spacing:3px;text-transform:uppercase;color:#000000;text-decoration:none;">
+                ▶ Open My Dashboard
+              </a>
+            </td>
+          </tr>
+          </table>
+
+          <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:11px;letter-spacing:1.5px;margin:14px 0 0 0;text-align:center;">
+            link · QR code · stats · position
+          </p>
+
+        </td>
+      </tr>
+      </table>
+
+      <!-- ─── DEADLINE BANNER ─── -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="mob-pad" style="padding:32px 32px 0 32px;">
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,200,87,0.06);border:1px solid rgba(255,200,87,0.4);border-radius:6px;box-shadow:0 0 18px rgba(255,200,87,0.08);">
+          <tr>
+            <td align="center" style="padding:14px 18px;">
+              <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:12px;letter-spacing:3.5px;text-transform:uppercase;margin:0;">
+                ⧗ Closes May 7 · 19:00 Madrid
+              </p>
+            </td>
+          </tr>
+          </table>
+
+        </td>
+      </tr>
+      </table>
+
+      <!-- ─── SIGN-OFF ─── -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td class="mob-pad" style="padding:36px 32px 32px 32px;">
+
+          <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:0 0 14px 0;">
+            Follow the white rabbit 🐇
+          </p>
+
+          <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+            Jesus &amp; Anni
+          </p>
+
+        </td>
+      </tr>
+      </table>
+
+    </td>
+  </tr>
+
+  <!-- TERMINAL FOOTER STRIP + UNSUBSCRIBE -->
+  <tr>
+    <td style="padding:14px 0 0 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td align="center" style="font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:3px;color:#4B5563;text-transform:uppercase;padding:8px 0;">
+          MetaKizz · The Unplugging Protocol
+        </td>
+      </tr>
+      <tr>
+        <td align="center" style="padding:6px 12px 0 12px;">
+          <p style="font-family:'Share Tech Mono','Courier New',monospace;font-size:11px;color:#6B7280;margin:0;">
+            Not feeling this? <a href="{{unsubscribe_url}}" style="color:#9CA3AF;text-decoration:underline;">Unsubscribe</a>
+          </p>
+        </td>
+      </tr>
+      </table>
+    </td>
+  </tr>
+
+</table>
+
+</td>
+</tr>
+</table>
+
+</body>
+</html>

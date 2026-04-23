@@ -14,6 +14,7 @@ from flask import current_app
 from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification
 from app.mailer import (
     send_welcome_email,
+    send_first_unplug_email,
     send_first_referral_email,
     send_referral_notification_email,
     send_almost_there_email,
@@ -83,17 +84,25 @@ def create_signup(name, email, ref_code=None):
 
     db.session.commit()
 
-    # 5. Send welcome email to the new ambassador (with their personal share link + WhatsApp link).
+    # 5. Send welcome email to the new ambassador (with their personal share link).
     app_url = current_app.config["APP_URL"]
     try:
         send_welcome_email(new_ambassador, app_url)
     except Exception:
         logger.exception("welcome email failed for %s", email)
 
-    # 6. If we credited a referrer, fire their referral notification + milestone logic.
+    # 6. Referrer notifications. We currently fire only Email #3 (First Unplug)
+    #    when this is their first referral (count goes 0 -> 1). The other emails
+    #    (#4 Guaranteed Prize, follow-up notifications, milestones) are queued up
+    #    for the next iteration and disabled here to avoid sending obsolete copy.
     if referrer is not None:
-        _notify_referrer(referrer, name, app_url)
-        _check_new_milestones(referrer)
+        try:
+            new_count = Referral.query.filter_by(ambassador_id=referrer.id).count()
+            if new_count == 1:
+                send_first_unplug_email(referrer, name, app_url)
+            # Future: count == 5 -> send_guaranteed_prize_email(referrer, app_url)
+        except Exception:
+            logger.exception("first_unplug email failed for %s", referrer.email)
 
     return new_ambassador, True
 

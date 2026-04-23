@@ -11,6 +11,7 @@
             <a href="{{ url_for('admin.rewards') }}" class="text-sm bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-lg transition">Rewards</a>
             <a href="{{ url_for('admin.test_email') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Test Emails</a>
             <a href="{{ url_for('admin.tiers') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Manage Tiers</a>
+            <a href="{{ url_for('admin.reset_test_data') }}" class="text-sm bg-red-900/50 hover:bg-red-800 text-red-300 hover:text-white border border-red-800 px-3 py-1.5 rounded-lg transition">Reset Tests</a>
             <a href="{{ url_for('admin.logout') }}" class="text-sm text-gray-400 hover:text-white px-3 py-1.5 transition">Logout</a>
         </div>
     </div>
@@ -70,7 +71,7 @@
                     <th class="text-left px-4 py-3 font-medium hidden sm:table-cell">Source</th>
                     <th class="text-center px-4 py-3 font-medium">Dancers</th>
                     <th class="text-center px-4 py-3 font-medium hidden sm:table-cell">IG Shared</th>
-                    <th class="text-left px-4 py-3 font-medium">Dashboard</th>
+                    <th class="text-left px-4 py-3 font-medium">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -93,7 +94,28 @@
                         {% endif %}
                     </td>
                     <td class="px-4 py-3">
-                        <a href="{{ url_for('dashboard.show', code=amb.dashboard_code) }}" class="text-brand-400 hover:text-brand-300 text-xs">View</a>
+                        <div class="flex items-center gap-2 text-xs">
+                            <a href="{{ url_for('dashboard.show', code=amb.dashboard_code) }}" target="_blank"
+                               class="text-brand-400 hover:text-brand-300">View</a>
+
+                            <span class="text-gray-700">|</span>
+
+                            <form method="POST"
+                                  action="{{ url_for('admin.reset_ambassador', ambassador_id=amb.id, channel=channel) }}"
+                                  onsubmit="return confirm('Reset {{ amb.name|e }} to 0 referrals?\n\nDeletes their {{ amb.referral_count }} referral(s). Ambassador stays.');"
+                                  class="inline">
+                                <button type="submit" class="text-yellow-500 hover:text-yellow-400">Reset</button>
+                            </form>
+
+                            <span class="text-gray-700">|</span>
+
+                            <form method="POST"
+                                  action="{{ url_for('admin.delete_ambassador', ambassador_id=amb.id, channel=channel) }}"
+                                  onsubmit="return confirm('DELETE {{ amb.name|e }} ({{ amb.email|e }})?\n\nRemoves the ambassador AND their {{ amb.referral_count }} referral(s).\nIrreversible.');"
+                                  class="inline">
+                                <button type="submit" class="text-red-500 hover:text-red-400">Delete</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

@@ -9,12 +9,17 @@
 
 {% block content %}
 <div class="max-w-lg mx-auto px-4 pt-8 pb-8">
-    <h1 class="text-xl font-display font-bold mb-6">Test Email Templates</h1>
-    <p class="text-gray-400 text-sm mb-6">Send any email template to yourself to preview how it looks. Uses the first ambassador's data as test content.</p>
+    <h1 class="text-xl font-display font-bold mb-3">Test Email Templates</h1>
+    <p class="text-gray-400 text-sm mb-6">
+        Send any of the live email templates to yourself. Mock data: count is set per email type
+        (e.g. 4 for last-6h, 5 for guaranteed prize, 7 for results).
+    </p>
 
     <form method="POST" class="space-y-4">
+
+        <!-- recipient -->
         <div>
-            <label for="email" class="block text-sm text-gray-400 mb-1 font-medium">Send to email</label>
+            <label for="email" class="block text-sm text-gray-400 mb-1 font-medium">Send to</label>
             <input
                 type="email"
                 id="email"
@@ -25,34 +30,132 @@
             >
         </div>
 
-        <div class="space-y-2 pt-2">
-            <p class="text-sm text-gray-400 font-medium mb-2">Choose email to send:</p>
+        <!-- source variant -->
+        <div>
+            <label class="block text-sm text-gray-400 mb-1 font-medium">Variant (rewards)</label>
+            <div class="flex gap-2">
+                <label class="flex-1">
+                    <input type="radio" name="source" value="community" class="peer sr-only" checked>
+                    <span class="block text-center text-sm font-medium px-4 py-3 rounded-lg cursor-pointer
+                                bg-gray-800 text-gray-300
+                                peer-checked:bg-brand-400 peer-checked:text-black">
+                        Community
+                    </span>
+                </label>
+                <label class="flex-1">
+                    <input type="radio" name="source" value="public" class="peer sr-only">
+                    <span class="block text-center text-sm font-medium px-4 py-3 rounded-lg cursor-pointer
+                                bg-gray-800 text-gray-300
+                                peer-checked:bg-brand-400 peer-checked:text-black">
+                        Public
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        <!-- TRANSACTIONAL EMAILS -->
+        <div class="space-y-2 pt-3">
+            <p class="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Transactional · real-time triggers</p>
 
             <button type="submit" name="type" value="welcome"
                 class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
-                1. Welcome — "You're in The Unplugging"
+                <div class="flex items-center justify-between">
+                    <span>1. <strong class="text-brand-400">Welcome</strong> — at signup</span>
+                    <span class="text-xs text-gray-500">count=0</span>
+                </div>
             </button>
 
-            <button type="submit" name="type" value="first_referral"
+            <button type="submit" name="type" value="first_unplug"
                 class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
-                2. First Referral — "Your first dancer is unplugged!"
+                <div class="flex items-center justify-between">
+                    <span>3. <strong class="text-brand-400">First Unplug</strong> — at 1st referral</span>
+                    <span class="text-xs text-gray-500">count=1</span>
+                </div>
             </button>
 
-            <button type="submit" name="type" value="referral"
+            <button type="submit" name="type" value="guaranteed_prize"
                 class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
-                3. New Referral — "[Name] just got unplugged"
-            </button>
-
-            <button type="submit" name="type" value="milestone"
-                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
-                4. Milestone — "You unlocked [Tier]!"
-            </button>
-
-            <button type="submit" name="type" value="almost_there"
-                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
-                5. Almost There — "1 more dancer to unlock [Tier]"
+                <div class="flex items-center justify-between">
+                    <span>4. <strong class="text-brand-400">Guaranteed Prize</strong> — at 5 unplugs</span>
+                    <span class="text-xs text-gray-500">count=5</span>
+                </div>
             </button>
         </div>
+
+        <!-- NUDGE / REMINDER EMAILS -->
+        <div class="space-y-2 pt-3">
+            <p class="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Nudges & reminders · cron-based</p>
+
+            <button type="submit" name="type" value="activation_nudge"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                <div class="flex items-center justify-between">
+                    <span>2. <strong class="text-brand-400">Activation Nudge</strong> — Day 2-3 if 0 referrals</span>
+                    <span class="text-xs text-gray-500">count=0</span>
+                </div>
+            </button>
+
+            <button type="submit" name="type" value="midway_reminder"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                <div class="flex items-center justify-between">
+                    <span>5. <strong class="text-brand-400">Midway Reminder</strong> — Day 7</span>
+                    <span class="text-xs text-gray-500">count=3, 7 days left</span>
+                </div>
+            </button>
+
+            <button type="submit" name="type" value="final_48h"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                <div class="flex items-center justify-between">
+                    <span>6. <strong class="text-brand-400">Final 48h</strong> — May 5 19:00</span>
+                    <span class="text-xs text-gray-500">count=4, pos=8</span>
+                </div>
+            </button>
+
+            <button type="submit" name="type" value="last_6h"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                <div class="flex items-center justify-between">
+                    <span>7. <strong class="text-brand-400">Last 6h</strong> — May 7 13:00 (count IN 3,4)</span>
+                    <span class="text-xs text-gray-500">count=4</span>
+                </div>
+            </button>
+        </div>
+
+        <!-- CLOSING / WINNERS -->
+        <div class="space-y-2 pt-3">
+            <p class="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Post-close · May 8</p>
+
+            <button type="submit" name="type" value="results"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                <div class="flex items-center justify-between">
+                    <span>8. <strong class="text-brand-400">Results</strong> — closing announcement</span>
+                    <span class="text-xs text-gray-500">count=7</span>
+                </div>
+            </button>
+
+            <button type="submit" name="type" value="you_won_guaranteed"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                <div class="flex items-center justify-between">
+                    <span>9a. <strong class="text-brand-400">You Won</strong> — guaranteed only (rama 1)</span>
+                    <span class="text-xs text-gray-500">count=8</span>
+                </div>
+            </button>
+
+            <button type="submit" name="type" value="you_won_top3_guaranteed"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                <div class="flex items-center justify-between">
+                    <span>9b. <strong class="text-brand-400">You Won</strong> — top 3 + guaranteed (rama 2)</span>
+                    <span class="text-xs text-gray-500">count=14, pos=2</span>
+                </div>
+            </button>
+
+            <button type="submit" name="type" value="you_won_top3_only"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                <div class="flex items-center justify-between">
+                    <span>9c. <strong class="text-brand-400">You Won</strong> — top 3 only (rama 3, edge)</span>
+                    <span class="text-xs text-gray-500">count=4, pos=3</span>
+                </div>
+            </button>
+        </div>
+
     </form>
 </div>
 {% endblock %}
