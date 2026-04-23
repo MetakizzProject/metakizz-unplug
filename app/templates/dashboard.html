@@ -296,20 +296,15 @@
         function activate(name) {
             tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
             panels.forEach(p => p.classList.toggle('hidden', p.dataset.panel !== name));
-            // remember selection across reloads
-            try { localStorage.setItem('dash-tab', name); } catch(e) {}
-            // update URL hash without scrolling
+            // update URL hash (no scroll) so users can share a direct link to a tab
             history.replaceState(null, '', '#' + name);
         }
 
         tabs.forEach(t => t.addEventListener('click', () => activate(t.dataset.tab)));
 
-        // initial tab: URL hash > localStorage > "link"
-        let initial = (location.hash || '').replace('#', '');
-        if (!initial) {
-            try { initial = localStorage.getItem('dash-tab') || 'link'; } catch(e) { initial = 'link'; }
-        }
+        // Always default to "link". Honor URL hash if present (e.g. /dashboard/XYZ#prizes).
         const validTabs = ['link', 'prizes', 'share', 'referrals'];
+        let initial = (location.hash || '').replace('#', '');
         if (!validTabs.includes(initial)) initial = 'link';
         activate(initial);
     })();
