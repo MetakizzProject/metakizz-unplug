@@ -40,6 +40,14 @@ class Ambassador(db.Model):
     # Idempotency flag for email #4 (Guaranteed Prize — fires once when count hits 5).
     guaranteed_prize_sent_at = db.Column(db.DateTime, nullable=True)
 
+    # Idempotency flags for the 6 cron-driven emails. Each is set after a successful send.
+    activation_nudge_sent_at = db.Column(db.DateTime, nullable=True)  # #2
+    midway_sent_at = db.Column(db.DateTime, nullable=True)            # #5
+    final_48h_sent_at = db.Column(db.DateTime, nullable=True)         # #6
+    last_6h_sent_at = db.Column(db.DateTime, nullable=True)           # #7
+    results_sent_at = db.Column(db.DateTime, nullable=True)           # #8
+    you_won_sent_at = db.Column(db.DateTime, nullable=True)           # #9
+
     referrals = db.relationship("Referral", backref="ambassador", lazy=True)
     notifications = db.relationship("MilestoneNotification", backref="ambassador", lazy=True)
 

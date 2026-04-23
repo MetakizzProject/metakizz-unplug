@@ -345,6 +345,53 @@ def test_email():
     return render_template("admin_test_email.html")
 
 
+@admin_bp.route("/cron-status", methods=["GET"])
+def cron_status():
+    """Dashboard of cron-driven email sends. Shows counters per email + manual
+    force-send buttons (fallback if the external scheduler fails)."""
+    totals = {
+        "activation_nudge_sent": Ambassador.query.filter(Ambassador.activation_nudge_sent_at.isnot(None)).count(),
+        "midway_sent": Ambassador.query.filter(Ambassador.midway_sent_at.isnot(None)).count(),
+        "final_48h_sent": Ambassador.query.filter(Ambassador.final_48h_sent_at.isnot(None)).count(),
+        "last_6h_sent": Ambassador.query.filter(Ambassador.last_6h_sent_at.isnot(None)).count(),
+        "results_sent": Ambassador.query.filter(Ambassador.results_sent_at.isnot(None)).count(),
+        "you_won_sent": Ambassador.query.filter(Ambassador.you_won_sent_at.isnot(None)).count(),
+    }
+    total_ambassadors = Ambassador.query.count()
+    return render_template(
+        "admin_cron_status.html",
+        totals=totals,
+        total_ambassadors=total_ambassadors,
+    )
+
+
+@admin_bp.route("/cron-force/<job>", methods=["POST"])
+def cron_force(job):
+    """Manually trigger a cron job from the admin UI (fallback if external cron fails).
+    Bypasses the CRON_SECRET because we're already admin-authed.
+    """
+    from app.services import cron_logic
+    job_map = {
+        "daily": cron_logic.dispatch_daily,
+        "final-48h": cron_logic.dispatch_final_48h,
+        "last-6h": cron_logic.dispatch_last_6h,
+        "results": cron_logic.dispatch_results,
+        "you-won": cron_logic.dispatch_you_won,
+    }
+    fn = job_map.get(job)
+    if fn is None:
+        flash(f"Unknown cron job: {job}", "error")
+        return redirect(url_for("admin.cron_status"))
+    try:
+        stats = fn()
+        flash(f"cron/{job} ran. Stats: {stats}", "success")
+        logger.warning("ADMIN force-ran cron/%s: %s", job, stats)
+    except Exception as e:
+        flash(f"cron/{job} failed: {e}", "error")
+        logger.exception("admin force cron/%s failed", job)
+    return redirect(url_for("admin.cron_status"))
+
+
 @admin_bp.route("/backfill-guaranteed", methods=["POST"])
 def backfill_guaranteed():
     """Send Email #4 (Guaranteed Prize) to any ambassador who already hit 5+ unplugs

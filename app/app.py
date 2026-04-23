@@ -38,6 +38,18 @@ def _ensure_unsubscribe_columns(db):
         if "guaranteed_prize_sent_at" not in cols:
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN guaranteed_prize_sent_at TIMESTAMP"))
             logger.info("added column ambassadors.guaranteed_prize_sent_at")
+        # Cron-driven email idempotency flags.
+        for col in (
+            "activation_nudge_sent_at",
+            "midway_sent_at",
+            "final_48h_sent_at",
+            "last_6h_sent_at",
+            "results_sent_at",
+            "you_won_sent_at",
+        ):
+            if col not in cols:
+                conn.execute(text(f"ALTER TABLE ambassadors ADD COLUMN {col} TIMESTAMP"))
+                logger.info("added column ambassadors.%s", col)
 
         # Backfill tokens for any rows that don't have one yet (existing ambassadors).
         rows = conn.execute(text("SELECT id FROM ambassadors WHERE unsubscribe_token IS NULL")).fetchall()
@@ -72,6 +84,9 @@ def create_app():
     app.config["ADMIN_PASSWORD"] = os.getenv("ADMIN_PASSWORD", "admin")
     app.config["GHL_WEBHOOK_SECRET"] = os.getenv("GHL_WEBHOOK_SECRET", "")
     app.config["WHATSAPP_GROUP_URL"] = os.getenv("WHATSAPP_GROUP_URL", "")
+    app.config["CRON_SECRET"] = os.getenv("CRON_SECRET", "")
+    # Hard campaign close: 2026-05-07 19:00 Europe/Madrid. Used by cron logic.
+    app.config["CAMPAIGN_CLOSE_ISO"] = os.getenv("CAMPAIGN_CLOSE_ISO", "2026-05-07T19:00:00+02:00")
 
     from app.models import db
 
@@ -86,12 +101,14 @@ def create_app():
     from app.routes.leaderboard import leaderboard_bp
     from app.routes.admin import admin_bp
     from app.routes.webhook import webhook_bp
+    from app.routes.cron import cron_bp
 
     app.register_blueprint(home_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(leaderboard_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(webhook_bp)
+    app.register_blueprint(cron_bp)
 
     return app
 

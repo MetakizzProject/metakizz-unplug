@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Cron Status — Admin{% endblock %}
+
+{% block nav_right %}
+<a href="/admin/" class="text-sm text-gray-400 hover:text-brand-400 transition font-medium">Back to Admin</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 pt-8 pb-8">
+
+    <h1 class="text-xl font-display font-bold mb-2">Cron Status</h1>
+    <p class="text-gray-400 text-sm mb-6">
+        Per-email delivery counters + manual override if the external cron fails.
+        Total active ambassadors: <strong class="text-white">{{ total_ambassadors }}</strong>
+    </p>
+
+    <!-- Status table -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden mb-6">
+        <table class="w-full text-sm">
+            <thead class="border-b border-gray-800 text-gray-400">
+                <tr>
+                    <th class="text-left px-4 py-3 font-medium">Email</th>
+                    <th class="text-left px-4 py-3 font-medium">Schedule</th>
+                    <th class="text-center px-4 py-3 font-medium">Sent</th>
+                    <th class="text-right px-4 py-3 font-medium">Force send</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="border-b border-gray-800">
+                    <td class="px-4 py-3">
+                        <div class="font-medium">#2 Activation Nudge</div>
+                        <div class="text-xs text-gray-500">Day 2-3 if count=0</div>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-gray-400">Daily 10:00 Madrid</td>
+                    <td class="px-4 py-3 text-center font-bold text-brand-400">{{ totals.activation_nudge_sent }}</td>
+                    <td class="px-4 py-3 text-right">
+                        <form method="POST" action="{{ url_for('admin.cron_force', job='daily') }}" class="inline"
+                              onsubmit="return confirm('Force-run the daily cron (activation + midway)?');">
+                            <button type="submit" class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded transition">Run daily</button>
+                        </form>
+                    </td>
+                </tr>
+                <tr class="border-b border-gray-800">
+                    <td class="px-4 py-3">
+                        <div class="font-medium">#5 Midway Reminder</div>
+                        <div class="text-xs text-gray-500">Day 7, if ≥5 days left</div>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-gray-400">Daily 10:00 Madrid</td>
+                    <td class="px-4 py-3 text-center font-bold text-brand-400">{{ totals.midway_sent }}</td>
+                    <td class="px-4 py-3 text-right">
+                        <span class="text-xs text-gray-600">(via daily)</span>
+                    </td>
+                </tr>
+                <tr class="border-b border-gray-800">
+                    <td class="px-4 py-3">
+                        <div class="font-medium">#6 Final 48h</div>
+                        <div class="text-xs text-gray-500">All active ambassadors</div>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-gray-400">5 may 19:00 Madrid</td>
+                    <td class="px-4 py-3 text-center font-bold text-brand-400">{{ totals.final_48h_sent }}</td>
+                    <td class="px-4 py-3 text-right">
+                        <form method="POST" action="{{ url_for('admin.cron_force', job='final-48h') }}" class="inline"
+                              onsubmit="return confirm('Force-send Final 48h to everyone who hasn\'t received it yet?');">
+                            <button type="submit" class="text-xs bg-yellow-900/50 hover:bg-yellow-800 text-yellow-300 px-3 py-1.5 rounded transition">Force</button>
+                        </form>
+                    </td>
+                </tr>
+                <tr class="border-b border-gray-800">
+                    <td class="px-4 py-3">
+                        <div class="font-medium">#7 Last 6h</div>
+                        <div class="text-xs text-gray-500">Only count IN (3, 4)</div>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-gray-400">7 may 13:00 Madrid</td>
+                    <td class="px-4 py-3 text-center font-bold text-brand-400">{{ totals.last_6h_sent }}</td>
+                    <td class="px-4 py-3 text-right">
+                        <form method="POST" action="{{ url_for('admin.cron_force', job='last-6h') }}" class="inline"
+                              onsubmit="return confirm('Force-send Last 6h to ambassadors at count 3-4?');">
+                            <button type="submit" class="text-xs bg-yellow-900/50 hover:bg-yellow-800 text-yellow-300 px-3 py-1.5 rounded transition">Force</button>
+                        </form>
+                    </td>
+                </tr>
+                <tr class="border-b border-gray-800">
+                    <td class="px-4 py-3">
+                        <div class="font-medium">#8 Results</div>
+                        <div class="text-xs text-gray-500">All active ambassadors</div>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-gray-400">8 may 10:00 Madrid</td>
+                    <td class="px-4 py-3 text-center font-bold text-brand-400">{{ totals.results_sent }}</td>
+                    <td class="px-4 py-3 text-right">
+                        <form method="POST" action="{{ url_for('admin.cron_force', job='results') }}" class="inline"
+                              onsubmit="return confirm('Force-send Results to all active ambassadors?');">
+                            <button type="submit" class="text-xs bg-yellow-900/50 hover:bg-yellow-800 text-yellow-300 px-3 py-1.5 rounded transition">Force</button>
+                        </form>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="px-4 py-3">
+                        <div class="font-medium">#9 You Won</div>
+                        <div class="text-xs text-gray-500">Prize winners (5+ or top 3)</div>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-gray-400">8 may 10:30 Madrid</td>
+                    <td class="px-4 py-3 text-center font-bold text-brand-400">{{ totals.you_won_sent }}</td>
+                    <td class="px-4 py-3 text-right">
+                        <form method="POST" action="{{ url_for('admin.cron_force', job='you-won') }}" class="inline"
+                              onsubmit="return confirm('Force-send You Won to all prize winners?');">
+                            <button type="submit" class="text-xs bg-yellow-900/50 hover:bg-yellow-800 text-yellow-300 px-3 py-1.5 rounded transition">Force</button>
+                        </form>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-4 text-xs text-gray-400 leading-relaxed">
+        <p class="mb-2"><strong class="text-white">How this works:</strong></p>
+        <ul class="list-disc pl-5 space-y-1">
+            <li>The <strong class="text-white">daily</strong> cron runs every day at 10:00 Madrid and handles Activation Nudge + Midway Reminder (per-user timing based on each signup date).</li>
+            <li>The 4 <strong class="text-white">one-shots</strong> (#6 / #7 / #8 / #9) run at their specific fixed datetime from the campaign calendar.</li>
+            <li>All are idempotent — the <code>*_sent_at</code> column prevents anyone from receiving the same email twice.</li>
+            <li>"Force" buttons bypass the external cron and run the same dispatch function manually, respecting the same idempotency.</li>
+        </ul>
+    </div>
+
+</div>
+{% endblock %}
