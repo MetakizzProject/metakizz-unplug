@@ -35,6 +35,9 @@ def _ensure_unsubscribe_columns(db):
         if "welcome_sent_at" not in cols:
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN welcome_sent_at TIMESTAMP"))
             logger.info("added column ambassadors.welcome_sent_at")
+        if "guaranteed_prize_sent_at" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN guaranteed_prize_sent_at TIMESTAMP"))
+            logger.info("added column ambassadors.guaranteed_prize_sent_at")
 
         # Backfill tokens for any rows that don't have one yet (existing ambassadors).
         rows = conn.execute(text("SELECT id FROM ambassadors WHERE unsubscribe_token IS NULL")).fetchall()

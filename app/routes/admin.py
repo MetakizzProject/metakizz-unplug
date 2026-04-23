@@ -345,6 +345,47 @@ def test_email():
     return render_template("admin_test_email.html")
 
 
+@admin_bp.route("/backfill-guaranteed", methods=["POST"])
+def backfill_guaranteed():
+    """Send Email #4 (Guaranteed Prize) to any ambassador who already hit 5+ unplugs
+    but didn't receive it yet (because the trigger was wired after they reached 5).
+
+    Idempotent via guaranteed_prize_sent_at — safe to re-run.
+    """
+    from app.mailer import send_guaranteed_prize_email
+    from datetime import datetime, timezone
+    from app.services.signup import _rank_in_bucket
+    app_url = current_app.config["APP_URL"]
+
+    # Find all ambassadors with count >= 5 and no guaranteed_prize yet
+    candidates = [
+        a for a in Ambassador.query.all()
+        if a.referral_count >= 5 and a.guaranteed_prize_sent_at is None and a.unsubscribed_at is None
+    ]
+
+    sent = 0
+    failed = 0
+    for amb in candidates:
+        try:
+            rank = _rank_in_bucket(amb)
+            if send_guaranteed_prize_email(amb, rank, app_url):
+                amb.guaranteed_prize_sent_at = datetime.now(timezone.utc)
+                db.session.commit()
+                sent += 1
+            else:
+                failed += 1
+        except Exception:
+            logger.exception("backfill #4 failed for %s", amb.email)
+            failed += 1
+
+    if sent or failed:
+        flash(f"Backfill complete. Sent: {sent}. Failed: {failed}. Candidates found: {len(candidates)}.", "success")
+    else:
+        flash("No candidates found — nobody at 5+ without the guaranteed prize email.", "info")
+    logger.warning("ADMIN BACKFILL #4: sent=%d failed=%d candidates=%d", sent, failed, len(candidates))
+    return redirect(url_for("admin.index"))
+
+
 @admin_bp.route("/ambassadors/<int:ambassador_id>/reset", methods=["POST"])
 def reset_ambassador(ambassador_id):
     """Per-ambassador reset: delete only this ambassador's referrals + milestone notifs.

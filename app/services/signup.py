@@ -16,11 +16,22 @@ from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotificati
 from app.mailer import (
     send_welcome_email,
     send_first_unplug_email,
+    send_guaranteed_prize_email,
     send_first_referral_email,
     send_referral_notification_email,
     send_almost_there_email,
     send_milestone_email,
 )
+
+
+def _rank_in_bucket(ambassador):
+    """Compute this ambassador's 1-based rank within their source bucket."""
+    bucket = Ambassador.query.filter_by(source=ambassador.source).all()
+    ordered = sorted(bucket, key=lambda a: (-a.referral_count, a.created_at))
+    return next(
+        (i + 1 for i, a in enumerate(ordered) if a.id == ambassador.id),
+        len(ordered),
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -109,18 +120,24 @@ def create_signup(name, email, ref_code=None):
     except Exception:
         logger.exception("welcome email failed for %s", email)
 
-    # 6. Referrer notifications. We currently fire only Email #3 (First Unplug)
-    #    when this is their first referral (count goes 0 -> 1). The other emails
-    #    (#4 Guaranteed Prize, follow-up notifications, milestones) are queued up
-    #    for the next iteration and disabled here to avoid sending obsolete copy.
+    # 6. Referrer notifications (real-time email triggers):
+    #    - count 0 -> 1: Email #3 First Unplug
+    #    - count 4 -> 5: Email #4 Guaranteed Prize (idempotent via guaranteed_prize_sent_at)
+    #    Nudges / reminders / results run on crons, not here.
     if referrer is not None:
         try:
             new_count = Referral.query.filter_by(ambassador_id=referrer.id).count()
+
             if new_count == 1:
                 send_first_unplug_email(referrer, name, app_url)
-            # Future: count == 5 -> send_guaranteed_prize_email(referrer, app_url)
+
+            elif new_count >= 5 and referrer.guaranteed_prize_sent_at is None:
+                rank = _rank_in_bucket(referrer)
+                if send_guaranteed_prize_email(referrer, rank, app_url):
+                    referrer.guaranteed_prize_sent_at = datetime.now(timezone.utc)
+                    db.session.commit()
         except Exception:
-            logger.exception("first_unplug email failed for %s", referrer.email)
+            logger.exception("referrer email failed for %s", referrer.email)
 
     return new_ambassador, True
 

@@ -11,6 +11,10 @@
             <a href="{{ url_for('admin.rewards') }}" class="text-sm bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-lg transition">Rewards</a>
             <a href="{{ url_for('admin.test_email') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Test Emails</a>
             <a href="{{ url_for('admin.tiers') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Manage Tiers</a>
+            <form method="POST" action="{{ url_for('admin.backfill_guaranteed') }}" class="inline"
+                  onsubmit="return confirm('Send Guaranteed Prize email (#4) to any ambassador at 5+ unplugs who hasn\'t received it yet?\n\nIdempotent (safe to re-run).');">
+                <button type="submit" class="text-sm bg-yellow-900/40 hover:bg-yellow-800 text-yellow-300 hover:text-white border border-yellow-800 px-3 py-1.5 rounded-lg transition">Backfill #4</button>
+            </form>
             <a href="{{ url_for('admin.reset_test_data') }}" class="text-sm bg-red-900/50 hover:bg-red-800 text-red-300 hover:text-white border border-red-800 px-3 py-1.5 rounded-lg transition">Reset Tests</a>
             <a href="{{ url_for('admin.logout') }}" class="text-sm text-gray-400 hover:text-white px-3 py-1.5 transition">Logout</a>
         </div>

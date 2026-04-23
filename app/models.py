@@ -37,6 +37,9 @@ class Ambassador(db.Model):
     # the FIRST time they register through the landing — but not twice.
     welcome_sent_at = db.Column(db.DateTime, nullable=True)
 
+    # Idempotency flag for email #4 (Guaranteed Prize — fires once when count hits 5).
+    guaranteed_prize_sent_at = db.Column(db.DateTime, nullable=True)
+
     referrals = db.relationship("Referral", backref="ambassador", lazy=True)
     notifications = db.relationship("MilestoneNotification", backref="ambassador", lazy=True)
 
