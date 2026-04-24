@@ -148,76 +148,9 @@
 
     <!-- ─── TABS NAV ─── -->
     <div class="flex gap-1.5 mb-4 overflow-x-auto pb-1 -mx-1 px-1" id="dash-tabs" role="tablist">
-        <button data-tab="link" class="dash-tab whitespace-nowrap px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition flex-shrink-0">My Link</button>
+        <button data-tab="share" class="dash-tab whitespace-nowrap px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition flex-shrink-0">Share</button>
         <button data-tab="prizes" class="dash-tab whitespace-nowrap px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition flex-shrink-0">Prizes</button>
-        <button data-tab="share" class="dash-tab whitespace-nowrap px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition flex-shrink-0">How to Share</button>
         <button data-tab="referrals" class="dash-tab whitespace-nowrap px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition flex-shrink-0">Referrals <span class="text-gray-500">({{ referrals|length }})</span></button>
-    </div>
-
-    <!-- ═══════════════════════════════════════════════════════════
-         TAB: MY LINK (default)
-         ═══════════════════════════════════════════════════════════ -->
-    <div class="dash-panel" data-panel="link">
-        <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-5 mb-6">
-
-            <!-- URL display (terminal-styled) + Copy button -->
-            <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-2">
-                // YOUR REFERRAL LINK
-            </p>
-            <div class="flex gap-2 mb-4">
-                <div class="flex-1 relative bg-brand-400/5 border border-dashed border-brand-400/50 rounded-lg overflow-hidden">
-                    <input type="text" value="{{ referral_url }}" readonly id="referral-link"
-                           class="w-full bg-transparent px-3 py-2.5 text-sm font-mono-term text-brand-400 focus:outline-none truncate"
-                           style="letter-spacing: 0.3px;">
-                </div>
-                <button onclick="copyLink()" id="copy-btn"
-                        class="bg-brand-400 hover:bg-brand-300 text-black text-xs font-display font-black uppercase tracking-wider px-4 py-2.5 rounded-lg transition flex items-center gap-1.5 flex-shrink-0"
-                        style="box-shadow: 0 0 14px rgba(46,219,153,0.35);">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M8 2a1 1 0 00-1 1v1H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2h-2V3a1 1 0 00-1-1H8zM7 5a1 1 0 001 1h4a1 1 0 001-1V4h2v12H5V4h2v1z"/></svg>
-                    <span>COPY</span>
-                </button>
-            </div>
-
-            <!-- Share buttons (WhatsApp + Native) -->
-            <div class="flex gap-2 mb-5">
-                <a href="{{ whatsapp_url }}"
-                   target="_blank"
-                   class="flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-white text-sm font-bold px-4 py-3 rounded-lg transition flex items-center justify-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
-                    <span>Share on WhatsApp</span>
-                </a>
-                <button onclick="nativeShare()" id="share-btn"
-                        class="flex-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-brand-400/40 text-white text-sm font-bold px-4 py-3 rounded-lg transition flex items-center justify-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-                    <span>Share...</span>
-                </button>
-            </div>
-
-            <!-- QR Code (corner-bracket terminal frame) -->
-            <div class="relative mt-5">
-                <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-2 text-center">
-                    // SCAN TO JOIN
-                </p>
-                <div class="relative mx-auto w-fit p-3 border border-brand-400/40 rounded-xl bg-brand-400/5"
-                     style="box-shadow: 0 0 24px rgba(46,219,153,0.15);">
-                    <span class="absolute top-1 left-1 w-3 h-3 border-t-2 border-l-2 border-brand-400"></span>
-                    <span class="absolute top-1 right-1 w-3 h-3 border-t-2 border-r-2 border-brand-400"></span>
-                    <span class="absolute bottom-1 left-1 w-3 h-3 border-b-2 border-l-2 border-brand-400"></span>
-                    <span class="absolute bottom-1 right-1 w-3 h-3 border-b-2 border-r-2 border-brand-400"></span>
-                    <img src="{{ url_for('home.qr_image', referral_code=ambassador.referral_code) }}"
-                         alt="QR Code"
-                         class="w-40 h-40 bg-white rounded-lg p-2">
-                </div>
-                <div class="text-center mt-3">
-                    <a href="{{ url_for('home.qr_image', referral_code=ambassador.referral_code) }}"
-                       download="metakizz-qr-{{ ambassador.referral_code }}.png"
-                       class="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-brand-400 hover:text-brand-300 transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                        Download QR
-                    </a>
-                </div>
-            </div>
-        </div>
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════
@@ -329,144 +262,126 @@
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════
-         TAB: HOW TO SHARE (SVG icons grid)
+         TAB: SHARE (default — link + poster + 3 ways)
          ═══════════════════════════════════════════════════════════ -->
-    <div class="dash-panel hidden" data-panel="share">
+    <div class="dash-panel" data-panel="share">
 
-        <div class="mb-4">
-            <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-1">
-                // PLAYBOOK · 06 IDEAS
+        <!-- ─── YOUR LINK (compact, up top) ─── -->
+        <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-4 mb-5">
+            <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-2">
+                // YOUR LINK
             </p>
-            <h2 class="font-display font-semibold text-base text-white mb-1">Some ideas to unplug more dancers...</h2>
-            <p class="text-xs text-gray-500">Pick what feels natural. Personal beats broadcast, every time.</p>
+            <div class="flex gap-2">
+                <div class="flex-1 relative bg-brand-400/5 border border-dashed border-brand-400/50 rounded-lg overflow-hidden">
+                    <input type="text" value="{{ referral_url }}" readonly id="referral-link"
+                           class="w-full bg-transparent px-3 py-2.5 text-sm font-mono-term text-brand-400 focus:outline-none truncate"
+                           style="letter-spacing: 0.3px;">
+                </div>
+                <button onclick="copyLink()" id="copy-btn"
+                        class="bg-brand-400 hover:bg-brand-300 text-black text-xs font-display font-black uppercase tracking-wider px-4 py-2.5 rounded-lg transition flex items-center gap-1.5 flex-shrink-0"
+                        style="box-shadow: 0 0 14px rgba(46,219,153,0.35);">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M8 2a1 1 0 00-1 1v1H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2h-2V3a1 1 0 00-1-1H8zM7 5a1 1 0 001 1h4a1 1 0 001-1V4h2v12H5V4h2v1z"/></svg>
+                    <span>COPY</span>
+                </button>
+            </div>
         </div>
 
+        <!-- ─── POSTER HERO — the thing they'll share ─── -->
+        <div class="flex flex-col items-center mb-6">
+            <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3">
+                // YOUR SHAREABLE POSTER
+            </p>
+            <a href="{{ url_for('home.story_image', referral_code=ambassador.referral_code) }}"
+               target="_blank" rel="noopener"
+               class="block rounded-xl overflow-hidden border border-brand-400/40 hover:border-brand-400 transition"
+               style="width: 200px; aspect-ratio: 9/16; box-shadow: 0 0 32px rgba(46,219,153,0.25);">
+                <img src="{{ url_for('home.story_image', referral_code=ambassador.referral_code) }}"
+                     alt="Your shareable poster — contains your QR"
+                     class="w-full h-full object-cover block">
+            </a>
+            <p class="text-[11px] text-gray-500 mt-2 font-mono-term uppercase tracking-wider">tap to enlarge</p>
+        </div>
+
+        <!-- ─── 3 WAYS TO SHARE — flat tiles, no accordion ─── -->
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-2.5">
+            ▌ 3 WAYS TO SHARE IT
+        </p>
         <div class="space-y-2.5 mb-6">
 
-            <!-- ═══ 1. Send a DM — 2 audience variants ═══ -->
-            <details class="share-card" data-share-card>
-                <summary>
+            <!-- Tile 1: WhatsApp DM (person or group) -->
+            <div class="share-tile bg-gray-900/80 border-[#25D366]/40">
+                <div class="flex items-center gap-3 mb-3">
                     <span class="share-icon bg-[#25D366]/15 border-[#25D366]/40 text-[#25D366]">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                     </span>
                     <div class="flex-1 min-w-0">
-                        <h3 class="share-title">Send a DM</h3>
-                        <p class="share-sub">Who are you sending it to?</p>
-                    </div>
-                    <span class="share-chevron">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                    </span>
-                </summary>
-                <div class="share-body">
-                    <p class="share-body-intro">Pick the audience. The message opens in WhatsApp, ready to send.</p>
-                    <div class="space-y-2">
-                        <a href="{{ wa_person }}" target="_blank" class="share-action-btn">
-                            <span class="text-xl">👤</span>
-                            <div class="flex-1 text-left">
-                                <p class="font-bold text-white">To one person</p>
-                                <p class="text-xs text-gray-400">For a dancer friend — warm, personal</p>
-                            </div>
-                            <span class="text-brand-400">→</span>
-                        </a>
-                        <a href="{{ wa_group }}" target="_blank" class="share-action-btn">
-                            <span class="text-xl">👥</span>
-                            <div class="flex-1 text-left">
-                                <p class="font-bold text-white">To a group chat</p>
-                                <p class="text-xs text-gray-400">For your dance WhatsApp crew</p>
-                            </div>
-                            <span class="text-brand-400">→</span>
-                        </a>
+                        <h3 class="share-title">Send a WhatsApp</h3>
+                        <p class="share-sub">Message ready. Pick who.</p>
                     </div>
                 </div>
-            </details>
+                <div class="grid grid-cols-2 gap-2">
+                    <a href="{{ wa_person }}" target="_blank" class="share-tile-btn">
+                        <span class="text-base leading-none">👤</span>
+                        <span>One friend</span>
+                    </a>
+                    <a href="{{ wa_group }}" target="_blank" class="share-tile-btn">
+                        <span class="text-base leading-none">👥</span>
+                        <span>A group</span>
+                    </a>
+                </div>
+            </div>
 
-            <!-- ═══ 2. Instagram Stories — download branded image ═══ -->
-            <details class="share-card" data-share-card>
-                <summary>
+            <!-- Tile 2: Instagram story -->
+            <div class="share-tile bg-gray-900/80 border-pink-500/40">
+                <div class="flex items-center gap-3 mb-3">
                     <span class="share-icon bg-pink-500/15 border-pink-500/40 text-pink-400">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                     </span>
                     <div class="flex-1 min-w-0">
-                        <h3 class="share-title">Post it as an Instagram story</h3>
-                        <p class="share-sub">Download the image. Upload. Done.</p>
+                        <h3 class="share-title">Post as Instagram story</h3>
+                        <p class="share-sub">Downloads poster + copies your link.</p>
                     </div>
-                    <span class="share-chevron">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                    </span>
-                </summary>
-                <div class="share-body">
-                    <p class="share-body-intro">
-                        Your branded story image is ready. Upload it as your story and anyone can scan the QR. Preview:
-                    </p>
-                    <div class="flex justify-center mb-3">
-                        <a href="{{ url_for('home.story_image', referral_code=ambassador.referral_code) }}"
-                           target="_blank" rel="noopener"
-                           class="block rounded-lg overflow-hidden border border-pink-500/40 shadow-lg hover:border-pink-400 transition"
-                           style="width: 172px; aspect-ratio: 9/16; box-shadow: 0 0 24px rgba(236,72,153,0.18);">
-                            <img src="{{ url_for('home.story_image', referral_code=ambassador.referral_code) }}"
-                                 alt="Your Instagram story poster"
-                                 loading="lazy"
-                                 class="w-full h-full object-cover block">
-                        </a>
-                    </div>
-                    <p class="share-body-intro" style="margin-top: -6px; border-top: none; padding-top: 0; font-size: 12px; color: rgb(156 163 175);">
-                        💡 <strong class="text-pink-400">Pro tip</strong>: after uploading, add an Instagram link sticker with your link (already copied to your clipboard) — that turns the story into a <strong class="text-white">1-tap</strong> join for your viewers.
-                    </p>
-                    <a href="{{ url_for('home.story_image', referral_code=ambassador.referral_code) }}"
-                       download="metakizz-story-{{ ambassador.referral_code }}.jpg"
-                       onclick="storyImageDownload('{{ referral_url|e }}', this); return true;"
-                       class="share-primary-btn bg-pink-500/20 border-pink-500/50 text-pink-400 hover:bg-pink-500/30 w-full mb-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                        <span data-label>DOWNLOAD STORY IMAGE + COPY LINK</span>
-                    </a>
-                    <a href="{{ ig_app_url }}" target="_blank" class="share-primary-btn w-full" style="background: transparent; border-color: rgba(236,72,153,0.3); color: rgb(236 72 153);">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
-                        <span data-label>OPEN INSTAGRAM</span>
-                    </a>
                 </div>
-            </details>
+                <a href="{{ url_for('home.story_image', referral_code=ambassador.referral_code) }}"
+                   download="metakizz-story-{{ ambassador.referral_code }}.jpg"
+                   onclick="storyImageDownload('{{ referral_url|e }}', this); return true;"
+                   class="share-primary-btn bg-pink-500/20 border-pink-500/50 text-pink-400 hover:bg-pink-500/30 w-full mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    <span data-label>DOWNLOAD + COPY LINK</span>
+                </a>
+                <a href="{{ ig_app_url }}" target="_blank" class="share-primary-btn w-full" style="background: transparent; border-color: rgba(236,72,153,0.3); color: rgb(236 72 153);">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+                    <span data-label>OPEN INSTAGRAM</span>
+                </a>
+                <p class="text-[11px] text-gray-500 mt-2 leading-snug">
+                    💡 After uploading, add an <strong class="text-pink-400">Instagram link sticker</strong> with your link (already on your clipboard) — turns the story into 1-tap join.
+                </p>
+            </div>
 
-            <!-- ═══ 3. Festival QR — download + fullscreen live mode ═══ -->
-            <details class="share-card" data-share-card>
-                <summary>
+            <!-- Tile 3: Festival / in-person -->
+            <div class="share-tile bg-gray-900/80 border-amber-500/40">
+                <div class="flex items-center gap-3 mb-3">
                     <span class="share-icon bg-amber-500/15 border-amber-500/40 text-amber-400">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
                     </span>
                     <div class="flex-1 min-w-0">
-                        <h3 class="share-title">Show QR at festivals &amp; classes</h3>
-                        <p class="share-sub">Live mode or download for print.</p>
+                        <h3 class="share-title">Show at festivals &amp; classes</h3>
+                        <p class="share-sub">Live fullscreen QR or printable poster.</p>
                     </div>
-                    <span class="share-chevron">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                    </span>
-                </summary>
-                <div class="share-body">
-                    <p class="share-body-intro">
-                        At a class or festival? <strong class="text-amber-400">Live mode</strong> locks your phone on a fullscreen QR anyone can scan in 2 seconds. Or print the poster for stickers, flyers or a table sign:
-                    </p>
-                    <div class="flex justify-center mb-3">
-                        <a href="{{ url_for('home.story_image', referral_code=ambassador.referral_code) }}"
-                           target="_blank" rel="noopener"
-                           class="block rounded-lg overflow-hidden border border-amber-500/40 shadow-lg hover:border-amber-400 transition"
-                           style="width: 172px; aspect-ratio: 9/16; box-shadow: 0 0 24px rgba(245,158,11,0.18);">
-                            <img src="{{ url_for('home.story_image', referral_code=ambassador.referral_code) }}"
-                                 alt="Your festival poster"
-                                 loading="lazy"
-                                 class="w-full h-full object-cover block">
-                        </a>
-                    </div>
-                    <button type="button" onclick="openQrFullscreen()" class="share-primary-btn bg-amber-500/20 border-amber-500/50 text-amber-400 hover:bg-amber-500/30 w-full mb-2">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" onclick="openQrFullscreen()" class="share-tile-btn border-amber-500/50 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
-                        <span data-label>SHOW LIVE (FULLSCREEN)</span>
+                        <span>Live QR</span>
                     </button>
                     <a href="{{ url_for('home.story_image', referral_code=ambassador.referral_code) }}"
                        download="metakizz-poster-{{ ambassador.referral_code }}.jpg"
-                       class="share-primary-btn w-full" style="background: transparent; border-color: rgba(245,158,11,0.3); color: rgb(245 158 11);">
+                       class="share-tile-btn border-amber-500/30 text-amber-400 hover:border-amber-400">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                        <span data-label>DOWNLOAD POSTER (PNG)</span>
+                        <span>Download</span>
                     </a>
                 </div>
-            </details>
+            </div>
 
         </div>
     </div>
@@ -605,44 +520,22 @@
         100% { transform: scale(1);    box-shadow: 0 0 14px rgba(46,219,153,0.35); }
     }
 
-    /* ═══ Share tab: accordion cards ═══ */
-    .share-card {
-        background: rgba(17, 24, 39, 0.8);
-        border: 1px solid rgb(31 41 55);
+    /* ═══ Share tab: flat tiles (no accordion) ═══ */
+    .share-tile {
+        border: 1px solid;
         border-radius: 0.75rem;
-        overflow: hidden;
-        transition: border-color 200ms;
-    }
-    .share-card:hover {
-        border-color: rgba(46, 219, 153, 0.3);
-    }
-    .share-card[open] {
-        border-color: rgba(46, 219, 153, 0.5);
-        box-shadow: 0 0 18px rgba(46, 219, 153, 0.12);
-    }
-    .share-card > summary {
-        list-style: none;
-        cursor: pointer;
         padding: 14px 16px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        user-select: none;
     }
-    .share-card > summary::-webkit-details-marker { display: none; }
-    .share-card > summary::marker { display: none; }
     .share-icon {
-        width: 44px;
-        height: 44px;
-        border-radius: 0.75rem;
+        width: 40px;
+        height: 40px;
+        border-radius: 0.6rem;
         border: 1px solid;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        transition: transform 200ms;
     }
-    .share-card[open] .share-icon { transform: scale(1.05); }
     .share-title {
         font-size: 15px;
         font-weight: 700;
@@ -651,55 +544,35 @@
         margin: 0;
     }
     .share-sub {
-        font-size: 13px;
-        color: rgb(209 213 219);
+        font-size: 12px;
+        color: rgb(156 163 175);
         font-weight: 500;
         margin: 2px 0 0 0;
         line-height: 1.4;
     }
-    .share-chevron {
-        flex-shrink: 0;
-        color: rgb(107 114 128);
-        transition: transform 250ms ease, color 200ms;
-    }
-    .share-card[open] .share-chevron {
-        transform: rotate(180deg);
-        color: rgb(46 219 153);
-    }
-    .share-body {
-        padding: 0 16px 18px 16px;
-        animation: shareBodyIn 260ms cubic-bezier(.22,.61,.36,1);
-    }
-    @keyframes shareBodyIn {
-        from { opacity: 0; transform: translateY(-4px); }
-        to   { opacity: 1; transform: translateY(0); }
-    }
-    .share-body-intro {
-        font-size: 13px;
-        color: rgb(209 213 219);
-        line-height: 1.55;
-        margin: 4px 0 14px 0;
-        padding-top: 10px;
-        border-top: 1px dashed rgba(46, 219, 153, 0.2);
-    }
-    /* Action button variant: 3 rows in the DM card */
-    .share-action-btn {
+    /* Secondary action button (smaller, used in 2-col grid) */
+    .share-tile-btn {
         display: flex;
         align-items: center;
-        gap: 12px;
-        padding: 10px 14px;
+        justify-content: center;
+        gap: 8px;
+        padding: 11px 12px;
         border-radius: 0.6rem;
         background: rgba(31, 41, 55, 0.6);
         border: 1px solid rgba(46, 219, 153, 0.2);
+        color: #FFFFFF;
+        font-size: 13px;
+        font-weight: 700;
         transition: all 180ms;
         text-decoration: none;
+        cursor: pointer;
     }
-    .share-action-btn:hover {
+    .share-tile-btn:hover {
         background: rgba(46, 219, 153, 0.1);
         border-color: rgba(46, 219, 153, 0.5);
-        transform: translateX(2px);
+        transform: translateY(-1px);
     }
-    /* Primary CTA button (full-width, solid brand) */
+    /* Primary CTA button (full-width, glowing) */
     .share-primary-btn {
         display: inline-flex;
         align-items: center;
@@ -722,50 +595,7 @@
         background: rgba(46, 219, 153, 0.25);
         box-shadow: 0 0 14px rgba(46, 219, 153, 0.3);
     }
-    /* Small platform share buttons (3-col grid) */
-    .share-platform-btn {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 12px 8px;
-        border-radius: 0.5rem;
-        border: 1px solid;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        transition: all 180ms;
-        text-decoration: none;
-    }
-    .share-platform-btn:hover {
-        transform: translateY(-2px);
-    }
-    /* Caption preview box (inside IG cards) */
-    .caption-preview {
-        background: rgba(0, 0, 0, 0.35);
-        border: 1px dashed rgba(46, 219, 153, 0.3);
-        border-radius: 0.5rem;
-        padding: 10px 12px;
-        margin-bottom: 12px;
-    }
-    .caption-label {
-        font-family: 'Share Tech Mono', 'Courier New', monospace;
-        font-size: 10px;
-        letter-spacing: 0.15em;
-        text-transform: uppercase;
-        color: rgba(46, 219, 153, 0.8);
-        margin: 0 0 4px 0;
-    }
-    .caption-preview > p:not(.caption-label) {
-        font-size: 13px;
-        color: #FFFFFF;
-        margin: 0;
-        line-height: 1.5;
-        font-style: italic;
-    }
-    /* Feedback pulse when share-primary-btn copies */
+    /* Copy-feedback pulse on primary buttons */
     .share-copied { animation: shareCopiedFlash 400ms ease-out; }
     @keyframes shareCopiedFlash {
         0%   { transform: scale(1); }
@@ -789,10 +619,12 @@
 
         tabs.forEach(t => t.addEventListener('click', () => activate(t.dataset.tab)));
 
-        // Always default to "link". Honor URL hash if present (e.g. /dashboard/XYZ#prizes).
-        const validTabs = ['link', 'prizes', 'share', 'referrals'];
+        // Always default to "share". Honor URL hash if present (e.g. /dashboard/XYZ#prizes).
+        // "link" still maps to "share" for backwards compat with any in-flight emails.
+        const validTabs = ['share', 'prizes', 'referrals'];
         let initial = (location.hash || '').replace('#', '');
-        if (!validTabs.includes(initial)) initial = 'link';
+        if (initial === 'link') initial = 'share';
+        if (!validTabs.includes(initial)) initial = 'share';
         activate(initial);
     })();
 
@@ -825,52 +657,6 @@
         }
     }
 
-    // ═══ Share tab: accordion + copy helpers ═══
-    (function() {
-        // Accordion behavior: opening one closes the others
-        const cards = document.querySelectorAll('details[data-share-card]');
-        cards.forEach(card => {
-            card.addEventListener('toggle', () => {
-                if (card.open) {
-                    cards.forEach(other => {
-                        if (other !== card) other.open = false;
-                    });
-                }
-            });
-        });
-    })();
-
-    // Copy text to clipboard + visual feedback on button
-    function shareCopy(text, btnEl) {
-        const label = btnEl.querySelector('[data-label]');
-        const original = label ? label.textContent : null;
-        navigator.clipboard.writeText(text).then(() => {
-            btnEl.classList.add('share-copied');
-            if (label) label.textContent = '✓ COPIED!';
-            setTimeout(() => {
-                if (label && original) label.textContent = original;
-                btnEl.classList.remove('share-copied');
-            }, 1800);
-        }).catch(() => {
-            // Clipboard API can fail on insecure contexts or old browsers
-            if (label) label.textContent = 'COPY FAILED — select manually';
-        });
-    }
-
-    // Copy text + open URL in new tab. Both fire within the user event,
-    // so popup blockers + clipboard write both succeed.
-    function shareCopyAndOpen(text, url, btnEl) {
-        navigator.clipboard.writeText(text).catch(() => {});
-        const label = btnEl.querySelector('[data-label]');
-        const original = label ? label.textContent : null;
-        btnEl.classList.add('share-copied');
-        if (label) label.textContent = '✓ COPIED · OPENING...';
-        window.open(url, '_blank');
-        setTimeout(() => {
-            if (label && original) label.textContent = original;
-            btnEl.classList.remove('share-copied');
-        }, 1800);
-    }
 
     // When the user downloads their story image, auto-copy the link to
     // the clipboard so they can paste it into an Instagram link sticker.
