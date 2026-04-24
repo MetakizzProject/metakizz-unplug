@@ -413,7 +413,7 @@
                         💡 <strong class="text-pink-400">Pro tip</strong>: after uploading, add an Instagram link sticker with your link (already copied to your clipboard) — that turns the story into a <strong class="text-white">1-tap</strong> join for your viewers.
                     </p>
                     <a href="{{ url_for('home.story_image', referral_code=ambassador.referral_code) }}"
-                       download="metakizz-story-{{ ambassador.referral_code }}.png"
+                       download="metakizz-story-{{ ambassador.referral_code }}.jpg"
                        onclick="storyImageDownload('{{ referral_url|e }}', this); return true;"
                        class="share-primary-btn bg-pink-500/20 border-pink-500/50 text-pink-400 hover:bg-pink-500/30 w-full mb-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
@@ -460,7 +460,7 @@
                         <span data-label>SHOW LIVE (FULLSCREEN)</span>
                     </button>
                     <a href="{{ url_for('home.story_image', referral_code=ambassador.referral_code) }}"
-                       download="metakizz-poster-{{ ambassador.referral_code }}.png"
+                       download="metakizz-poster-{{ ambassador.referral_code }}.jpg"
                        class="share-primary-btn w-full" style="background: transparent; border-color: rgba(245,158,11,0.3); color: rgb(245 158 11);">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                         <span data-label>DOWNLOAD POSTER (PNG)</span>

@@ -119,7 +119,7 @@ def qr_image(referral_code):
     return send_file(buf, mimetype="image/png", download_name=f"metakizz-qr-{referral_code}.png")
 
 
-@home_bp.route("/story/<referral_code>.png")
+@home_bp.route("/story/<referral_code>.jpg")
 def story_image(referral_code):
     """Generate a 1080x1920 Instagram-story image with the ambassador's QR.
 
@@ -131,4 +131,11 @@ def story_image(referral_code):
     landing_url = current_app.config["LANDING_URL"].rstrip("/")
     referral_url = f"{landing_url}?ref={ambassador.referral_code}"
     buf = generate_story(referral_url)
-    return send_file(buf, mimetype="image/png", download_name=f"metakizz-story-{referral_code}.png")
+    response = send_file(
+        buf,
+        mimetype="image/jpeg",
+        download_name=f"metakizz-poster-{referral_code}.jpg",
+    )
+    # Poster content is deterministic per referral_code; cache aggressively.
+    response.headers["Cache-Control"] = "public, max-age=86400, immutable"
+    return response
