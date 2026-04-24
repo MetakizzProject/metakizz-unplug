@@ -117,3 +117,18 @@ def qr_image(referral_code):
     img.save(buf, format="PNG")
     buf.seek(0)
     return send_file(buf, mimetype="image/png", download_name=f"metakizz-qr-{referral_code}.png")
+
+
+@home_bp.route("/story/<referral_code>.png")
+def story_image(referral_code):
+    """Generate a 1080x1920 Instagram-story image with the ambassador's QR.
+
+    Uses app/static/story_bg.{png,jpg} as background if present (user-provided
+    branded design). Falls back to a default Matrix-style template otherwise.
+    """
+    from app.services.story_image import generate as generate_story
+    ambassador = Ambassador.query.filter_by(referral_code=referral_code).first_or_404()
+    landing_url = current_app.config["LANDING_URL"].rstrip("/")
+    referral_url = f"{landing_url}?ref={ambassador.referral_code}"
+    buf = generate_story(referral_url)
+    return send_file(buf, mimetype="image/png", download_name=f"metakizz-story-{referral_code}.png")

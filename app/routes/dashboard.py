@@ -4,17 +4,21 @@ from app.models import db, Ambassador, Referral
 dashboard_bp = Blueprint("dashboard", __name__)
 
 
-# Top 3 prize catalogue (post-RewardTier refactor — these match the email copy + briefs)
+# Top 3 prize catalogue. Each entry has:
+#   - place:    badge label (1ST / 2ND / 3RD)
+#   - name:     the main reward description
+#   - subtitle: a short qualifier (can be None)
+#   - amount:   the monetary-value badge text (e.g. "€1,000+"); None for prizes without a value badge
 _TOP3_PRIZES = {
     "community": [
-        {"place": "1ST", "name": "1 year of MetaDancers, free", "value": "€1,000+ value"},
-        {"place": "2ND", "name": "Video feedback on your dancing", "value": "direct from us · €150+ value"},
-        {"place": "3RD", "name": "Personalized MetaKizz hoodie", "value": None},
+        {"place": "1ST", "name": "1 year of MetaDancers, free", "subtitle": None,                 "amount": "€1,000+"},
+        {"place": "2ND", "name": "Video feedback on your dancing", "subtitle": "direct from us",  "amount": "€150+"},
+        {"place": "3RD", "name": "Personalized MetaKizz hoodie", "subtitle": None,                "amount": "€60+"},
     ],
     "public": [
-        {"place": "1ST", "name": "Video feedback on your dancing", "value": "direct from us · €150+ value"},
-        {"place": "2ND", "name": "Personalized MetaKizz hoodie", "value": None},
-        {"place": "3RD", "name": "Personalized MetaKizz t-shirt", "value": None},
+        {"place": "1ST", "name": "Video feedback on your dancing", "subtitle": "direct from us",  "amount": "€150+"},
+        {"place": "2ND", "name": "Personalized MetaKizz hoodie", "subtitle": None,                "amount": "€60+"},
+        {"place": "3RD", "name": "Personalized MetaKizz t-shirt", "subtitle": None,               "amount": "€30+"},
     ],
 }
 
@@ -84,12 +88,17 @@ def show(code):
     landing_url = current_app.config["LANDING_URL"].rstrip("/")
     referral_url = f"{landing_url}?ref={ambassador.referral_code}"
 
+    # Global momentum counter: total people registered in the system (ambassadors +
+    # referrals of ambassadors who aren't ambassadors themselves yet).
+    total_joined = Ambassador.query.count() + Referral.query.count()
+
     return render_template(
         "dashboard.html",
         ambassador=ambassador,
         referrals=referrals,
         rank=rank,
         total_ambassadors=len(sorted_ambassadors),
+        total_joined=total_joined,
         referral_url=referral_url,
         community=community,
         guaranteed_reward=guaranteed_reward,
