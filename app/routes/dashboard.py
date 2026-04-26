@@ -51,13 +51,30 @@ def show(code):
         .all()
     )
 
-    # Calculate leaderboard position within source bucket
+    # Calculate leaderboard position within source bucket. Tie-break by
+    # join date (earlier wins) so rank stays consistent with /leaderboard.
     all_ambassadors = Ambassador.query.filter_by(source=ambassador.source).all()
-    sorted_ambassadors = sorted(all_ambassadors, key=lambda a: a.referral_count, reverse=True)
+    sorted_ambassadors = sorted(
+        all_ambassadors,
+        key=lambda a: (-a.referral_count, a.created_at),
+    )
     rank = next(
         (i + 1 for i, a in enumerate(sorted_ambassadors) if a.id == ambassador.id),
         len(sorted_ambassadors),
     )
+
+    # Top 10 for the embedded Ranking tab. Same shape as /leaderboard so
+    # we could later extract this to a shared helper if needed.
+    leaderboard_top10 = []
+    for i, amb in enumerate(sorted_ambassadors[:10]):
+        first_name = amb.name.strip().split()[0] if amb.name and amb.name.strip() else "?"
+        leaderboard_top10.append({
+            "rank": i + 1,
+            "name": first_name,
+            "profile_picture_url": amb.profile_picture_url,
+            "referral_count": amb.referral_count,
+            "is_viewer": amb.id == ambassador.id,
+        })
 
     count = ambassador.referral_count
     community = (ambassador.source == "community")
@@ -108,4 +125,5 @@ def show(code):
         progress_pct=progress_pct,
         progress_remaining=progress_remaining,
         progress_message=progress_message,
+        leaderboard_top10=leaderboard_top10,
     )

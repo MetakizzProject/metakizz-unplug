@@ -34,7 +34,7 @@
 {% set ig_profile_url = 'https://instagram.com/jesusyannikizomba' %}
 {% set ig_app_url = 'https://instagram.com' %}
 
-<div class="max-w-2xl mx-auto px-4 pt-6 pb-28 sm:pb-8">
+<div class="max-w-2xl mx-auto px-4 pt-6 pb-28">
 
     <!-- ─── TERMINAL HEADER STRIP ─── -->
     <div class="flex items-center justify-between mb-4 font-mono-term text-[10px] tracking-[0.25em] uppercase">
@@ -42,115 +42,136 @@
         <span class="text-gray-500">STATUS: <span class="text-brand-400">CONNECTED</span></span>
     </div>
 
-    <!-- ─── PROFILE HEADER ─── -->
-    <div class="flex items-center gap-4 mb-6">
+    <!-- ─── COMPACT PROFILE + UNPLUG BAR (always visible above tabs) ─── -->
+    <div class="flex items-center gap-3 mb-3">
         {% if ambassador.profile_picture_url %}
         <img src="{{ ambassador.profile_picture_url }}" alt="{{ ambassador.name }}"
-             class="w-16 h-16 rounded-full object-cover ring-2 ring-brand-400/40 ring-offset-2 ring-offset-black flex-shrink-0">
+             class="w-12 h-12 rounded-full object-cover ring-2 ring-brand-400/40 flex-shrink-0">
         {% else %}
-        <div class="w-16 h-16 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-2xl font-orbitron font-black ring-2 ring-brand-400/40 ring-offset-2 ring-offset-black flex-shrink-0">
+        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-lg font-orbitron font-black ring-2 ring-brand-400/40 flex-shrink-0">
             {{ ambassador.name[0]|upper }}
         </div>
         {% endif %}
         <div class="min-w-0 flex-1">
-            <h1 class="text-2xl font-display font-bold leading-tight truncate">{{ ambassador.name }}</h1>
-            <p class="text-xs font-mono-term uppercase tracking-[0.15em] text-gray-400 mt-1">
-                <span class="text-brand-400">&gt;</span> RANK
-                <span class="text-white font-orbitron font-black text-sm">#{{ rank }}</span>
-                <span class="text-gray-600">/</span>
-                <span class="text-gray-300 font-semibold">{{ total_ambassadors }}</span>
+            <h1 class="text-lg font-display font-bold leading-tight truncate">{{ ambassador.name }}</h1>
+            <p class="text-[11px] font-mono-term uppercase tracking-wider text-gray-400 mt-0.5">
+                RANK <span class="text-white font-orbitron font-black text-xs">#{{ rank }}</span><span class="text-gray-600">/{{ total_ambassadors }}</span>
                 <span class="text-gray-700 mx-1">·</span>
-                <span class="text-brand-400 font-semibold">{{ ambassador.source }}</span>
+                <span class="text-brand-400">{{ ambassador.source }}</span>
             </p>
         </div>
-    </div>
-
-    <!-- ─── GLOBAL MOMENTUM COUNTER ─── -->
-    <div class="flex items-center gap-3 mb-4 px-4 py-3 rounded-xl bg-gradient-to-r from-brand-900/40 via-brand-800/20 to-brand-900/40 border border-brand-400/30">
-        <span class="font-orbitron font-black text-3xl text-brand-400 leading-none" style="text-shadow: 0 0 14px rgba(46,219,153,0.5);">
-            {{ total_joined }}
-        </span>
-        <div class="flex-1 min-w-0">
-            <p class="text-sm font-bold text-white leading-tight">dancers already joined</p>
-            <p class="text-[11px] text-gray-400 font-mono-term tracking-wider uppercase">the movement · across 27 countries</p>
-        </div>
-        <div class="text-brand-400/50 font-mono-term text-sm">LIVE</div>
-    </div>
-
-    <!-- ─── STATS CARDS ─── -->
-    <div class="grid grid-cols-2 gap-3 mb-4">
-        <div class="relative bg-gray-900/80 border border-brand-400/30 rounded-xl p-4 overflow-hidden stat-pulse">
-            <div class="absolute top-2 right-3 text-brand-400/30 font-mono-term text-xs">◆</div>
-            <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/80 mb-1">// UNPLUGGED</p>
-            <div class="font-orbitron font-black text-[44px] leading-none text-brand-400" style="text-shadow: 0 0 18px rgba(46,219,153,0.55);">
+        <div class="text-right flex-shrink-0">
+            <div class="font-orbitron font-black text-2xl text-brand-400 leading-none" style="text-shadow: 0 0 12px rgba(46,219,153,0.5);">
                 {{ ambassador.referral_count }}
             </div>
-            <p class="text-[11px] text-gray-500 mt-2 font-mono-term uppercase tracking-wider">dancers</p>
-        </div>
-        <div class="relative bg-gray-900/80 border border-gray-800/50 rounded-xl p-4 overflow-hidden">
-            <div class="absolute top-2 right-3 text-gray-600 font-mono-term text-xs">▲</div>
-            <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-400 mb-1">// POSITION</p>
-            <div class="font-orbitron font-black text-[44px] leading-none text-white">
-                #{{ rank }}
-            </div>
-            <p class="text-[11px] text-gray-500 mt-2 font-mono-term uppercase tracking-wider">of {{ total_ambassadors }}</p>
+            <p class="text-[10px] text-gray-500 font-mono-term uppercase tracking-wider mt-0.5">unplugs</p>
         </div>
     </div>
 
-    <!-- ─── PROGRESS CARD ─── -->
-    <div class="bg-gray-900/80 border border-brand-400/30 rounded-xl p-4 mb-6" style="box-shadow: 0 0 20px rgba(46,219,153,0.12);">
-        <div class="flex justify-between items-center mb-2">
-            <span class="font-mono-term text-[11px] tracking-[0.2em] uppercase text-brand-400/80">
-                <span class="text-brand-400">▌</span> NEXT OBJECTIVE
-            </span>
-            {% if progress_target %}
-            <span class="font-orbitron font-black text-sm text-brand-400" style="text-shadow: 0 0 10px rgba(46,219,153,0.5);">
-                [ {{ '%02d' % (ambassador.referral_count or 0) }} / {{ '%02d' % progress_target }} ]
-            </span>
-            {% else %}
-            <span class="font-orbitron font-black text-sm text-brand-400" style="text-shadow: 0 0 10px rgba(46,219,153,0.5);">
-                [ ✓ LOCKED ]
-            </span>
-            {% endif %}
+    <!-- Thin progress bar (the unplug "barrita") -->
+    <div class="mb-5">
+        <div class="relative w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
+            <div class="progress-bar-fill bg-gradient-to-r from-brand-600 via-brand-400 to-brand-300 h-1.5 rounded-full"
+                 style="width: {{ progress_pct }}%; box-shadow: 0 0 8px rgba(46,219,153,0.5);"></div>
         </div>
-        <p class="text-base text-white font-display font-bold mb-3 leading-tight">{{ progress_label }}</p>
-        <div class="relative w-full bg-gray-800 rounded-full h-3 mb-2 overflow-hidden">
-            <div class="progress-bar-fill bg-gradient-to-r from-brand-600 via-brand-400 to-brand-300 h-3 rounded-full"
-                 style="width: {{ progress_pct }}%; box-shadow: 0 0 12px rgba(46,219,153,0.7);"></div>
-        </div>
-        <p class="text-sm text-gray-300 font-medium">
-            <span class="text-brand-400/80 font-mono-term mr-1">&gt;</span>{{ progress_message }}
+    </div>
+
+    {# Bottom-fixed tab nav at the end of this file (#dash-bottom-nav). #}
+
+    <!-- ═══════════════════════════════════════════════════════════
+         TAB: HOW IT WORKS (first-time onboarding)
+         ═══════════════════════════════════════════════════════════ -->
+    <div class="dash-panel hidden" data-panel="how">
+
+        <p class="font-orbitron font-black text-brand-400 text-sm tracking-[0.25em] uppercase mb-1 text-center"
+           style="text-shadow: 0 0 12px rgba(46,219,153,0.4);">
+            ────  How it works  ────
         </p>
-    </div>
-
-    <!-- ─── HOW IT WORKS (3-step mini-explainer) ─── -->
-    <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-4 mb-4">
-        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3 text-center">
-            // HOW IT WORKS
+        <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-500 text-center mb-5">
+            // The Unplugging Protocol
         </p>
-        <div class="flex items-center justify-between gap-1">
-            <div class="flex-1 text-center">
-                <div class="w-9 h-9 rounded-full bg-brand-400/15 border border-brand-400/40 text-brand-400 font-orbitron font-black text-sm flex items-center justify-center mx-auto mb-1.5">1</div>
-                <p class="text-[11px] sm:text-xs font-bold text-white uppercase tracking-wider leading-tight">Share<br>your link</p>
+
+        <!-- ─── 3 STEPS DIAGRAM ─── -->
+        <div class="bg-gray-900/80 border border-brand-400/30 rounded-xl p-5 mb-4">
+            <div class="flex items-center justify-between gap-1 mb-4">
+                <div class="flex-1 text-center">
+                    <div class="w-11 h-11 rounded-full bg-brand-400/15 border-2 border-brand-400/50 text-brand-400 font-orbitron font-black text-base flex items-center justify-center mx-auto mb-1.5">1</div>
+                    <p class="text-[11px] font-bold text-white uppercase tracking-wider leading-tight">Share<br>your link</p>
+                </div>
+                <span class="text-brand-400/60 font-mono-term text-base flex-shrink-0 pb-4">→</span>
+                <div class="flex-1 text-center">
+                    <div class="w-11 h-11 rounded-full bg-brand-400/15 border-2 border-brand-400/50 text-brand-400 font-orbitron font-black text-base flex items-center justify-center mx-auto mb-1.5">2</div>
+                    <p class="text-[11px] font-bold text-white uppercase tracking-wider leading-tight">They<br>register</p>
+                </div>
+                <span class="text-brand-400/60 font-mono-term text-base flex-shrink-0 pb-4">→</span>
+                <div class="flex-1 text-center">
+                    <div class="w-11 h-11 rounded-full bg-brand-400 text-black font-orbitron font-black text-base flex items-center justify-center mx-auto mb-1.5" style="box-shadow: 0 0 14px rgba(46,219,153,0.5);">3</div>
+                    <p class="text-[11px] font-bold text-brand-400 uppercase tracking-wider leading-tight">You<br>earn</p>
+                </div>
             </div>
-            <span class="text-brand-400/60 font-mono-term text-base flex-shrink-0 pb-4">→</span>
-            <div class="flex-1 text-center">
-                <div class="w-9 h-9 rounded-full bg-brand-400/15 border border-brand-400/40 text-brand-400 font-orbitron font-black text-sm flex items-center justify-center mx-auto mb-1.5">2</div>
-                <p class="text-[11px] sm:text-xs font-bold text-white uppercase tracking-wider leading-tight">They<br>register</p>
-            </div>
-            <span class="text-brand-400/60 font-mono-term text-base flex-shrink-0 pb-4">→</span>
-            <div class="flex-1 text-center">
-                <div class="w-9 h-9 rounded-full bg-brand-400 text-black font-orbitron font-black text-sm flex items-center justify-center mx-auto mb-1.5" style="box-shadow: 0 0 12px rgba(46,219,153,0.45);">3</div>
-                <p class="text-[11px] sm:text-xs font-bold text-brand-400 uppercase tracking-wider leading-tight">You<br>earn</p>
+
+            <div class="space-y-3 pt-4 border-t border-dashed border-brand-400/20">
+                <div class="flex gap-3">
+                    <span class="font-orbitron font-black text-brand-400 text-sm flex-shrink-0 w-6">01</span>
+                    <p class="text-sm text-gray-300 leading-snug">
+                        <strong class="text-white">Share your link</strong> from the Share tab. WhatsApp, Instagram story, festivals, anywhere.
+                    </p>
+                </div>
+                <div class="flex gap-3">
+                    <span class="font-orbitron font-black text-brand-400 text-sm flex-shrink-0 w-6">02</span>
+                    <p class="text-sm text-gray-300 leading-snug">
+                        <strong class="text-white">They register</strong> through your link. Each one becomes one of <em class="text-brand-400 not-italic">your unplugs</em>.
+                    </p>
+                </div>
+                <div class="flex gap-3">
+                    <span class="font-orbitron font-black text-brand-400 text-sm flex-shrink-0 w-6">03</span>
+                    <p class="text-sm text-gray-300 leading-snug">
+                        <strong class="text-white">You earn rewards</strong>. Hit 5 to lock the guaranteed prize. Climb the ranking to win bigger ones.
+                    </p>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- ─── TABS NAV ─── -->
-    <div class="flex gap-1.5 mb-4 overflow-x-auto pb-1 -mx-1 px-1" id="dash-tabs" role="tablist">
-        <button data-tab="share" class="dash-tab whitespace-nowrap px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition flex-shrink-0">Share</button>
-        <button data-tab="prizes" class="dash-tab whitespace-nowrap px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition flex-shrink-0">Prizes</button>
-        <button data-tab="referrals" class="dash-tab whitespace-nowrap px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition flex-shrink-0">Referrals <span class="text-gray-500">({{ referrals|length }})</span></button>
+        <!-- ─── KEY FACTS STRIP ─── -->
+        <div class="bg-gray-900/60 border border-gray-800 rounded-xl p-4 mb-4">
+            <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3">
+                ▌ KEY FACTS
+            </p>
+            <div class="space-y-2.5 text-sm">
+                <div class="flex items-start gap-2">
+                    <span class="text-brand-400 font-mono-term text-xs flex-shrink-0 mt-0.5">⧗</span>
+                    <p class="text-gray-300"><strong class="text-white">Closes May 7 · 19:00 Madrid.</strong> Your unplugs after that don't count.</p>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="text-brand-400 font-mono-term text-xs flex-shrink-0 mt-0.5">◉</span>
+                    <p class="text-gray-300"><strong class="text-white">5 unplugs</strong> = guaranteed prize locked. No ranking, no luck. Just five.</p>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="text-brand-400 font-mono-term text-xs flex-shrink-0 mt-0.5">◆</span>
+                    <p class="text-gray-300"><strong class="text-white">Top 3 most active</strong> win additional bigger rewards on top.</p>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="text-brand-400 font-mono-term text-xs flex-shrink-0 mt-0.5">⧉</span>
+                    <p class="text-gray-300"><strong class="text-white">Your link is unique.</strong> Anyone who registers via it shows up in your Unplugs tab.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── CTAs to other tabs ─── -->
+        <div class="grid grid-cols-2 gap-2.5">
+            <button type="button" onclick="dashGoTab('share')"
+                    class="flex flex-col items-center justify-center gap-1.5 px-4 py-4 rounded-xl bg-brand-400/15 border border-brand-400/50 text-brand-400 hover:bg-brand-400/25 transition"
+                    style="box-shadow: 0 0 18px rgba(46,219,153,0.18);">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-8-12v12m0 0l-4-4m4 4l4-4"/></svg>
+                <span class="font-mono-term text-[11px] tracking-[0.15em] uppercase font-bold">Start sharing →</span>
+            </button>
+            <button type="button" onclick="dashGoTab('prizes')"
+                    class="flex flex-col items-center justify-center gap-1.5 px-4 py-4 rounded-xl bg-gray-900/80 border border-gray-700 text-gray-300 hover:border-brand-400/40 hover:text-white transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5h14l-1 7a4 4 0 01-4 3h-4a4 4 0 01-4-3L5 5zM9 21h6m-3-6v6"/></svg>
+                <span class="font-mono-term text-[11px] tracking-[0.15em] uppercase font-bold">See prizes</span>
+            </button>
+        </div>
+
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════
@@ -387,7 +408,139 @@
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════
-         TAB: REFERRALS
+         TAB: RANKING (podium 2-1-3 + positions 4-10)
+         ═══════════════════════════════════════════════════════════ -->
+    <div class="dash-panel hidden" data-panel="ranking">
+
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400/80 mb-4 text-center">
+            // TOP 10 · {{ ambassador.source|upper }}
+        </p>
+
+        {% if leaderboard_top10 and leaderboard_top10|length >= 3 %}
+        <!-- ─── PODIUM (top 3) ─── -->
+        <div class="flex items-end justify-center gap-2 mb-6">
+
+            <!-- 2ND PLACE -->
+            <div class="text-center flex-1 max-w-[130px]">
+                <div class="w-14 h-14 mx-auto mb-2 rounded-full bg-gray-800 border-2 {% if leaderboard_top10[1].is_viewer %}border-brand-400 ring-2 ring-brand-400/40{% else %}border-brand-400/50{% endif %} flex items-center justify-center overflow-hidden">
+                    {% if leaderboard_top10[1].profile_picture_url %}
+                    <img src="{{ leaderboard_top10[1].profile_picture_url }}" class="w-full h-full object-cover">
+                    {% else %}
+                    <span class="text-lg font-orbitron font-black text-brand-400/80">{{ leaderboard_top10[1].name[0]|upper }}</span>
+                    {% endif %}
+                </div>
+                <p class="text-base font-display font-bold truncate">{{ leaderboard_top10[1].name }}{% if leaderboard_top10[1].is_viewer %} <span class="text-brand-400 font-mono-term text-[10px] uppercase">// you</span>{% endif %}</p>
+                <p class="text-xs font-mono-term text-brand-400 tracking-wider mt-0.5">{{ leaderboard_top10[1].referral_count }} UNPLUGS</p>
+                <div class="bg-gray-900 border-t-2 border-brand-400/50 rounded-t-lg mt-3 h-20 flex items-center justify-center">
+                    <span class="font-orbitron font-black text-3xl text-brand-400/70">2</span>
+                </div>
+            </div>
+
+            <!-- 1ST PLACE (tallest, most glow) -->
+            <div class="text-center flex-1 max-w-[140px]">
+                <div class="w-16 h-16 mx-auto mb-2 rounded-full bg-brand-400/20 border-2 {% if leaderboard_top10[0].is_viewer %}border-brand-400 ring-2 ring-brand-400/50{% else %}border-brand-400{% endif %} flex items-center justify-center overflow-hidden"
+                     style="box-shadow: 0 0 24px rgba(46,219,153,0.6);">
+                    {% if leaderboard_top10[0].profile_picture_url %}
+                    <img src="{{ leaderboard_top10[0].profile_picture_url }}" class="w-full h-full object-cover">
+                    {% else %}
+                    <span class="text-xl font-orbitron font-black text-brand-400">{{ leaderboard_top10[0].name[0]|upper }}</span>
+                    {% endif %}
+                </div>
+                <p class="text-lg font-display font-bold truncate">{{ leaderboard_top10[0].name }}{% if leaderboard_top10[0].is_viewer %} <span class="text-brand-400 font-mono-term text-[10px] uppercase">// you</span>{% endif %}</p>
+                <p class="text-xs font-mono-term text-brand-400 tracking-wider mt-0.5" style="text-shadow: 0 0 10px rgba(46,219,153,0.5);">
+                    {{ leaderboard_top10[0].referral_count }} UNPLUGS
+                </p>
+                <div class="bg-gradient-to-b from-brand-400/30 to-brand-900/40 border-t-2 border-brand-400 rounded-t-lg mt-3 h-32 flex items-center justify-center"
+                     style="box-shadow: 0 0 28px rgba(46,219,153,0.35);">
+                    <span class="font-orbitron font-black text-5xl text-brand-400" style="text-shadow: 0 0 18px rgba(46,219,153,0.7);">1</span>
+                </div>
+            </div>
+
+            <!-- 3RD PLACE -->
+            <div class="text-center flex-1 max-w-[130px]">
+                <div class="w-12 h-12 mx-auto mb-2 rounded-full bg-gray-800 border {% if leaderboard_top10[2].is_viewer %}border-brand-400 ring-2 ring-brand-400/30{% else %}border-brand-400/35{% endif %} flex items-center justify-center overflow-hidden">
+                    {% if leaderboard_top10[2].profile_picture_url %}
+                    <img src="{{ leaderboard_top10[2].profile_picture_url }}" class="w-full h-full object-cover">
+                    {% else %}
+                    <span class="text-base font-orbitron font-black text-brand-400/60">{{ leaderboard_top10[2].name[0]|upper }}</span>
+                    {% endif %}
+                </div>
+                <p class="text-sm font-display font-bold truncate">{{ leaderboard_top10[2].name }}{% if leaderboard_top10[2].is_viewer %} <span class="text-brand-400 font-mono-term text-[10px] uppercase">// you</span>{% endif %}</p>
+                <p class="text-xs font-mono-term text-brand-400/80 tracking-wider mt-0.5">{{ leaderboard_top10[2].referral_count }} UNPLUGS</p>
+                <div class="bg-gray-900 border-t border-brand-400/35 rounded-t-lg mt-3 h-12 flex items-center justify-center">
+                    <span class="font-orbitron font-black text-2xl text-brand-400/50">3</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ─── POSITIONS 4-10 LIST ─── -->
+        {% set rest = leaderboard_top10[3:] if leaderboard_top10|length >= 4 else [] %}
+        {% if rest %}
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400/80 mb-2 text-center">
+            ── POSITIONS 04 – {{ '%02d' % leaderboard_top10|length }} ──
+        </p>
+        <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl overflow-hidden mb-5">
+            {% for entry in rest %}
+            <div class="flex items-center gap-3 px-4 py-3 {% if entry.is_viewer %}bg-brand-400/10{% endif %} {% if not loop.last %}border-b border-gray-800{% endif %}">
+                <span class="w-10 font-orbitron font-black text-lg text-gray-400 text-center">
+                    {{ '%02d' % entry.rank }}
+                </span>
+                <div class="w-9 h-9 rounded-full bg-brand-400/10 border border-brand-400/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {% if entry.profile_picture_url %}
+                    <img src="{{ entry.profile_picture_url }}" class="w-full h-full object-cover">
+                    {% else %}
+                    <span class="text-sm font-orbitron font-black text-brand-400">{{ entry.name[0]|upper }}</span>
+                    {% endif %}
+                </div>
+                <span class="flex-1 text-base font-semibold text-white truncate">
+                    {{ entry.name }}{% if entry.is_viewer %} <span class="text-brand-400 font-mono-term text-[10px] uppercase ml-1">// you</span>{% endif %}
+                </span>
+                <span class="font-orbitron font-black text-brand-400 text-lg" style="text-shadow: 0 0 10px rgba(46,219,153,0.4);">{{ entry.referral_count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <!-- Empty state -->
+        <div class="border border-dashed border-gray-700 rounded-xl p-10 text-center mb-5">
+            <p class="font-mono-term text-xs tracking-wider text-gray-500 uppercase mb-2">
+                &gt; NO TRANSMISSIONS YET_
+            </p>
+            <p class="text-sm text-gray-500">The leaderboard is still waiting for its first dancers.</p>
+        </div>
+        {% endif %}
+
+        {% if rank > 10 %}
+        <!-- Your-position banner (only if outside top 10) -->
+        <div class="bg-gradient-to-r from-brand-900/60 via-brand-800/40 to-brand-900/60 border-2 border-brand-400/50 rounded-xl p-4 mb-4 text-center"
+             style="box-shadow: 0 0 24px rgba(46,219,153,0.2);">
+            <p class="font-mono-term text-[10px] tracking-[0.3em] uppercase text-brand-400/80 mb-1.5">
+                // YOUR POSITION
+            </p>
+            <p class="font-orbitron font-black text-white text-3xl leading-none mb-1" style="text-shadow: 0 0 18px rgba(46,219,153,0.5);">
+                #{{ rank }}
+                <span class="text-gray-500 text-xl">/ {{ total_ambassadors }}</span>
+            </p>
+            <p class="text-xs text-gray-300 font-semibold">
+                {{ ambassador.referral_count }} unplug{{ 's' if ambassador.referral_count != 1 else '' }} ·
+                {{ (leaderboard_top10[-1].referral_count - ambassador.referral_count + 1) if leaderboard_top10 else 0 }} more to enter top 10
+            </p>
+        </div>
+        {% endif %}
+
+        <!-- CTA: full leaderboard page -->
+        <a href="{{ url_for('leaderboard.show', channel=ambassador.source) }}?from={{ ambassador.dashboard_code }}"
+           class="block bg-gray-900/60 border border-brand-400/30 hover:border-brand-400/60 rounded-xl px-4 py-3 text-center transition">
+            <span class="font-mono-term text-[11px] tracking-[0.2em] uppercase text-brand-400">
+                Open full leaderboard →
+            </span>
+        </a>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         TAB: REFERRALS (your unplugs feed)
          ═══════════════════════════════════════════════════════════ -->
     <div class="dash-panel hidden" data-panel="referrals">
         <div class="bg-gray-900/80 border border-gray-800/50 rounded-xl p-5">
@@ -416,13 +569,37 @@
                 <p class="font-mono-term text-xs tracking-wider text-gray-500">
                     &gt; NO TRANSMISSIONS YET_
                 </p>
-                <p class="text-sm text-gray-500 mt-2">Share your link from the My Link tab to get started.</p>
+                <p class="text-sm text-gray-500 mt-2">Share your link from the Share tab to get the first dancer.</p>
             </div>
             {% endif %}
         </div>
     </div>
 
 </div>
+
+<!-- ─── BOTTOM TAB NAV (mobile-app style, fixed bottom) ─── -->
+<nav id="dash-bottom-nav" class="dash-bottom-nav" role="tablist" aria-label="Dashboard sections">
+    <button data-tab="how" class="dash-nav-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827V14m0 3h.01M12 21a9 9 0 110-18 9 9 0 010 18z"/></svg>
+        <span>How</span>
+    </button>
+    <button data-tab="share" class="dash-nav-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-8-12v12m0 0l-4-4m4 4l4-4"/></svg>
+        <span>Share</span>
+    </button>
+    <button data-tab="ranking" class="dash-nav-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6.2a1 1 0 011-1h4a1 1 0 011 1V19m-6 0H5a1 1 0 01-1-1v-6a1 1 0 011-1h4m6 8h4a1 1 0 001-1v-9a1 1 0 00-1-1h-4"/></svg>
+        <span>Ranking</span>
+    </button>
+    <button data-tab="prizes" class="dash-nav-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5h14l-1 7a4 4 0 01-4 3h-4a4 4 0 01-4-3L5 5zM9 21h6m-3-6v6"/></svg>
+        <span>Prizes</span>
+    </button>
+    <button data-tab="referrals" class="dash-nav-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 014-4h2m6-7a4 4 0 11-8 0 4 4 0 018 0zm6 3a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span>Unplugs{% if referrals|length %} <span class="dash-nav-count">{{ referrals|length }}</span>{% endif %}</span>
+    </button>
+</nav>
 
 <!-- ─── FULLSCREEN QR MODAL (festival live mode) ─── -->
 <div id="qr-fullscreen" class="hidden fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center p-6">
@@ -459,24 +636,82 @@
     .font-orbitron  { font-family: 'Orbitron', 'Arial Black', sans-serif; }
 
     /* Tabs */
-    .dash-tab {
-        background: rgb(17 24 39);
-        color: rgb(156 163 175);
-        border: 1px solid rgb(31 41 55);
+    /* ═══ Bottom tab nav (mobile-app style, fixed) ═══ */
+    .dash-bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 50;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 0;
+        padding: 6px 4px;
+        padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+        background: rgba(0, 0, 0, 0.92);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border-top: 1px solid rgba(46, 219, 153, 0.2);
     }
-    .dash-tab:hover {
-        color: rgb(255 255 255);
-        border-color: rgba(46, 219, 153, 0.4);
-        background: rgb(31 41 55);
+    /* Constrain width on desktop so the nav doesn't span full screen — matches the dashboard wrapper */
+    @media (min-width: 768px) {
+        .dash-bottom-nav {
+            left: 50%;
+            transform: translateX(-50%);
+            max-width: 42rem;          /* matches max-w-2xl of the wrapper */
+            border-left: 1px solid rgba(46, 219, 153, 0.15);
+            border-right: 1px solid rgba(46, 219, 153, 0.15);
+            border-radius: 0.75rem 0.75rem 0 0;
+        }
     }
-    .dash-tab.active {
-        background: rgb(46 219 153);
-        color: #000;
-        border-color: rgb(46 219 153);
-        box-shadow: 0 0 18px rgba(46,219,153,0.45);
+    .dash-nav-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 6px 4px;
+        background: transparent;
+        border: none;
+        color: rgb(107 114 128);
+        font-size: 10px;
         font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        cursor: pointer;
+        transition: color 180ms;
+        position: relative;
     }
-    .dash-tab.active span { color: rgba(0,0,0,0.55) !important; }
+    .dash-nav-btn:hover { color: rgb(209 213 219); }
+    .dash-nav-btn.active {
+        color: rgb(46 219 153);
+    }
+    .dash-nav-btn.active svg {
+        filter: drop-shadow(0 0 6px rgba(46, 219, 153, 0.6));
+    }
+    /* Active-tab indicator dot above the icon */
+    .dash-nav-btn.active::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 28px;
+        height: 2px;
+        background: rgb(46 219 153);
+        border-radius: 0 0 3px 3px;
+        box-shadow: 0 0 8px rgba(46, 219, 153, 0.6);
+    }
+    .dash-nav-count {
+        display: inline-block;
+        background: rgba(46, 219, 153, 0.2);
+        color: rgb(46 219 153);
+        font-size: 9px;
+        padding: 1px 5px;
+        border-radius: 999px;
+        margin-left: 2px;
+        font-weight: 800;
+    }
 
     /* Panel fade-in on tab switch */
     .dash-panel {
@@ -607,7 +842,7 @@
 <script>
     // Tabs toggle
     (function() {
-        const tabs = document.querySelectorAll('.dash-tab');
+        const tabs = document.querySelectorAll('.dash-nav-btn');
         const panels = document.querySelectorAll('.dash-panel');
 
         function activate(name) {
@@ -615,17 +850,35 @@
             panels.forEach(p => p.classList.toggle('hidden', p.dataset.panel !== name));
             // update URL hash (no scroll) so users can share a direct link to a tab
             history.replaceState(null, '', '#' + name);
+            // scroll the active panel into view (skip on first load)
+            if (window.__dashTabsReady) {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
         }
 
         tabs.forEach(t => t.addEventListener('click', () => activate(t.dataset.tab)));
 
-        // Always default to "share". Honor URL hash if present (e.g. /dashboard/XYZ#prizes).
-        // "link" still maps to "share" for backwards compat with any in-flight emails.
-        const validTabs = ['share', 'prizes', 'referrals'];
+        // Expose a tiny helper so in-tab CTAs (e.g. "Start sharing →") can switch tabs.
+        window.dashGoTab = function(name) {
+            const btn = document.querySelector('.dash-nav-btn[data-tab="' + name + '"]');
+            if (btn) btn.click();
+        };
+
+        // Tab resolution rules:
+        //   1. Honor URL hash if it's a known tab.
+        //   2. Old anchor "link" → "share" (in-flight emails).
+        //   3. First-time visitors land on "how" (onboarding); returning users on "share".
+        const validTabs = ['how', 'share', 'ranking', 'prizes', 'referrals'];
         let initial = (location.hash || '').replace('#', '');
         if (initial === 'link') initial = 'share';
-        if (!validTabs.includes(initial)) initial = 'share';
+        if (!validTabs.includes(initial)) {
+            let seenHowto = false;
+            try { seenHowto = !!localStorage.getItem('mk_seen_howto'); } catch (e) {}
+            initial = seenHowto ? 'share' : 'how';
+        }
         activate(initial);
+        try { localStorage.setItem('mk_seen_howto', '1'); } catch (e) {}
+        window.__dashTabsReady = true;
     })();
 
     // Copy-to-clipboard. Mutates only the inner <span> label so the SVG icon survives.
