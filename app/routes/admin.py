@@ -73,6 +73,73 @@ def _compute_segments(ambassadors):
     }
 
 
+def _compute_suspicion(ambassador):
+    """Heuristic fraud check based on referral IP / UA clusters.
+
+    Returns dict with:
+      level:  'clean' | 'watch' | 'high'
+      score:  0..100 (only meaningful when level != 'clean')
+      reason: short human-readable explanation
+      max_ip_count, max_ua_count, total: raw stats for debugging
+
+    Logic (intentionally simple — admin reviews manually):
+      - Need at least 2 referrals with IP data to make any call.
+      - If 70%+ of referrals come from the SAME IP and total >= 3 → HIGH.
+      - Otherwise if 50%+ same IP and total >= 5 → WATCH.
+      - Otherwise if 70%+ share user agent and total >= 5 → WATCH.
+    """
+    refs = ambassador.referrals
+    n = len(refs)
+    if n < 2:
+        return {"level": "clean", "score": 0, "reason": None, "total": n}
+
+    ip_counts = {}
+    ua_counts = {}
+    refs_with_ip = 0
+    for r in refs:
+        if r.signup_ip:
+            ip_counts[r.signup_ip] = ip_counts.get(r.signup_ip, 0) + 1
+            refs_with_ip += 1
+        if r.signup_user_agent:
+            ua_counts[r.signup_user_agent] = ua_counts.get(r.signup_user_agent, 0) + 1
+
+    # No IP data captured (e.g. all referrals are from before tracking was wired).
+    if refs_with_ip == 0:
+        return {"level": "clean", "score": 0, "reason": None, "total": n}
+
+    max_ip_count = max(ip_counts.values()) if ip_counts else 0
+    max_ua_count = max(ua_counts.values()) if ua_counts else 0
+    ip_share = max_ip_count / n
+    ua_share = max_ua_count / n if max_ua_count else 0
+
+    # HIGH: ≥70% same IP and at least 3 referrals
+    if n >= 3 and ip_share >= 0.7:
+        return {
+            "level": "high",
+            "score": int(ip_share * 100),
+            "reason": f"{max_ip_count}/{n} from same IP",
+            "total": n, "max_ip_count": max_ip_count, "max_ua_count": max_ua_count,
+        }
+    # WATCH: ≥50% same IP and at least 5 referrals
+    if n >= 5 and ip_share >= 0.5:
+        return {
+            "level": "watch",
+            "score": int(ip_share * 100),
+            "reason": f"{max_ip_count}/{n} from same IP",
+            "total": n, "max_ip_count": max_ip_count, "max_ua_count": max_ua_count,
+        }
+    # WATCH (UA only): ≥70% same UA and at least 5 referrals
+    if n >= 5 and ua_share >= 0.7:
+        return {
+            "level": "watch",
+            "score": int(ua_share * 100),
+            "reason": f"{max_ua_count}/{n} share user agent",
+            "total": n, "max_ip_count": max_ip_count, "max_ua_count": max_ua_count,
+        }
+    return {"level": "clean", "score": 0, "reason": None, "total": n,
+            "max_ip_count": max_ip_count, "max_ua_count": max_ua_count}
+
+
 def _compute_email_stats():
     """Per-template aggregate stats from EmailEvent rows.
 
@@ -233,6 +300,10 @@ def index():
     # Engagement: how many ambassadors have opened their dashboard at least once
     visited = sum(1 for a in all_amb_for_stats if a.last_dashboard_visit_at is not None)
 
+    # Fraud risk per ambassador (only for the rows we'll actually render)
+    risk_by_id = {a.id: _compute_suspicion(a) for a in sorted_ambassadors}
+    high_risk_total = sum(1 for a in all_amb_for_stats if _compute_suspicion(a)["level"] == "high")
+
     return render_template(
         "admin.html",
         ambassadors=sorted_ambassadors,
@@ -251,6 +322,8 @@ def index():
         email_stats=email_stats,
         now_ts=datetime.now(timezone.utc),
         tz_utc=timezone.utc,
+        risk_by_id=risk_by_id,
+        high_risk_total=high_risk_total,
     )
 
 

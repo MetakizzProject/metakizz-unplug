@@ -281,6 +281,16 @@
         </form>
     </div>
 
+    {% if high_risk_total %}
+    <div class="bg-red-900/20 border border-red-500/40 rounded-xl p-3 mb-4 flex items-center gap-3">
+        <span class="font-orbitron font-black text-red-400 text-2xl">⚠</span>
+        <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-red-300">{{ high_risk_total }} ambassador{{ 's' if high_risk_total != 1 else '' }} with suspicious referral patterns</p>
+            <p class="text-[11px] text-red-300/70">≥70% of their referrals share the same IP. Sort the table by Risk and review before paying any prize.</p>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- ─── FILTERS + SEARCH + EXPORTS ─── -->
     <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-2">▌ AMBASSADORS</p>
     <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
@@ -312,6 +322,7 @@
                         <th class="text-left px-4 py-3 font-bold hidden sm:table-cell">Email</th>
                         <th data-sort-by="source" class="admin-th-sort text-left px-4 py-3 font-bold hidden md:table-cell">Source <span class="sort-arrow"></span></th>
                         <th data-sort-by="unplugs" data-default-dir="desc" class="admin-th-sort text-center px-4 py-3 font-bold sort-active sort-desc">Unplugs <span class="sort-arrow">▼</span></th>
+                        <th data-sort-by="risk" data-default-dir="desc" class="admin-th-sort text-center px-4 py-3 font-bold">Risk <span class="sort-arrow"></span></th>
                         <th data-sort-by="visit" data-default-dir="desc" class="admin-th-sort text-center px-4 py-3 font-bold hidden md:table-cell">Last visit <span class="sort-arrow"></span></th>
                         <th class="text-center px-4 py-3 font-bold hidden sm:table-cell">IG</th>
                         <th class="text-left px-4 py-3 font-bold">Actions</th>
@@ -319,10 +330,12 @@
                 </thead>
                 <tbody>
                     {% for amb in ambassadors %}
-                    <tr class="admin-row border-b border-gray-800/50 last:border-0 hover:bg-brand-400/5 transition {% if amb.unsubscribed_at %}opacity-50{% endif %}"
+                    {% set risk = risk_by_id.get(amb.id, {'level': 'clean', 'score': 0, 'reason': None}) %}
+                    <tr class="admin-row border-b border-gray-800/50 last:border-0 hover:bg-brand-400/5 transition {% if amb.unsubscribed_at %}opacity-50{% endif %} {% if risk.level == 'high' %}admin-row-suspicious{% endif %}"
                         data-name="{{ (amb.name or '')|lower }}"
                         data-source="{{ amb.source }}"
                         data-unplugs="{{ amb.referral_count }}"
+                        data-risk="{{ {'clean': 0, 'watch': 1, 'high': 2}.get(risk.level, 0) }}"
                         data-visit="{{ amb.last_dashboard_visit_at.timestamp()|int if amb.last_dashboard_visit_at else 0 }}">
                         <td class="px-4 py-3 text-gray-600 font-orbitron font-black text-xs admin-row-num">{{ '%02d' % loop.index }}</td>
                         <td class="px-4 py-3 font-semibold text-white">
@@ -340,6 +353,17 @@
                                   {% if amb.referral_count >= 5 %}style="text-shadow: 0 0 10px rgba(46,219,153,0.5);"{% endif %}>
                                 {{ amb.referral_count }}
                             </span>
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            {% if risk.level == 'high' %}
+                                <span class="risk-badge risk-high" title="{{ risk.reason }}">⚠ HIGH</span>
+                            {% elif risk.level == 'watch' %}
+                                <span class="risk-badge risk-watch" title="{{ risk.reason }}">👀 WATCH</span>
+                            {% elif amb.referral_count >= 2 and (risk.total or 0) >= 2 %}
+                                <span class="risk-badge risk-clean" title="No suspicious clusters">✓</span>
+                            {% else %}
+                                <span class="text-gray-700">—</span>
+                            {% endif %}
                         </td>
                         <td class="px-4 py-3 text-center hidden md:table-cell font-mono-term text-[11px]">
                             {% if amb.last_dashboard_visit_at %}
@@ -384,7 +408,7 @@
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="8" class="px-4 py-10 text-center text-gray-500 font-mono-term">&gt; NO MATCHES_</td></tr>
+                    <tr><td colspan="9" class="px-4 py-10 text-center text-gray-500 font-mono-term">&gt; NO MATCHES_</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -519,6 +543,42 @@
     color: white;
     background: transparent;
 }
+
+/* Risk badges (fraud detection) */
+.risk-badge {
+    display: inline-block;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid;
+}
+.risk-high {
+    background: rgba(220, 38, 38, 0.15);
+    color: rgb(252, 165, 165);
+    border-color: rgba(220, 38, 38, 0.5);
+    animation: riskPulse 2s ease-in-out infinite;
+}
+.risk-watch {
+    background: rgba(234, 179, 8, 0.12);
+    color: rgb(253, 224, 71);
+    border-color: rgba(234, 179, 8, 0.4);
+}
+.risk-clean {
+    background: rgba(46, 219, 153, 0.1);
+    color: rgb(46, 219, 153);
+    border-color: rgba(46, 219, 153, 0.3);
+}
+@keyframes riskPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.0); }
+    50%      { box-shadow: 0 0 0 4px rgba(220,38,38,0.25); }
+}
+.admin-row-suspicious {
+    background: rgba(220, 38, 38, 0.04);
+}
+.admin-row-suspicious:hover { background: rgba(220, 38, 38, 0.08) !important; }
 
 /* Sortable table headers */
 .admin-th-sort { cursor: pointer; user-select: none; transition: color 180ms; }

@@ -57,6 +57,23 @@ def _ensure_unsubscribe_columns(db):
         if "dashboard_visit_count" not in cols:
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN dashboard_visit_count INTEGER DEFAULT 0"))
             logger.info("added column ambassadors.dashboard_visit_count")
+        # Fraud-detection columns (IP / UA at signup time).
+        if "signup_ip" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN signup_ip VARCHAR(64)"))
+            logger.info("added column ambassadors.signup_ip")
+        if "signup_user_agent" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN signup_user_agent VARCHAR(500)"))
+            logger.info("added column ambassadors.signup_user_agent")
+
+        # Same fraud columns on referrals (the more actionable signal — duplicates here
+        # mean the same person is registering many "friends" via their own link).
+        ref_cols = {c["name"] for c in inspector.get_columns("referrals")}
+        if "signup_ip" not in ref_cols:
+            conn.execute(text("ALTER TABLE referrals ADD COLUMN signup_ip VARCHAR(64)"))
+            logger.info("added column referrals.signup_ip")
+        if "signup_user_agent" not in ref_cols:
+            conn.execute(text("ALTER TABLE referrals ADD COLUMN signup_user_agent VARCHAR(500)"))
+            logger.info("added column referrals.signup_user_agent")
 
         # Backfill tokens for any rows that don't have one yet (existing ambassadors).
         rows = conn.execute(text("SELECT id FROM ambassadors WHERE unsubscribe_token IS NULL")).fetchall()

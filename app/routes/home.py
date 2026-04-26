@@ -40,18 +40,30 @@ def community():
 def join():
     """Public signup for anyone (Instagram, social media, etc.)."""
     if request.method == "POST":
+        from app.services.email_validation import is_disposable_email, client_ip, client_user_agent
+
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip().lower()
         instagram = request.form.get("instagram", "").strip().lstrip("@")
+        ref_code = (request.args.get("ref") or request.form.get("ref") or "").strip()
 
         if not name or not email:
             flash("Name and email are required.", "error")
+            return render_template("join.html")
+
+        # Disposable / temp-mail blocklist — first line of defence against the
+        # obvious referral-fraud loop (Bad Actor signs up with mailinator emails).
+        if is_disposable_email(email):
+            flash("Please use a real email address. Throwaway/temp-mail providers aren't accepted.", "error")
             return render_template("join.html")
 
         existing = Ambassador.query.filter_by(email=email).first()
         if existing:
             flash("You're already in the challenge!", "info")
             return redirect(url_for("dashboard.show", code=existing.dashboard_code))
+
+        ip = client_ip()
+        ua = client_user_agent()
 
         referral_code = secrets.token_urlsafe(6)[:8]
         dashboard_code = secrets.token_urlsafe(6)[:8]
@@ -68,8 +80,27 @@ def join():
             dashboard_code=dashboard_code,
             source="public",
             instagram_handle=instagram if instagram else None,
+            signup_ip=ip,
+            signup_user_agent=ua,
         )
         db.session.add(ambassador)
+
+        # If they came in via someone else's referral link, credit that referrer
+        # with a Referral row carrying the same IP/UA fingerprint. (This was
+        # missing before — /join wasn't crediting referrers!)
+        if ref_code:
+            referrer = Ambassador.query.filter_by(referral_code=ref_code).first()
+            if referrer is not None:
+                already = Referral.query.filter_by(email=email).first()
+                if already is None:
+                    db.session.add(Referral(
+                        ambassador_id=referrer.id,
+                        name=name,
+                        email=email,
+                        signup_ip=ip,
+                        signup_user_agent=ua,
+                    ))
+
         db.session.commit()
 
         try:

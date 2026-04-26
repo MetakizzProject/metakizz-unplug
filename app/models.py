@@ -52,6 +52,11 @@ class Ambassador(db.Model):
     last_dashboard_visit_at = db.Column(db.DateTime, nullable=True)
     dashboard_visit_count = db.Column(db.Integer, default=0)
 
+    # Fraud-detection signals captured at signup. Both fields are NULL for
+    # rows created before tracking was wired (legacy, GHL imports).
+    signup_ip = db.Column(db.String(64), nullable=True, index=True)
+    signup_user_agent = db.Column(db.String(500), nullable=True)
+
     referrals = db.relationship("Referral", backref="ambassador", lazy=True)
     notifications = db.relationship("MilestoneNotification", backref="ambassador", lazy=True)
 
@@ -78,6 +83,11 @@ class Referral(db.Model):
     name = db.Column(db.String(200), nullable=False)
     email = db.Column(db.String(200), unique=True, nullable=False)
     registered_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Fraud-detection signals captured at signup. Used by the admin to flag
+    # ambassadors whose referrals share IPs / user agents.
+    signup_ip = db.Column(db.String(64), nullable=True, index=True)
+    signup_user_agent = db.Column(db.String(500), nullable=True)
 
 
 class RewardTier(db.Model):

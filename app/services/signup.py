@@ -47,11 +47,15 @@ def _generate_unique_code():
     return code
 
 
-def create_signup(name, email, ref_code=None):
+def create_signup(name, email, ref_code=None, signup_ip=None, signup_user_agent=None):
     """
     Create (or return existing) Ambassador for a PLF signup, and credit the referrer.
 
     Returns: tuple(ambassador, was_new) where was_new is True if a new Ambassador was created.
+
+    signup_ip / signup_user_agent are stored on both the new Ambassador AND the new
+    Referral row (when a referrer is credited). They power the admin's fraud-detection
+    badge that flags ambassadors with many referrals from the same IP / user agent.
 
     Existing community members imported from Circle still get the welcome email the
     FIRST time they register through the landing (they need their dashboard link),
@@ -94,6 +98,8 @@ def create_signup(name, email, ref_code=None):
         referral_code=_generate_unique_code(),
         dashboard_code=_generate_unique_code(),
         source="public",
+        signup_ip=signup_ip,
+        signup_user_agent=signup_user_agent,
     )
     db.session.add(new_ambassador)
 
@@ -106,6 +112,8 @@ def create_signup(name, email, ref_code=None):
                 ambassador_id=referrer.id,
                 name=name,
                 email=email,
+                signup_ip=signup_ip,
+                signup_user_agent=signup_user_agent,
             )
             db.session.add(referral)
 
