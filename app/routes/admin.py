@@ -1,12 +1,14 @@
 import csv
 import io
 import logging
+from collections import defaultdict
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
     flash, session, current_app, Response,
 )
-from datetime import datetime, timezone
-from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification
+from datetime import datetime, timezone, timedelta
+from sqlalchemy import func
+from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent
 from app.mailer import (
     send_welcome_email,
     send_activation_nudge_email,
@@ -17,6 +19,7 @@ from app.mailer import (
     send_last_6h_email,
     send_results_announcement_email,
     send_you_won_email,
+    _send as _mailer_send,  # low-level Resend POST, used by /admin/broadcast
     # legacy:
     send_first_referral_email,
     send_referral_notification_email,
@@ -26,6 +29,153 @@ from app.mailer import (
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 logger = logging.getLogger(__name__)
+
+
+# ════════════════════════════════════════════════════════════════════
+# Marketing helpers — segments + chart data
+# ════════════════════════════════════════════════════════════════════
+
+def _compute_segments(ambassadors):
+    """Group reachable ambassadors into marketing-relevant buckets.
+
+    Only includes opted-in (unsubscribed_at IS NULL) ambassadors. Each
+    segment is a list of Ambassador instances.
+    """
+    now = datetime.now(timezone.utc)
+    reachable = [a for a in ambassadors if a.unsubscribed_at is None]
+
+    def days_since_last_referral(amb):
+        if amb.referrals:
+            last = max(r.registered_at for r in amb.referrals)
+            # SQLite returns naive datetimes; coerce to UTC for math
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            return (now - last).days
+        created = amb.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        return (now - created).days
+
+    cold = [a for a in reachable if a.referral_count == 0]
+    sleeping = [a for a in reachable if 1 <= a.referral_count < 5]
+    champions = [a for a in reachable if a.referral_count >= 5]
+    top10 = sorted(reachable, key=lambda a: -a.referral_count)[:10]
+    inactive_7d = [a for a in reachable if days_since_last_referral(a) >= 7]
+    never_visited = [a for a in reachable if a.last_dashboard_visit_at is None]
+
+    return {
+        "cold": cold,                    # 0 unplugs (need a kick)
+        "sleeping": sleeping,            # 1-4 unplugs (need momentum)
+        "champions": champions,          # 5+ unplugs (lock the prize)
+        "top10": top10,                  # current top performers
+        "inactive_7d": inactive_7d,      # no activity in 7 days
+        "never_visited": never_visited,  # never opened their dashboard
+    }
+
+
+def _compute_email_stats():
+    """Per-template aggregate stats from EmailEvent rows.
+
+    For each template_key:
+      sent     — count of 'sent' events
+      opened   — count of distinct emails that got at least one 'opened' event
+      clicked  — count of distinct emails with at least one 'clicked' event
+      bounced  — count with at least one 'bounced'
+
+    Open/click rates are computed against sent (delivered would be slightly
+    more accurate but Resend reports both, and we want to show the simpler
+    funnel).
+    """
+    # All sent rows grouped by template
+    rows = (
+        db.session.query(EmailEvent.template_key, EmailEvent.event_type, EmailEvent.resend_email_id)
+        .filter(EmailEvent.template_key != "unknown")
+        .all()
+    )
+
+    stats = {}
+    seen_per_template = defaultdict(lambda: {"sent": set(), "opened": set(), "clicked": set(), "bounced": set()})
+
+    for tpl, evt, rid in rows:
+        if rid is None:
+            continue
+        bucket = seen_per_template[tpl]
+        if evt in bucket:
+            bucket[evt].add(rid)
+
+    for tpl, sets in seen_per_template.items():
+        sent = len(sets["sent"])
+        opened = len(sets["opened"])
+        clicked = len(sets["clicked"])
+        bounced = len(sets["bounced"])
+        stats[tpl] = {
+            "sent": sent,
+            "opened": opened,
+            "clicked": clicked,
+            "bounced": bounced,
+            "open_rate": (round(100 * opened / sent, 1) if sent else 0),
+            "click_rate": (round(100 * clicked / sent, 1) if sent else 0),
+        }
+    return stats
+
+
+def _compute_chart_data():
+    """Return JSON-serialisable data for the admin charts."""
+    now = datetime.now(timezone.utc)
+    today = now.date()
+
+    # ── Signups timeline (last 14 days, split by source) ──
+    days = [today - timedelta(days=i) for i in range(13, -1, -1)]
+    day_keys = [d.isoformat() for d in days]
+    counts_by_day = defaultdict(lambda: {"community": 0, "public": 0})
+    cutoff = datetime.combine(days[0], datetime.min.time(), tzinfo=timezone.utc)
+    for amb in Ambassador.query.filter(Ambassador.created_at >= cutoff).all():
+        d = (amb.created_at.date() if amb.created_at.tzinfo else amb.created_at.date()).isoformat()
+        counts_by_day[d][amb.source] += 1
+
+    timeline = {
+        "labels": [d.strftime("%b %d") for d in days],
+        "community": [counts_by_day[k]["community"] for k in day_keys],
+        "public": [counts_by_day[k]["public"] for k in day_keys],
+    }
+
+    # ── Activity distribution (unplug-count buckets) ──
+    all_amb = Ambassador.query.all()
+    buckets = {"0": 0, "1-2": 0, "3-4": 0, "5-9": 0, "10+": 0}
+    for amb in all_amb:
+        c = amb.referral_count
+        if c == 0:
+            buckets["0"] += 1
+        elif c <= 2:
+            buckets["1-2"] += 1
+        elif c <= 4:
+            buckets["3-4"] += 1
+        elif c <= 9:
+            buckets["5-9"] += 1
+        else:
+            buckets["10+"] += 1
+
+    distribution = {
+        "labels": list(buckets.keys()),
+        "values": list(buckets.values()),
+    }
+
+    # ── Funnel ──
+    total = len(all_amb)
+    welcomed = sum(1 for a in all_amb if a.welcome_sent_at is not None)
+    first_unplug = sum(1 for a in all_amb if a.referral_count >= 1)
+    five_plus = sum(1 for a in all_amb if a.referral_count >= 5)
+
+    funnel = {
+        "labels": ["Registered", "Welcomed", "1+ unplug", "5+ (locked)"],
+        "values": [total, welcomed, first_unplug, five_plus],
+    }
+
+    return {
+        "timeline": timeline,
+        "distribution": distribution,
+        "funnel": funnel,
+    }
 
 
 @admin_bp.before_request
@@ -50,30 +200,218 @@ def login():
 @admin_bp.route("/")
 def index():
     channel = request.args.get("channel", "all")
+    q = request.args.get("q", "").strip().lower()
 
     if channel == "all":
         ambassadors = Ambassador.query.all()
     else:
         ambassadors = Ambassador.query.filter_by(source=channel).all()
 
+    if q:
+        ambassadors = [
+            a for a in ambassadors
+            if q in (a.name or "").lower() or q in (a.email or "").lower()
+        ]
+
     sorted_ambassadors = sorted(ambassadors, key=lambda a: a.referral_count, reverse=True)
 
+    # Top-line stats (computed across the FULL dataset, not the filtered view)
+    all_amb_for_stats = Ambassador.query.all()
     total_referrals = Referral.query.count()
     community_count = Ambassador.query.filter_by(source="community").count()
     public_count = Ambassador.query.filter_by(source="public").count()
+    unsubscribed = Ambassador.query.filter(Ambassador.unsubscribed_at.isnot(None)).count()
     prizes_earned = MilestoneNotification.query.count()
     prizes_pending = MilestoneNotification.query.filter_by(delivered=False).count()
+
+    # Marketing segments + chart data + email stats
+    segments = _compute_segments(all_amb_for_stats)
+    segment_counts = {k: len(v) for k, v in segments.items()}
+    charts = _compute_chart_data()
+    email_stats = _compute_email_stats()
+
+    # Engagement: how many ambassadors have opened their dashboard at least once
+    visited = sum(1 for a in all_amb_for_stats if a.last_dashboard_visit_at is not None)
 
     return render_template(
         "admin.html",
         ambassadors=sorted_ambassadors,
+        total_ambassadors=len(all_amb_for_stats),
         total_referrals=total_referrals,
         community_count=community_count,
         public_count=public_count,
+        unsubscribed=unsubscribed,
         prizes_earned=prizes_earned,
         prizes_pending=prizes_pending,
+        visited_count=visited,
         channel=channel,
+        q=q,
+        segment_counts=segment_counts,
+        charts=charts,
+        email_stats=email_stats,
     )
+
+
+# ════════════════════════════════════════════════════════════════════
+# Segment-based marketing actions
+# ════════════════════════════════════════════════════════════════════
+
+# Templated emails available for one-click "send to segment" actions.
+# Maps a logical name → (mailer fn, segment-key default, idempotency-flag attr).
+_SEGMENT_TEMPLATES = {
+    "activation_nudge": {
+        "fn": send_activation_nudge_email,
+        "default_segment": "cold",
+        "flag": "activation_nudge_sent_at",
+        "label": "Activation nudge",
+    },
+    "midway_reminder": {
+        "fn": send_midway_reminder_email,
+        "default_segment": "sleeping",
+        "flag": "midway_sent_at",
+        "label": "Midway reminder",
+    },
+}
+
+
+@admin_bp.route("/segment/<segment_name>/send-template", methods=["POST"])
+def segment_send_template(segment_name):
+    """Send one of the pre-built emails to every ambassador in a segment.
+
+    Segment is computed live, then we filter to opted-in + (optionally) skip
+    anyone who already received this template (via the *_sent_at flag).
+    """
+    template_key = request.form.get("template", "")
+    cfg = _SEGMENT_TEMPLATES.get(template_key)
+    if cfg is None:
+        flash(f"Unknown template: {template_key}", "error")
+        return redirect(url_for("admin.index"))
+
+    all_amb = Ambassador.query.all()
+    segments = _compute_segments(all_amb)
+    targets = segments.get(segment_name, [])
+    if not targets:
+        flash(f"No ambassadors in segment '{segment_name}'.", "info")
+        return redirect(url_for("admin.index"))
+
+    # Skip anyone who already got this email
+    flag = cfg["flag"]
+    targets = [a for a in targets if getattr(a, flag, None) is None]
+
+    app_url = current_app.config["APP_URL"]
+    fn = cfg["fn"]
+
+    sent, failed = 0, 0
+    for amb in targets:
+        try:
+            # Some templates need extra args (rank, days_left, etc.). Use safe defaults.
+            if template_key == "midway_reminder":
+                ok = fn(amb, position=None, days_left=None, app_url=app_url)
+            else:
+                ok = fn(amb, app_url)
+            if ok:
+                setattr(amb, flag, datetime.now(timezone.utc))
+                db.session.commit()
+                sent += 1
+            else:
+                failed += 1
+        except Exception:
+            logger.exception("segment send failed for %s", amb.email)
+            failed += 1
+
+    flash(
+        f"{cfg['label']}: sent {sent}, failed {failed}, skipped {len(segments[segment_name]) - len(targets)} (already received).",
+        "success" if sent else "info",
+    )
+    logger.warning("ADMIN segment send: segment=%s template=%s sent=%d failed=%d",
+                   segment_name, template_key, sent, failed)
+    return redirect(url_for("admin.index"))
+
+
+@admin_bp.route("/broadcast", methods=["POST"])
+def broadcast():
+    """Send a custom subject+body email to a chosen segment.
+
+    Body is plain text; we wrap it in the brand HTML shell. Skips opt-outs.
+    """
+    segment_name = request.form.get("segment", "")
+    subject = request.form.get("subject", "").strip()
+    body_text = request.form.get("body", "").strip()
+
+    if not subject or not body_text:
+        flash("Subject and body are required.", "error")
+        return redirect(url_for("admin.index"))
+
+    all_amb = Ambassador.query.all()
+    segments = _compute_segments(all_amb)
+    targets = segments.get(segment_name, [])
+    if not targets:
+        flash(f"No ambassadors in segment '{segment_name}'.", "info")
+        return redirect(url_for("admin.index"))
+
+    app_url = current_app.config["APP_URL"]
+    sent, failed = 0, 0
+
+    # Render a minimal brand HTML wrapper around the plain body. We deliberately
+    # keep this dead simple: bold paragraph breaks + a "go to dashboard" footer.
+    body_html_template = """\
+<!doctype html><html><body style="margin:0;padding:0;background:#000000;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#ffffff;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#000000;padding:24px 0;">
+  <tr><td align="center">
+    <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#0a0f0c;border:1px solid rgba(46,219,153,0.25);border-radius:12px;">
+      <tr><td style="padding:28px 28px 8px 28px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#2EDB99;margin:0 0 16px 0;">▌ METAKIZZ // BROADCAST</p>
+        <p style="font-size:18px;line-height:1.5;color:#ffffff;margin:0;font-weight:700;">Hey {name},</p>
+      </td></tr>
+      <tr><td style="padding:8px 28px 24px 28px;font-size:15px;line-height:1.6;color:#d1d5db;">
+        {body}
+      </td></tr>
+      <tr><td style="padding:0 28px 28px 28px;">
+        <a href="{dashboard_url}" style="display:inline-block;background:#2EDB99;color:#000000;font-weight:900;text-decoration:none;padding:12px 22px;border-radius:8px;font-size:14px;letter-spacing:1px;text-transform:uppercase;">Open my dashboard →</a>
+      </td></tr>
+      <tr><td style="padding:0 28px 24px 28px;border-top:1px solid rgba(46,219,153,0.15);">
+        <p style="font-size:11px;color:#6b7280;margin:16px 0 0 0;">Jesus & Anni · MetaKizz Project</p>
+        <p style="font-size:10px;color:#4b5563;margin:6px 0 0 0;">Don't want these? <a href="{unsub_url}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>"""
+
+    # Body paragraphs → wrap each line in <p>
+    paragraphs = "".join(f"<p style=\"margin:0 0 14px 0;\">{p}</p>" for p in body_text.split("\n\n") if p.strip())
+
+    for amb in targets:
+        if amb.unsubscribed_at is not None:
+            continue
+        dashboard_url = f"{app_url.rstrip('/')}/dashboard/{amb.dashboard_code}"
+        unsub_url = f"{app_url.rstrip('/')}/unsubscribe/{amb.unsubscribe_token}"
+        html = body_html_template.format(
+            name=(amb.name or "dancer").split()[0],
+            body=paragraphs,
+            dashboard_url=dashboard_url,
+            unsub_url=unsub_url,
+        )
+        try:
+            ok = _mailer_send(
+                amb.email, subject, html,
+                from_name="Jesus & Anni",
+                template_key="broadcast",
+                ambassador=amb,
+            )
+            if ok:
+                sent += 1
+            else:
+                failed += 1
+        except Exception:
+            logger.exception("broadcast failed for %s", amb.email)
+            failed += 1
+
+    flash(f"Broadcast to '{segment_name}': sent {sent}, failed {failed} (skipped opt-outs).",
+          "success" if sent else "error")
+    logger.warning("ADMIN BROADCAST: segment=%s subject=%r sent=%d failed=%d",
+                   segment_name, subject, sent, failed)
+    return redirect(url_for("admin.index"))
 
 
 @admin_bp.route("/tiers", methods=["GET", "POST"])

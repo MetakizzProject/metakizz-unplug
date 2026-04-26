@@ -48,6 +48,10 @@ class Ambassador(db.Model):
     results_sent_at = db.Column(db.DateTime, nullable=True)           # #8
     you_won_sent_at = db.Column(db.DateTime, nullable=True)           # #9
 
+    # Engagement tracking — bumped on every /dashboard/<code> hit.
+    last_dashboard_visit_at = db.Column(db.DateTime, nullable=True)
+    dashboard_visit_count = db.Column(db.Integer, default=0)
+
     referrals = db.relationship("Referral", backref="ambassador", lazy=True)
     notifications = db.relationship("MilestoneNotification", backref="ambassador", lazy=True)
 
@@ -98,3 +102,20 @@ class MilestoneNotification(db.Model):
     delivered_at = db.Column(db.DateTime, nullable=True)
 
     reward_tier = db.relationship("RewardTier")
+
+
+class EmailEvent(db.Model):
+    """One row per email lifecycle event. Inserted on send (template_key=...);
+    augmented by /api/webhook/resend with 'opened' / 'clicked' / 'bounced' rows
+    that match back via resend_email_id.
+    """
+    __tablename__ = "email_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ambassador_id = db.Column(db.Integer, db.ForeignKey("ambassadors.id"), nullable=True, index=True)
+    template_key = db.Column(db.String(60), nullable=False, index=True)
+    event_type = db.Column(db.String(30), nullable=False, index=True)  # sent | opened | clicked | bounced | complained | delivered
+    resend_email_id = db.Column(db.String(120), nullable=True, index=True)
+    to_email = db.Column(db.String(200), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    extra = db.Column(db.Text, nullable=True)  # raw webhook payload (JSON string), for debugging

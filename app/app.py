@@ -50,6 +50,13 @@ def _ensure_unsubscribe_columns(db):
             if col not in cols:
                 conn.execute(text(f"ALTER TABLE ambassadors ADD COLUMN {col} TIMESTAMP"))
                 logger.info("added column ambassadors.%s", col)
+        # Engagement tracking columns (added later).
+        if "last_dashboard_visit_at" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN last_dashboard_visit_at TIMESTAMP"))
+            logger.info("added column ambassadors.last_dashboard_visit_at")
+        if "dashboard_visit_count" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN dashboard_visit_count INTEGER DEFAULT 0"))
+            logger.info("added column ambassadors.dashboard_visit_count")
 
         # Backfill tokens for any rows that don't have one yet (existing ambassadors).
         rows = conn.execute(text("SELECT id FROM ambassadors WHERE unsubscribe_token IS NULL")).fetchall()

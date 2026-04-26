@@ -1,131 +1,639 @@
 {% extends "base.html" %}
 {% set embed = false %}
 
-{% block title %}Admin — MetaKizz Challenge{% endblock %}
+{% block title %}Admin · MetaKizz Ops{% endblock %}
+
+{% block nav_right %}{% endblock %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto px-4 pt-8 pb-8">
-    <div class="flex items-center justify-between mb-8">
-        <h1 class="text-2xl font-bold">Admin Panel</h1>
-        <div class="flex gap-2">
-            <a href="{{ url_for('admin.rewards') }}" class="text-sm bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-lg transition">Rewards</a>
-            <a href="{{ url_for('admin.test_email') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Test Emails</a>
-            <a href="{{ url_for('admin.cron_status') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Cron Status</a>
-            <a href="{{ url_for('admin.tiers') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Manage Tiers</a>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+<div class="max-w-6xl mx-auto px-4 pt-4 pb-12">
+
+    <!-- ─── TERMINAL HEADER STRIP ─── -->
+    <div class="flex items-center justify-between mb-3 font-mono-term text-[10px] tracking-[0.25em] uppercase">
+        <span class="text-brand-400/80"><span class="text-brand-400">▌</span> METAKIZZ // ADMIN.OPS</span>
+        <span class="text-gray-500 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-brand-400 live-pulse"></span>
+            SUPERVISOR
+        </span>
+    </div>
+
+    <!-- Title + secondary nav -->
+    <div class="flex items-center justify-between mb-5 flex-wrap gap-2">
+        <h1 class="text-2xl font-display font-bold">Admin Console</h1>
+        <div class="flex gap-1.5 flex-wrap">
+            <a href="{{ url_for('admin.rewards') }}" class="admin-nav-btn">Rewards</a>
+            <a href="{{ url_for('admin.test_email') }}" class="admin-nav-btn">Test emails</a>
+            <a href="{{ url_for('admin.cron_status') }}" class="admin-nav-btn">Cron</a>
+            <a href="{{ url_for('admin.tiers') }}" class="admin-nav-btn">Tiers</a>
             <form method="POST" action="{{ url_for('admin.backfill_guaranteed') }}" class="inline"
                   onsubmit="return confirm('Send Guaranteed Prize email (#4) to any ambassador at 5+ unplugs who hasn\'t received it yet?\n\nIdempotent (safe to re-run).');">
-                <button type="submit" class="text-sm bg-yellow-900/40 hover:bg-yellow-800 text-yellow-300 hover:text-white border border-yellow-800 px-3 py-1.5 rounded-lg transition">Backfill #4</button>
+                <button type="submit" class="admin-nav-btn admin-nav-warn">Backfill #4</button>
             </form>
-            <a href="{{ url_for('admin.reset_test_data') }}" class="text-sm bg-red-900/50 hover:bg-red-800 text-red-300 hover:text-white border border-red-800 px-3 py-1.5 rounded-lg transition">Reset Tests</a>
-            <a href="{{ url_for('admin.logout') }}" class="text-sm text-gray-400 hover:text-white px-3 py-1.5 transition">Logout</a>
+            <a href="{{ url_for('admin.reset_test_data') }}" class="admin-nav-btn admin-nav-danger">Reset tests</a>
+            <a href="{{ url_for('admin.logout') }}" class="admin-nav-btn">Logout</a>
         </div>
     </div>
 
-    <!-- Stats -->
-    <div class="grid grid-cols-3 gap-3 mb-4">
-        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold text-brand-400">{{ total_referrals }}</div>
-            <div class="text-xs text-gray-400 mt-1">Total Dancers Unplugged</div>
+    <!-- ─── TOP-LINE STATS ─── -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
+        <div class="admin-stat">
+            <p class="admin-stat-label">// REGISTERED</p>
+            <p class="admin-stat-value text-brand-400" style="text-shadow: 0 0 14px rgba(46,219,153,0.5);">{{ total_ambassadors }}</p>
+            <p class="admin-stat-sub">total dancers</p>
         </div>
-        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold">{{ community_count }}</div>
-            <div class="text-xs text-gray-400 mt-1">Community Ambassadors</div>
+        <div class="admin-stat">
+            <p class="admin-stat-label">// UNPLUGS</p>
+            <p class="admin-stat-value text-white">{{ total_referrals }}</p>
+            <p class="admin-stat-sub">via referrals</p>
         </div>
-        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold">{{ public_count }}</div>
-            <div class="text-xs text-gray-400 mt-1">Public Ambassadors</div>
+        <div class="admin-stat">
+            <p class="admin-stat-label">// VISITED</p>
+            <p class="admin-stat-value text-cyan-300">{{ visited_count }}</p>
+            <p class="admin-stat-sub">opened dashboard</p>
+        </div>
+        <div class="admin-stat">
+            <p class="admin-stat-label">// COMMUNITY</p>
+            <p class="admin-stat-value text-blue-300">{{ community_count }}</p>
+            <p class="admin-stat-sub">circle members</p>
+        </div>
+        <div class="admin-stat">
+            <p class="admin-stat-label">// PUBLIC</p>
+            <p class="admin-stat-value text-purple-300">{{ public_count }}</p>
+            <p class="admin-stat-sub">open signups</p>
+        </div>
+        <div class="admin-stat">
+            <p class="admin-stat-label">// OPT-OUTS</p>
+            <p class="admin-stat-value text-gray-400">{{ unsubscribed }}</p>
+            <p class="admin-stat-sub">unsubscribed</p>
         </div>
     </div>
-    {% if prizes_earned > 0 %}
-    <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-8 flex items-center justify-between">
-        <div class="text-sm text-gray-400">
-            <span class="text-white font-bold">{{ prizes_earned }}</span> prizes earned
-            &middot;
-            <span class="text-green-400 font-bold">{{ prizes_earned - prizes_pending }}</span> delivered
-            &middot;
-            <span class="text-yellow-400 font-bold">{{ prizes_pending }}</span> pending
+
+    <!-- ─── CHARTS SECTION ─── -->
+    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3">▌ ACTIVITY · LAST 14 DAYS</p>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-7">
+        <!-- Signups timeline -->
+        <div class="admin-card">
+            <p class="admin-card-label">Signups by day</p>
+            <div class="relative" style="height: 200px;">
+                <canvas id="chart-timeline"></canvas>
+            </div>
         </div>
-        <a href="{{ url_for('admin.rewards', status='pending') }}" class="text-xs bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-lg transition">
-            View Pending
-        </a>
+        <!-- Activity distribution -->
+        <div class="admin-card">
+            <p class="admin-card-label">Unplug-count distribution</p>
+            <div class="relative" style="height: 200px;">
+                <canvas id="chart-distribution"></canvas>
+            </div>
+        </div>
+        <!-- Funnel -->
+        <div class="admin-card lg:col-span-2">
+            <p class="admin-card-label">Engagement funnel</p>
+            <div class="relative" style="height: 180px;">
+                <canvas id="chart-funnel"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── MARKETING SEGMENTS — quick contact actions ─── -->
+    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3">▌ MARKETING SEGMENTS · 1-CLICK CONTACT</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-7">
+
+        <!-- Cold (0 unplugs) -->
+        <div class="admin-segment border-blue-500/40">
+            <div class="flex items-baseline gap-2 mb-1">
+                <span class="font-orbitron font-black text-blue-300 text-2xl">{{ segment_counts.cold }}</span>
+                <span class="text-xs text-gray-400">cold</span>
+            </div>
+            <p class="text-sm text-white font-semibold mb-1">0 unplugs · need a kick</p>
+            <p class="text-[11px] text-gray-500 mb-3">Haven't moved a single person yet.</p>
+            <div class="flex flex-col gap-1.5">
+                <form method="POST" action="{{ url_for('admin.segment_send_template', segment_name='cold') }}"
+                      onsubmit="return confirm('Send Activation Nudge email to all {{ segment_counts.cold }} cold ambassadors who haven\\'t received it yet?');">
+                    <input type="hidden" name="template" value="activation_nudge">
+                    <button type="submit" class="admin-segment-btn">Send activation nudge →</button>
+                </form>
+                <button type="button" onclick="openBroadcast('cold', '{{ segment_counts.cold }}')" class="admin-segment-btn admin-segment-btn-soft">Custom message</button>
+            </div>
+        </div>
+
+        <!-- Sleeping (1-4 unplugs) -->
+        <div class="admin-segment border-yellow-500/40">
+            <div class="flex items-baseline gap-2 mb-1">
+                <span class="font-orbitron font-black text-yellow-400 text-2xl">{{ segment_counts.sleeping }}</span>
+                <span class="text-xs text-gray-400">sleeping</span>
+            </div>
+            <p class="text-sm text-white font-semibold mb-1">1-4 unplugs · need momentum</p>
+            <p class="text-[11px] text-gray-500 mb-3">Started but not at guaranteed yet.</p>
+            <div class="flex flex-col gap-1.5">
+                <form method="POST" action="{{ url_for('admin.segment_send_template', segment_name='sleeping') }}"
+                      onsubmit="return confirm('Send Midway Reminder email to all {{ segment_counts.sleeping }} sleeping ambassadors who haven\\'t received it yet?');">
+                    <input type="hidden" name="template" value="midway_reminder">
+                    <button type="submit" class="admin-segment-btn">Send midway reminder →</button>
+                </form>
+                <button type="button" onclick="openBroadcast('sleeping', '{{ segment_counts.sleeping }}')" class="admin-segment-btn admin-segment-btn-soft">Custom message</button>
+            </div>
+        </div>
+
+        <!-- Champions (5+ unplugs) -->
+        <div class="admin-segment border-brand-400/50" style="box-shadow: 0 0 18px rgba(46,219,153,0.15);">
+            <div class="flex items-baseline gap-2 mb-1">
+                <span class="font-orbitron font-black text-brand-400 text-2xl" style="text-shadow: 0 0 10px rgba(46,219,153,0.5);">{{ segment_counts.champions }}</span>
+                <span class="text-xs text-gray-400">champions</span>
+            </div>
+            <p class="text-sm text-white font-semibold mb-1">5+ unplugs · prize locked</p>
+            <p class="text-[11px] text-gray-500 mb-3">Hit the guaranteed reward. Keep them moving.</p>
+            <div class="flex flex-col gap-1.5">
+                <button type="button" onclick="openBroadcast('champions', '{{ segment_counts.champions }}')" class="admin-segment-btn">Send thank-you / push →</button>
+            </div>
+        </div>
+
+        <!-- Top 10 -->
+        <div class="admin-segment border-amber-500/40">
+            <div class="flex items-baseline gap-2 mb-1">
+                <span class="font-orbitron font-black text-amber-400 text-2xl">{{ segment_counts.top10 }}</span>
+                <span class="text-xs text-gray-400">top 10</span>
+            </div>
+            <p class="text-sm text-white font-semibold mb-1">Current podium contenders</p>
+            <p class="text-[11px] text-gray-500 mb-3">Highest performers across both channels.</p>
+            <div class="flex flex-col gap-1.5">
+                <button type="button" onclick="openBroadcast('top10', '{{ segment_counts.top10 }}')" class="admin-segment-btn">Personal message →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Secondary segments — small horizontal strips -->
+    {% if segment_counts.inactive_7d %}
+    <div class="bg-gray-900/60 border border-orange-500/30 rounded-xl p-3 mb-3 flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-3">
+            <span class="font-orbitron font-black text-orange-400 text-xl">{{ segment_counts.inactive_7d }}</span>
+            <div>
+                <p class="text-sm font-semibold text-white">No activity in 7+ days</p>
+                <p class="text-[11px] text-gray-500">Either zero unplugs or last referral &gt; 7 days ago.</p>
+            </div>
+        </div>
+        <button type="button" onclick="openBroadcast('inactive_7d', '{{ segment_counts.inactive_7d }}')"
+                class="admin-segment-btn !w-auto px-4">Wake them up →</button>
     </div>
     {% endif %}
-    </div>
-
-    <!-- Filter + Export -->
-    <div class="flex items-center justify-between mb-4">
-        <div class="flex gap-2">
-            <a href="?channel=all" class="px-3 py-1.5 rounded-full text-sm transition {% if channel == 'all' %}bg-brand-600 text-white{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %}">All</a>
-            <a href="?channel=community" class="px-3 py-1.5 rounded-full text-sm transition {% if channel == 'community' %}bg-brand-600 text-white{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %}">Community</a>
-            <a href="?channel=public" class="px-3 py-1.5 rounded-full text-sm transition {% if channel == 'public' %}bg-brand-600 text-white{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %}">Public</a>
+    {% if segment_counts.never_visited %}
+    <div class="bg-gray-900/60 border border-cyan-500/30 rounded-xl p-3 mb-7 flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-3">
+            <span class="font-orbitron font-black text-cyan-300 text-xl">{{ segment_counts.never_visited }}</span>
+            <div>
+                <p class="text-sm font-semibold text-white">Never opened their dashboard</p>
+                <p class="text-[11px] text-gray-500">Got the welcome email but haven't clicked through yet. Highest-leverage to reactivate.</p>
+            </div>
         </div>
-        <div class="flex gap-2">
-            <a href="{{ url_for('admin.export_csv', channel=channel) }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Export Ambassadors</a>
-            <a href="{{ url_for('admin.export_referrals') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Export Referrals</a>
-        </div>
+        <button type="button" onclick="openBroadcast('never_visited', '{{ segment_counts.never_visited }}')"
+                class="admin-segment-btn !w-auto px-4">Send custom email →</button>
     </div>
+    {% endif %}
 
-    <!-- Ambassador Table -->
-    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+    <!-- ─── EMAIL PERFORMANCE — open/click rates per template ─── -->
+    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3 mt-6">▌ EMAIL PERFORMANCE · BY TEMPLATE</p>
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden mb-7">
+        {% if email_stats %}
         <table class="w-full text-sm">
-            <thead class="border-b border-gray-800 text-gray-400">
-                <tr>
-                    <th class="text-left px-4 py-3 font-medium">#</th>
-                    <th class="text-left px-4 py-3 font-medium">Name</th>
-                    <th class="text-left px-4 py-3 font-medium hidden sm:table-cell">Email</th>
-                    <th class="text-left px-4 py-3 font-medium hidden sm:table-cell">Source</th>
-                    <th class="text-center px-4 py-3 font-medium">Dancers</th>
-                    <th class="text-center px-4 py-3 font-medium hidden sm:table-cell">IG Shared</th>
-                    <th class="text-left px-4 py-3 font-medium">Actions</th>
+            <thead class="border-b border-gray-800">
+                <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                    <th class="text-left px-4 py-2.5 font-bold">Template</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Sent</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Opened</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Open %</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Clicked</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Click %</th>
+                    <th class="text-right px-4 py-2.5 font-bold hidden sm:table-cell">Bounced</th>
                 </tr>
             </thead>
             <tbody>
-                {% for amb in ambassadors %}
-                <tr class="border-b border-gray-800 last:border-0 hover:bg-gray-800/50">
-                    <td class="px-4 py-3 text-gray-500">{{ loop.index }}</td>
-                    <td class="px-4 py-3 font-medium">{{ amb.name }}</td>
-                    <td class="px-4 py-3 text-gray-400 hidden sm:table-cell">{{ amb.email }}</td>
-                    <td class="px-4 py-3 hidden sm:table-cell">
-                        <span class="px-2 py-0.5 rounded-full text-xs {% if amb.source == 'community' %}bg-blue-900/50 text-blue-300{% else %}bg-purple-900/50 text-purple-300{% endif %}">
-                            {{ amb.source }}
-                        </span>
+                {% for tpl_name, s in email_stats.items() %}
+                <tr class="border-b border-gray-800/50 last:border-0">
+                    <td class="px-4 py-2.5 font-semibold text-white font-mono-term tracking-wider">{{ tpl_name }}</td>
+                    <td class="px-4 py-2.5 text-right font-orbitron font-black text-gray-300 text-base">{{ s.sent }}</td>
+                    <td class="px-4 py-2.5 text-right font-orbitron font-black text-base
+                        {% if s.open_rate >= 50 %}text-brand-400{% elif s.open_rate >= 25 %}text-yellow-400{% else %}text-gray-500{% endif %}"
+                        {% if s.open_rate >= 50 %}style="text-shadow: 0 0 10px rgba(46,219,153,0.4);"{% endif %}>
+                        {{ s.opened }}
                     </td>
-                    <td class="px-4 py-3 text-center font-semibold text-brand-400">{{ amb.referral_count }}</td>
-                    <td class="px-4 py-3 text-center hidden sm:table-cell">
-                        {% if amb.shared_on_instagram %}
-                        <span class="text-green-400">&#10003;</span>
-                        {% else %}
-                        <span class="text-gray-600">&mdash;</span>
-                        {% endif %}
+                    <td class="px-4 py-2.5 text-right text-xs font-mono-term tracking-wider
+                        {% if s.open_rate >= 50 %}text-brand-400{% elif s.open_rate >= 25 %}text-yellow-400{% else %}text-gray-500{% endif %}">
+                        {{ s.open_rate }}%
                     </td>
-                    <td class="px-4 py-3">
-                        <div class="flex items-center gap-2 text-xs">
-                            <a href="{{ url_for('dashboard.show', code=amb.dashboard_code) }}" target="_blank"
-                               class="text-brand-400 hover:text-brand-300">View</a>
-
-                            <span class="text-gray-700">|</span>
-
-                            <form method="POST"
-                                  action="{{ url_for('admin.reset_ambassador', ambassador_id=amb.id, channel=channel) }}"
-                                  onsubmit="return confirm('Reset {{ amb.name|e }} to 0 referrals?\n\nDeletes their {{ amb.referral_count }} referral(s). Ambassador stays.');"
-                                  class="inline">
-                                <button type="submit" class="text-yellow-500 hover:text-yellow-400">Reset</button>
-                            </form>
-
-                            <span class="text-gray-700">|</span>
-
-                            <form method="POST"
-                                  action="{{ url_for('admin.delete_ambassador', ambassador_id=amb.id, channel=channel) }}"
-                                  onsubmit="return confirm('DELETE {{ amb.name|e }} ({{ amb.email|e }})?\n\nRemoves the ambassador AND their {{ amb.referral_count }} referral(s).\nIrreversible.');"
-                                  class="inline">
-                                <button type="submit" class="text-red-500 hover:text-red-400">Delete</button>
-                            </form>
-                        </div>
+                    <td class="px-4 py-2.5 text-right font-orbitron font-black text-base
+                        {% if s.click_rate >= 25 %}text-brand-400{% elif s.click_rate >= 10 %}text-yellow-400{% else %}text-gray-500{% endif %}">
+                        {{ s.clicked }}
+                    </td>
+                    <td class="px-4 py-2.5 text-right text-xs font-mono-term tracking-wider
+                        {% if s.click_rate >= 25 %}text-brand-400{% elif s.click_rate >= 10 %}text-yellow-400{% else %}text-gray-500{% endif %}">
+                        {{ s.click_rate }}%
+                    </td>
+                    <td class="px-4 py-2.5 text-right text-xs hidden sm:table-cell {% if s.bounced %}text-red-400{% else %}text-gray-700{% endif %}">
+                        {{ s.bounced }}
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        {% else %}
+        <div class="p-6 text-center text-gray-500 text-sm">
+            <p class="font-mono-term text-xs tracking-wider mb-2">&gt; NO EMAIL EVENTS YET</p>
+            <p>Once Resend webhooks are configured (URL: <code class="text-brand-400 font-mono-term">/api/webhook/resend</code>) and emails start sending, open/click rates will appear here.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ─── BROADCAST MODAL ─── -->
+    <div id="broadcast-modal" class="hidden fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+        <form method="POST" action="{{ url_for('admin.broadcast') }}" class="bg-gray-900 border border-brand-400/40 rounded-xl p-5 max-w-lg w-full"
+              style="box-shadow: 0 0 32px rgba(46,219,153,0.25);"
+              onsubmit="return confirm('Send this broadcast to ' + document.getElementById('broadcast-count').textContent + ' ambassadors?');">
+            <div class="flex items-center justify-between mb-4">
+                <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ CUSTOM BROADCAST</p>
+                <button type="button" onclick="closeBroadcast()" class="text-gray-500 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <input type="hidden" name="segment" id="broadcast-segment" value="">
+            <p class="text-sm text-gray-300 mb-3">
+                Send to segment <strong id="broadcast-segment-label" class="text-brand-400">cold</strong>
+                (<strong id="broadcast-count" class="text-white">0</strong> recipients · opt-outs auto-skipped).
+            </p>
+            <label class="block text-[10px] font-mono-term tracking-wider uppercase text-brand-400 mb-1">Subject</label>
+            <input name="subject" required maxlength="120" placeholder="e.g. Quick reminder before May 7"
+                   class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-400 mb-3">
+
+            <label class="block text-[10px] font-mono-term tracking-wider uppercase text-brand-400 mb-1">Body</label>
+            <textarea name="body" required rows="7" placeholder="Hey {first_name} — paragraphs separated by blank line.&#10;&#10;The brand HTML wrapper, dashboard CTA and unsubscribe link are auto-added."
+                      class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-400 mb-4 font-mono-term tracking-wide leading-relaxed"></textarea>
+
+            <p class="text-[11px] text-gray-500 mb-4 italic">
+                The greeting "Hey [first_name]," and the dashboard button are added automatically. Just write the message.
+            </p>
+
+            <div class="flex gap-2 justify-end">
+                <button type="button" onclick="closeBroadcast()" class="admin-nav-btn">Cancel</button>
+                <button type="submit" class="bg-brand-400 hover:bg-brand-300 text-black font-display font-black uppercase tracking-wider text-xs px-5 py-2 rounded-lg transition" style="box-shadow: 0 0 14px rgba(46,219,153,0.35);">
+                    Send broadcast →
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ─── FILTERS + SEARCH + EXPORTS ─── -->
+    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-2">▌ AMBASSADORS</p>
+    <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div class="flex gap-1.5 flex-wrap items-center">
+            <a href="?channel=all" class="admin-chip {% if channel == 'all' %}admin-chip-active{% endif %}">All</a>
+            <a href="?channel=community" class="admin-chip {% if channel == 'community' %}admin-chip-active{% endif %}">Community</a>
+            <a href="?channel=public" class="admin-chip {% if channel == 'public' %}admin-chip-active{% endif %}">Public</a>
+            <form method="GET" class="flex items-center gap-1 ml-2">
+                <input type="hidden" name="channel" value="{{ channel }}">
+                <input name="q" value="{{ q }}" placeholder="Search name or email…"
+                       class="bg-black/60 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-brand-400 w-48 font-mono-term tracking-wide">
+                {% if q %}<a href="?channel={{ channel }}" class="text-xs text-gray-500 hover:text-white">×</a>{% endif %}
+            </form>
+        </div>
+        <div class="flex gap-1.5">
+            <a href="{{ url_for('admin.export_csv', channel=channel) }}" class="admin-nav-btn">⬇ Ambassadors CSV</a>
+            <a href="{{ url_for('admin.export_referrals') }}" class="admin-nav-btn">⬇ Referrals CSV</a>
+        </div>
+    </div>
+
+    <!-- ─── AMBASSADOR TABLE ─── -->
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="border-b border-gray-800">
+                    <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                        <th class="text-left px-4 py-3 font-bold">#</th>
+                        <th class="text-left px-4 py-3 font-bold">Name</th>
+                        <th class="text-left px-4 py-3 font-bold hidden sm:table-cell">Email</th>
+                        <th class="text-left px-4 py-3 font-bold hidden md:table-cell">Source</th>
+                        <th class="text-center px-4 py-3 font-bold">Unplugs</th>
+                        <th class="text-center px-4 py-3 font-bold hidden md:table-cell">Last visit</th>
+                        <th class="text-center px-4 py-3 font-bold hidden sm:table-cell">IG</th>
+                        <th class="text-left px-4 py-3 font-bold">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for amb in ambassadors %}
+                    <tr class="border-b border-gray-800/50 last:border-0 hover:bg-brand-400/5 transition {% if amb.unsubscribed_at %}opacity-50{% endif %}">
+                        <td class="px-4 py-3 text-gray-600 font-orbitron font-black text-xs">{{ '%02d' % loop.index }}</td>
+                        <td class="px-4 py-3 font-semibold text-white">
+                            {{ amb.name }}
+                            {% if amb.unsubscribed_at %}<span class="text-[10px] text-gray-500 font-mono-term ml-1">(opt-out)</span>{% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-gray-400 hidden sm:table-cell font-mono-term text-xs">{{ amb.email }}</td>
+                        <td class="px-4 py-3 hidden md:table-cell">
+                            <span class="px-2 py-0.5 rounded font-mono-term text-[10px] tracking-wider uppercase {% if amb.source == 'community' %}bg-blue-900/40 text-blue-300 border border-blue-500/30{% else %}bg-purple-900/40 text-purple-300 border border-purple-500/30{% endif %}">
+                                {{ amb.source }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            <span class="font-orbitron font-black text-base {% if amb.referral_count >= 5 %}text-brand-400{% elif amb.referral_count > 0 %}text-yellow-400{% else %}text-gray-600{% endif %}"
+                                  {% if amb.referral_count >= 5 %}style="text-shadow: 0 0 10px rgba(46,219,153,0.5);"{% endif %}>
+                                {{ amb.referral_count }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-center hidden md:table-cell font-mono-term text-[11px]">
+                            {% if amb.last_dashboard_visit_at %}
+                                <span class="text-cyan-300">{{ amb.last_dashboard_visit_at.strftime('%b %d') }}</span>
+                                <span class="text-gray-600 ml-1">({{ amb.dashboard_visit_count or 0 }}×)</span>
+                            {% else %}
+                                <span class="text-gray-700">never</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-center hidden sm:table-cell">
+                            {% if amb.shared_on_instagram %}
+                            <span class="text-brand-400 text-base">✓</span>
+                            {% else %}
+                            <span class="text-gray-700">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2 text-xs font-mono-term">
+                                <a href="{{ url_for('dashboard.show', code=amb.dashboard_code) }}" target="_blank"
+                                   class="text-brand-400 hover:text-brand-300 transition">View</a>
+                                <span class="text-gray-700">|</span>
+                                <form method="POST"
+                                      action="{{ url_for('admin.reset_ambassador', ambassador_id=amb.id, channel=channel) }}"
+                                      onsubmit="return confirm('Reset {{ amb.name|e }} to 0 referrals?\n\nDeletes their {{ amb.referral_count }} referral(s). Ambassador stays.');"
+                                      class="inline">
+                                    <button type="submit" class="text-yellow-500 hover:text-yellow-400 transition">Reset</button>
+                                </form>
+                                <span class="text-gray-700">|</span>
+                                <form method="POST"
+                                      action="{{ url_for('admin.delete_ambassador', ambassador_id=amb.id, channel=channel) }}"
+                                      onsubmit="return confirm('DELETE {{ amb.name|e }} ({{ amb.email|e }})?\n\nRemoves the ambassador AND their {{ amb.referral_count }} referral(s).\nIrreversible.');"
+                                      class="inline">
+                                    <button type="submit" class="text-red-500 hover:text-red-400 transition">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="px-4 py-10 text-center text-gray-500 font-mono-term">&gt; NO MATCHES_</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
+
+<style>
+.font-mono-term { font-family: 'Share Tech Mono', 'Courier New', monospace; }
+.font-orbitron  { font-family: 'Orbitron', 'Arial Black', sans-serif; }
+
+.live-pulse { animation: livePulse 1.5s ease-in-out infinite; }
+@keyframes livePulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(46,219,153,0.6); }
+    50%      { opacity: 0.5; box-shadow: 0 0 0 6px rgba(46,219,153,0); }
+}
+
+/* Admin nav buttons */
+.admin-nav-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(31, 41, 55, 0.6);
+    border: 1px solid rgba(46, 219, 153, 0.2);
+    color: rgb(229 231 235);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 6px 12px;
+    border-radius: 8px;
+    transition: all 180ms;
+    text-decoration: none;
+    cursor: pointer;
+}
+.admin-nav-btn:hover {
+    border-color: rgba(46,219,153,0.5);
+    background: rgba(46,219,153,0.1);
+    color: white;
+}
+.admin-nav-warn {
+    border-color: rgba(234,179,8,0.4);
+    color: rgb(253,224,71);
+    background: rgba(133,77,14,0.2);
+}
+.admin-nav-warn:hover { background: rgba(133,77,14,0.4); border-color: rgba(234,179,8,0.6); color: white; }
+.admin-nav-danger {
+    border-color: rgba(220,38,38,0.4);
+    color: rgb(252,165,165);
+    background: rgba(127,29,29,0.2);
+}
+.admin-nav-danger:hover { background: rgba(127,29,29,0.4); border-color: rgba(220,38,38,0.6); color: white; }
+
+/* Stat cards */
+.admin-stat {
+    background: rgba(17, 24, 39, 0.8);
+    border: 1px solid rgba(46, 219, 153, 0.2);
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+.admin-stat-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(46,219,153,0.7);
+    margin: 0 0 4px 0;
+}
+.admin-stat-value {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: 28px;
+    line-height: 1;
+    margin: 0 0 4px 0;
+}
+.admin-stat-sub {
+    font-size: 10px;
+    color: rgb(107 114 128);
+    margin: 0;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 0.05em;
+}
+
+/* Card containers (charts, segments) */
+.admin-card {
+    background: rgba(17, 24, 39, 0.8);
+    border: 1px solid rgb(31 41 55);
+    border-radius: 12px;
+    padding: 16px;
+}
+.admin-card-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(46,219,153,0.8);
+    margin: 0 0 12px 0;
+}
+
+.admin-segment {
+    background: rgba(17, 24, 39, 0.8);
+    border: 1px solid;
+    border-radius: 12px;
+    padding: 14px 14px 12px 14px;
+}
+.admin-segment-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    background: rgba(46, 219, 153, 0.15);
+    border: 1px solid rgba(46, 219, 153, 0.5);
+    color: rgb(46 219 153);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 8px 10px;
+    border-radius: 6px;
+    transition: all 180ms;
+    cursor: pointer;
+}
+.admin-segment-btn:hover {
+    background: rgba(46, 219, 153, 0.3);
+    box-shadow: 0 0 12px rgba(46,219,153,0.25);
+}
+.admin-segment-btn-soft {
+    background: transparent;
+    border-color: rgba(255,255,255,0.15);
+    color: rgb(156 163 175);
+}
+.admin-segment-btn-soft:hover {
+    border-color: rgba(46, 219, 153, 0.4);
+    color: white;
+    background: transparent;
+}
+
+/* Filter chips */
+.admin-chip {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: rgb(31 41 55);
+    color: rgb(156 163 175);
+    border: 1px solid rgb(55 65 81);
+    transition: all 180ms;
+    text-decoration: none;
+}
+.admin-chip:hover { color: white; border-color: rgba(46,219,153,0.4); }
+.admin-chip-active {
+    background: rgb(46 219 153);
+    color: black;
+    border-color: rgb(46 219 153);
+    font-weight: 700;
+    box-shadow: 0 0 14px rgba(46,219,153,0.35);
+}
+</style>
+
+<!-- Chart.js (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+    // ── Broadcast modal ──────────────────────────────────────────────
+    const SEGMENT_LABEL = {
+        cold: 'cold (0 unplugs)',
+        sleeping: 'sleeping (1-4 unplugs)',
+        champions: 'champions (5+ unplugs)',
+        top10: 'top 10',
+        inactive_7d: 'inactive 7+ days',
+        never_visited: 'never opened dashboard',
+    };
+    function openBroadcast(segment, count) {
+        document.getElementById('broadcast-segment').value = segment;
+        document.getElementById('broadcast-segment-label').textContent = SEGMENT_LABEL[segment] || segment;
+        document.getElementById('broadcast-count').textContent = count;
+        document.getElementById('broadcast-modal').classList.remove('hidden');
+    }
+    function closeBroadcast() {
+        document.getElementById('broadcast-modal').classList.add('hidden');
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeBroadcast();
+    });
+
+    // ── Charts ───────────────────────────────────────────────────────
+    const CHART_DATA = {{ charts | tojson }};
+
+    Chart.defaults.color = '#9ca3af';
+    Chart.defaults.font.family = "'Share Tech Mono', 'Courier New', monospace";
+    Chart.defaults.font.size = 11;
+
+    // 1. Signups timeline (stacked bars: community + public)
+    new Chart(document.getElementById('chart-timeline'), {
+        type: 'bar',
+        data: {
+            labels: CHART_DATA.timeline.labels,
+            datasets: [
+                {label: 'community', data: CHART_DATA.timeline.community, backgroundColor: 'rgba(96,165,250,0.7)', borderColor: 'rgb(96,165,250)', borderWidth: 1, borderRadius: 4},
+                {label: 'public',    data: CHART_DATA.timeline.public,    backgroundColor: 'rgba(167,139,250,0.7)', borderColor: 'rgb(167,139,250)', borderWidth: 1, borderRadius: 4},
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: {position: 'bottom', labels: {boxWidth: 10, padding: 12}} },
+            scales: {
+                x: { stacked: true, grid: {display: false}, ticks: {maxRotation: 0, autoSkip: true, maxTicksLimit: 8} },
+                y: { stacked: true, beginAtZero: true, grid: {color: 'rgba(46,219,153,0.08)'}, ticks: {precision: 0} },
+            }
+        }
+    });
+
+    // 2. Unplug-count distribution (doughnut)
+    new Chart(document.getElementById('chart-distribution'), {
+        type: 'doughnut',
+        data: {
+            labels: CHART_DATA.distribution.labels.map(l => l + ' unplugs'),
+            datasets: [{
+                data: CHART_DATA.distribution.values,
+                backgroundColor: [
+                    'rgba(107,114,128,0.7)', 'rgba(234,179,8,0.7)', 'rgba(251,146,60,0.7)',
+                    'rgba(46,219,153,0.7)',  'rgba(46,219,153,0.95)',
+                ],
+                borderColor: 'rgba(0,0,0,0.4)',
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: {position: 'right', labels: {boxWidth: 10, padding: 8}} },
+        }
+    });
+
+    // 3. Funnel (horizontal bar — drops naturally)
+    new Chart(document.getElementById('chart-funnel'), {
+        type: 'bar',
+        data: {
+            labels: CHART_DATA.funnel.labels,
+            datasets: [{
+                data: CHART_DATA.funnel.values,
+                backgroundColor: [
+                    'rgba(46,219,153,0.95)', 'rgba(46,219,153,0.75)',
+                    'rgba(46,219,153,0.55)', 'rgba(46,219,153,0.35)',
+                ],
+                borderColor: 'rgba(46,219,153,1)',
+                borderWidth: 1,
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: {display: false} },
+            scales: {
+                x: { beginAtZero: true, grid: {color: 'rgba(46,219,153,0.08)'}, ticks: {precision: 0} },
+                y: { grid: {display: false} },
+            }
+        }
+    });
+</script>
 {% endblock %}

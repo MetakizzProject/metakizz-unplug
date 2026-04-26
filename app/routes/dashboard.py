@@ -34,6 +34,13 @@ def _guaranteed_reward_label(source):
 def show(code):
     ambassador = Ambassador.query.filter_by(dashboard_code=code).first_or_404()
 
+    # Engagement tracking: bump the visit counter on every GET. (POST requests
+    # — Instagram share, etc. — also count, since the user is interacting.)
+    from datetime import datetime, timezone
+    ambassador.last_dashboard_visit_at = datetime.now(timezone.utc)
+    ambassador.dashboard_visit_count = (ambassador.dashboard_visit_count or 0) + 1
+    db.session.commit()
+
     # Handle Instagram share self-report
     if request.method == "POST" and "instagram_share" in request.form:
         proof_url = request.form.get("instagram_url", "").strip()

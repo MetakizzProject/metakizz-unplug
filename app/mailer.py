@@ -43,11 +43,19 @@ def is_unsubscribed(ambassador):
     return getattr(ambassador, "unsubscribed_at", None) is not None
 
 
-def _send(to, subject, html, from_name=None):
+def _send(to, subject, html, from_name=None, *, template_key=None, ambassador=None):
     """Send an email via Resend. Returns True on success.
 
     from_name overrides the default sender display name for this single send
     (e.g. "Jesus & Anni" for the welcome email).
+
+    Optional kwargs:
+      template_key — logical name (welcome, activation_nudge, ...) for analytics.
+      ambassador   — the Ambassador the email is going to, to link the EmailEvent row.
+
+    When template_key is provided, every successful send writes an EmailEvent
+    row (event_type='sent'), and Resend's webhook later augments it with
+    'opened' / 'clicked' rows matched by resend_email_id.
     """
     api_key = os.getenv("RESEND_API_KEY")
     default_from = os.getenv("EMAIL_FROM", "MetaKizz <noreply@metakizzproject.com>")
@@ -79,6 +87,13 @@ def _send(to, subject, html, from_name=None):
         )
         if resp.status_code < 300:
             logger.info("Email sent to %s: %s", to, subject)
+            # Track this send in EmailEvent. Best-effort: failure here must
+            # not stop the email-send caller.
+            if template_key:
+                try:
+                    _record_send_event(resp, to, template_key, ambassador)
+                except Exception:
+                    logger.exception("failed to record EmailEvent for %s", to)
             return True
         else:
             logger.error("Email failed (%s) to %s: %s", resp.status_code, to, resp.text)
@@ -86,6 +101,29 @@ def _send(to, subject, html, from_name=None):
     except Exception as e:
         logger.error("Email exception to %s: %s", to, e)
         return False
+
+
+def _record_send_event(resp, to_email, template_key, ambassador):
+    """Insert a 'sent' row in email_events. Pulls Resend's email id from the
+    response so later webhook events ('opened', 'clicked', etc.) can match back.
+    """
+    from app.models import db, EmailEvent
+    resend_id = None
+    try:
+        body = resp.json()
+        if isinstance(body, dict):
+            resend_id = body.get("id")
+    except Exception:
+        pass
+    evt = EmailEvent(
+        ambassador_id=(ambassador.id if ambassador is not None else None),
+        template_key=template_key,
+        event_type="sent",
+        resend_email_id=resend_id,
+        to_email=to_email,
+    )
+    db.session.add(evt)
+    db.session.commit()
 
 
 def _wrap(content_html, app_url, preview_text=None, unsubscribe_url=None, unsubscribe_prominent=False):
@@ -213,6 +251,8 @@ def send_welcome_email(ambassador, app_url):
         "Welcome to Hacking the Urbankiz Code.",
         html,
         from_name="Jesus & Anni",
+        template_key="welcome",
+        ambassador=ambassador,
     )
 
 
@@ -258,6 +298,8 @@ def send_first_unplug_email(ambassador, referral_name, app_url):
         ambassador.email,
         f"{referral_first_name} is in.",
         html,
+        template_key="first_unplug",
+        ambassador=ambassador,
     )
 
 
@@ -325,6 +367,8 @@ def send_activation_nudge_email(ambassador, app_url):
         ambassador.email,
         "We drafted a message. Copy-paste if you want.",
         html,
+        template_key="activation_nudge",
+        ambassador=ambassador,
     )
 
 
@@ -356,6 +400,8 @@ def send_guaranteed_prize_email(ambassador, position, app_url):
         ambassador.email,
         "5 unplugs. Your reward is locked.",
         html,
+        template_key="guaranteed_prize",
+        ambassador=ambassador,
     )
 
 
@@ -382,6 +428,8 @@ def send_midway_reminder_email(ambassador, position, days_left, app_url):
         ambassador.email,
         "Halfway through. Here's where you stand.",
         html,
+        template_key="midway_reminder",
+        ambassador=ambassador,
     )
 
 
@@ -416,6 +464,8 @@ def send_final_48h_email(ambassador, position, gap_to_top3, app_url):
         ambassador.email,
         "48 hours to close.",
         html,
+        template_key="final_48h",
+        ambassador=ambassador,
     )
 
 
@@ -447,7 +497,7 @@ def send_last_6h_email(ambassador, app_url):
         unsubscribe_url=_unsubscribe_url(ambassador, app_url),
     )
 
-    return _send(ambassador.email, subject, html)
+    return _send(ambassador.email, subject, html, template_key="last_6h", ambassador=ambassador)
 
 
 # ─── EMAIL 8: RESULTS ANNOUNCEMENT ───────────────────────────────
@@ -476,6 +526,8 @@ def send_results_announcement_email(ambassador, total_ambassadors, total_unplugs
         ambassador.email,
         "The Unplugging is closed. Here's what happened.",
         html,
+        template_key="results",
+        ambassador=ambassador,
     )
 
 
@@ -534,7 +586,7 @@ def send_you_won_email(ambassador, position, app_url):
         unsubscribe_url=_unsubscribe_url(ambassador, app_url),
     )
 
-    return _send(ambassador.email, subject, html, from_name=from_name)
+    return _send(ambassador.email, subject, html, from_name=from_name, template_key="you_won", ambassador=ambassador)
 
 
 # ─── EMAIL 2 (LEGACY): FIRST REFERRAL ────────────────────────────

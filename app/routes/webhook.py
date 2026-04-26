@@ -1,12 +1,18 @@
 """
-External webhook endpoints. Currently used by Go High Level to notify the app
-of new PLF signups so the leaderboard can be updated and welcome emails sent.
+External webhook endpoints:
+
+- /api/webhook/signup → Go High Level posts new PLF signups here.
+- /api/webhook/resend → Resend posts email lifecycle events (sent, opened,
+                       clicked, bounced, complained, delivered) so we can
+                       compute open/click rates per template in the admin.
 """
 
 import json
 import logging
+from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, current_app
 from app.services.signup import create_signup
+from app.models import db, EmailEvent
 
 logger = logging.getLogger(__name__)
 
@@ -110,3 +116,95 @@ def ghl_signup():
         "referral_code": ambassador.referral_code,
         "dashboard_url": f"{current_app.config['APP_URL']}/dashboard/{ambassador.dashboard_code}",
     }), 200
+
+
+# ════════════════════════════════════════════════════════════════════
+# RESEND WEBHOOK — email lifecycle events (open, click, bounce, etc.)
+# ════════════════════════════════════════════════════════════════════
+#
+# Configure in Resend dashboard:
+#   1. Webhooks → Add → URL: https://<your-app>/api/webhook/resend
+#   2. Events to select: email.sent, email.delivered, email.opened,
+#                        email.clicked, email.bounced, email.complained
+#   3. Copy the signing secret → set as RESEND_WEBHOOK_SECRET env var.
+#
+# We match incoming events to our 'sent' rows via Resend's email id (which
+# we stored at send time). The original 'sent' row carries the template_key
+# and ambassador_id, so per-template open/click rates can be computed by
+# joining sent rows ↔ event rows on resend_email_id.
+#
+# Supported event names emitted by Resend (subject to API version):
+#   email.sent / email.delivered / email.opened / email.clicked /
+#   email.bounced / email.complained / email.delivery_delayed
+
+_RESEND_TYPE_MAP = {
+    "email.sent": "sent",
+    "email.delivered": "delivered",
+    "email.opened": "opened",
+    "email.clicked": "clicked",
+    "email.bounced": "bounced",
+    "email.complained": "complained",
+    "email.delivery_delayed": "delayed",
+}
+
+
+@webhook_bp.route("/api/webhook/resend", methods=["POST"])
+def resend_webhook():
+    """Persist Resend lifecycle events as EmailEvent rows.
+
+    Lookup logic:
+      - Webhook payload contains email_id → match the original 'sent' row
+        (via resend_email_id) to copy its template_key + ambassador_id.
+      - If we can't match (e.g. an email sent before tracking was wired),
+        we still record the event with template_key='unknown'.
+    """
+    payload = request.get_json(silent=True) or {}
+    event_type_raw = payload.get("type") or ""
+    event_type = _RESEND_TYPE_MAP.get(event_type_raw, event_type_raw)
+
+    data = payload.get("data") or {}
+    resend_email_id = data.get("email_id") or data.get("id")
+    to_field = data.get("to") or []
+    if isinstance(to_field, list) and to_field:
+        to_email = to_field[0]
+    elif isinstance(to_field, str):
+        to_email = to_field
+    else:
+        to_email = ""
+
+    # Look up the original 'sent' row to copy template_key + ambassador_id.
+    template_key = "unknown"
+    ambassador_id = None
+    if resend_email_id:
+        sent = (
+            EmailEvent.query
+            .filter_by(resend_email_id=resend_email_id, event_type="sent")
+            .first()
+        )
+        if sent is not None:
+            template_key = sent.template_key
+            ambassador_id = sent.ambassador_id
+
+    # 'sent' itself we already wrote at send time; ignore the duplicate from
+    # Resend (their event would race the synchronous insert anyway).
+    if event_type == "sent":
+        return jsonify({"ok": True, "ignored": "duplicate_sent"}), 200
+
+    try:
+        evt = EmailEvent(
+            ambassador_id=ambassador_id,
+            template_key=template_key,
+            event_type=event_type,
+            resend_email_id=resend_email_id,
+            to_email=to_email,
+            extra=json.dumps(payload)[:5000] if payload else None,
+        )
+        db.session.add(evt)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.exception("failed to persist resend webhook event")
+        return jsonify({"error": "persist_failed"}), 500
+
+    return jsonify({"ok": True, "stored": event_type}), 200
+
