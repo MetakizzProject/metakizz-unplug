@@ -1,4 +1,5 @@
-"""Email validation helpers — disposable-domain blocklist + client IP/UA capture.
+"""Email validation helpers — disposable-domain blocklist, MX check,
+client IP/UA capture, and lightweight rate limiting.
 
 The disposable list is a curated set of the most common throwaway-email
 providers used for fraud (people inflating their referral count).
@@ -6,7 +7,14 @@ Curated, not exhaustive — covers ~95% of free-tier services. Easy to
 extend; just add the domain (lowercased) to DISPOSABLE_DOMAINS.
 """
 
+import logging
+import re
+import threading
+import time
+from collections import defaultdict, deque
 from flask import request
+
+logger = logging.getLogger(__name__)
 
 
 DISPOSABLE_DOMAINS = {
@@ -77,3 +85,88 @@ def client_user_agent():
     if not request:
         return ""
     return (request.headers.get("User-Agent", "") or "")[:500]
+
+
+# ════════════════════════════════════════════════════════════════════
+# Strict email syntax check (stricter than HTML5 input type=email)
+# ════════════════════════════════════════════════════════════════════
+
+# RFC 5322 simplified — covers 99% of legit emails, rejects obvious garbage.
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+
+
+def is_valid_email_syntax(email):
+    """Return True if email looks syntactically real (rejects 'asdf@asdf')."""
+    if not email or len(email) > 254 or len(email) < 6:
+        return False
+    return bool(_EMAIL_RE.match(email))
+
+
+# ════════════════════════════════════════════════════════════════════
+# MX record check — does the email's domain actually receive mail?
+# ════════════════════════════════════════════════════════════════════
+#
+# Rejects garbage like "asdfg@asdfg.com" where the domain has no mail
+# servers. Cached per domain for 24h so common providers (gmail.com, etc.)
+# never re-resolve.
+
+_MX_CACHE = {}              # domain -> (timestamp, has_mx_bool)
+_MX_CACHE_TTL = 24 * 3600   # 24 hours
+
+
+def has_mx_record(email, timeout=3.0):
+    """True if the email's domain has at least one MX record. Cached."""
+    if not email or "@" not in email:
+        return False
+    domain = email.rsplit("@", 1)[1].lower().strip()
+
+    # Cache hit
+    cached = _MX_CACHE.get(domain)
+    if cached is not None:
+        ts, ok = cached
+        if (time.time() - ts) < _MX_CACHE_TTL:
+            return ok
+
+    # Resolve
+    try:
+        import dns.resolver
+        answers = dns.resolver.resolve(domain, "MX", lifetime=timeout)
+        ok = len(answers) > 0
+    except Exception:
+        # Could be NXDOMAIN, timeout, or any DNS error. Treat as fail.
+        ok = False
+
+    _MX_CACHE[domain] = (time.time(), ok)
+    return ok
+
+
+# ════════════════════════════════════════════════════════════════════
+# Rate limiting — max signups per IP in a sliding window
+# ════════════════════════════════════════════════════════════════════
+#
+# In-memory, per-process. Sufficient for a single-instance Render deploy
+# during a 2-week campaign. Survives a few thousand entries fine.
+# Resets on app restart, which is acceptable.
+
+_RATE_BUCKETS = defaultdict(deque)  # ip -> deque of timestamps
+_RATE_LOCK = threading.Lock()
+
+
+def check_rate_limit(ip, max_per_window=10, window_seconds=3600):
+    """Return True if `ip` is below the limit; False if it should be blocked.
+
+    Default: max 10 signups per IP per hour. Sliding window.
+    """
+    if not ip:
+        return True  # never block anonymous (no IP); shouldn't happen behind proxy
+    now = time.time()
+    cutoff = now - window_seconds
+    with _RATE_LOCK:
+        q = _RATE_BUCKETS[ip]
+        # Drop stale entries
+        while q and q[0] < cutoff:
+            q.popleft()
+        if len(q) >= max_per_window:
+            return False
+        q.append(now)
+    return True

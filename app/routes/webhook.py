@@ -102,6 +102,23 @@ def ghl_signup():
             "extracted": {"name": name, "email": email, "ref": ref_code},
         }), 400
 
+    # Email validation — same checks as /join, applied here so GHL-driven
+    # signups can't bypass the disposable/MX defences. We log + reject;
+    # GHL will retry on 4xx, so use 400 for permanent errors.
+    from app.services.email_validation import (
+        is_disposable_email, is_valid_email_syntax, has_mx_record,
+    )
+    email_lower = email.lower().strip()
+    if not is_valid_email_syntax(email_lower):
+        logger.warning("GHL webhook rejected: bad syntax email=%r", email)
+        return jsonify({"error": "invalid_email_syntax", "email": email}), 400
+    if is_disposable_email(email_lower):
+        logger.warning("GHL webhook rejected: disposable email=%r", email)
+        return jsonify({"error": "disposable_email", "email": email}), 400
+    if not has_mx_record(email_lower):
+        logger.warning("GHL webhook rejected: no MX record email=%r", email)
+        return jsonify({"error": "domain_no_mx", "email": email}), 400
+
     try:
         ambassador, was_new = create_signup(name, email, ref_code)
     except ValueError as e:

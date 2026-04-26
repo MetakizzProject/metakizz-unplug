@@ -40,21 +40,46 @@ def community():
 def join():
     """Public signup for anyone (Instagram, social media, etc.)."""
     if request.method == "POST":
-        from app.services.email_validation import is_disposable_email, client_ip, client_user_agent
+        from app.services.email_validation import (
+            is_disposable_email, is_valid_email_syntax, has_mx_record,
+            client_ip, client_user_agent, check_rate_limit,
+        )
 
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip().lower()
         instagram = request.form.get("instagram", "").strip().lstrip("@")
         ref_code = (request.args.get("ref") or request.form.get("ref") or "").strip()
 
+        # Honeypot: if a bot filled the trap field, silently accept (HTTP 200) but
+        # do nothing — bots think they succeeded, humans never see this field.
+        if request.form.get("website", "").strip() or request.form.get("phone_number", "").strip():
+            current_app.logger.warning("honeypot triggered on /join, IP=%s", client_ip())
+            return redirect(url_for("home.community"))
+
         if not name or not email:
             flash("Name and email are required.", "error")
             return render_template("join.html")
 
-        # Disposable / temp-mail blocklist — first line of defence against the
-        # obvious referral-fraud loop (Bad Actor signs up with mailinator emails).
+        # 1. Email syntax check (stricter than HTML5).
+        if not is_valid_email_syntax(email):
+            flash("That email doesn't look right. Double-check the spelling.", "error")
+            return render_template("join.html")
+
+        # 2. Disposable / temp-mail blocklist.
         if is_disposable_email(email):
             flash("Please use a real email address. Throwaway/temp-mail providers aren't accepted.", "error")
+            return render_template("join.html")
+
+        # 3. MX record check — domain must accept email.
+        if not has_mx_record(email):
+            flash("That email's domain doesn't accept mail. Please use a real email.", "error")
+            return render_template("join.html")
+
+        # 4. Rate limiting per IP.
+        ip_for_limit = client_ip()
+        if not check_rate_limit(ip_for_limit, max_per_window=10, window_seconds=3600):
+            current_app.logger.warning("rate limit hit on /join, IP=%s", ip_for_limit)
+            flash("Too many signups from this connection. Please try again in an hour.", "error")
             return render_template("join.html")
 
         existing = Ambassador.query.filter_by(email=email).first()
