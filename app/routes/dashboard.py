@@ -105,9 +105,10 @@ def show(code):
     landing_url = current_app.config["LANDING_URL"].rstrip("/")
     referral_url = f"{landing_url}?ref={ambassador.referral_code}"
 
-    # Global momentum counter: total people registered in the system (ambassadors +
-    # referrals of ambassadors who aren't ambassadors themselves yet).
-    total_joined = Ambassador.query.count() + Referral.query.count()
+    # Total unique people registered. Ambassador rows are 1:1 with humans —
+    # adding Referral rows here would double-count anyone who joined via a
+    # referral link (signup creates both an Ambassador and a Referral for them).
+    total_joined = Ambassador.query.count()
 
     return render_template(
         "dashboard.html",

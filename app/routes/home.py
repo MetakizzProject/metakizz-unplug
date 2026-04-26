@@ -22,7 +22,7 @@ def community():
         email = request.form.get("email", "").strip().lower()
         if not email:
             flash("Please enter your email.", "error")
-            total_count = Ambassador.query.count() + Referral.query.count()
+            total_count = Ambassador.query.count()
             return render_template("community.html", total_count=total_count)
 
         ambassador = Ambassador.query.filter_by(email=email).first()
@@ -32,7 +32,7 @@ def community():
             flash("No dashboard found for that email. Join the challenge instead!", "info")
             return redirect(url_for("home.join"))
 
-    total_count = Ambassador.query.count() + Referral.query.count()
+    total_count = Ambassador.query.count()
     return render_template("community.html", total_count=total_count)
 
 

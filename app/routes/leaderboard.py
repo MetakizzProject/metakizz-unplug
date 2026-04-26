@@ -62,7 +62,7 @@ def show(channel):
                     break
 
     # Context strip data
-    total_joined = Ambassador.query.count() + Referral.query.count()
+    total_joined = Ambassador.query.count()
     close_str = current_app.config.get("CAMPAIGN_CLOSE_ISO", "2026-05-07T19:00:00+02:00")
     try:
         close_dt = datetime.fromisoformat(close_str)
