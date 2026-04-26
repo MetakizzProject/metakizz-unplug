@@ -249,6 +249,8 @@ def index():
         segment_counts=segment_counts,
         charts=charts,
         email_stats=email_stats,
+        now_ts=datetime.now(timezone.utc),
+        tz_utc=timezone.utc,
     )
 
 
