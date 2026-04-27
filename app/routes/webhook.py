@@ -92,6 +92,17 @@ def ghl_signup():
 
     name, email, ref_code = _extract_signup_fields(payload)
 
+    # Honeypot check — if either trap field arrives non-empty, it's a bot.
+    # We accept (200) so the bot thinks it worked, but skip processing.
+    honeypot_website = _pluck(payload, "website")
+    honeypot_phone_number = _pluck(payload, "phone_number")
+    if honeypot_website or honeypot_phone_number:
+        logger.warning(
+            "honeypot triggered on /api/webhook/signup: website=%r phone_number=%r email=%r",
+            honeypot_website, honeypot_phone_number, email,
+        )
+        return jsonify({"ok": True, "ignored": "honeypot"}), 200
+
     if not name or not email:
         logger.warning(
             "GHL webhook missing fields after extraction: name=%r email=%r ref=%r",
