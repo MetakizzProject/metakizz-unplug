@@ -3,7 +3,7 @@
 {% block title %}A drafted message — copy-paste if you want{% endblock %}
 {% block preheader %}Send to one dancer who should be at this training.{% endblock %}
 {% block header_left %}METAKIZZ // NUDGE.001{% endblock %}
-{% block header_right %}REFERRALS: <span style="color:#FFC857;">0</span>{% endblock %}
+{% block header_right %}REFERRALS: <span style="color:#FFC857;">{{ '%02d' % count }}</span>{% endblock %}
 
 {% block content %}
 
@@ -17,7 +17,48 @@
     <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.6;margin:14px 0 0 0;">
       Your link's been live for <strong>2 days</strong>. Quiet so far.
     </p>
-    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.65;margin:14px 0 0 0;">
+  </td>
+</tr>
+</table>
+
+<!-- The reward at stake — what they're missing -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:18px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a1f15" style="background:#0a1f15;border:2px solid #2EDB99;border-radius:10px;">
+    <tr>
+      <td style="padding:18px 22px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 8px 0;">
+          ▌ The reward you're {{ '%02d' % remaining_to_5 }} dancers away from
+        </p>
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:18px;line-height:1.35;margin:0 0 6px 0;text-shadow:0 0 12px rgba(46,219,153,0.5);">
+          {% if community %}
+          1 month of MetaDancers, free
+          {% else %}
+          Live musicality masterclass with Jesus &amp; Anni
+          {% endif %}
+        </p>
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:13px;line-height:1.55;margin:0 0 12px 0;">
+          {% if community %}
+          €30+ value · locked the moment you hit 5 unplugs.
+          {% else %}
+          €97 value · locked the moment you hit 5 unplugs.
+          {% endif %}
+        </p>
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:14px;letter-spacing:1.5px;text-transform:uppercase;margin:0;text-shadow:0 0 10px rgba(46,219,153,0.4);">
+          → {{ remaining_to_5 }} dancer{{ 's' if remaining_to_5 != 1 else '' }} between you and that.
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:18px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.65;margin:0;">
       In case you're not sure what to write, here's a message you can copy and paste to one dancer who should be at this training:
     </p>
   </td>

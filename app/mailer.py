@@ -354,9 +354,14 @@ def send_activation_nudge_email(ambassador, app_url):
         f"2 videos + 1 live. Thought of you. {referral_url}"
     )
 
+    count = ambassador.referral_count
+    remaining_to_5 = max(0, 5 - count)
     html = render_template(
         "emails/activation_nudge.html",
         first_name=_first_name(ambassador),
+        community=(ambassador.source == "community"),
+        count=count,
+        remaining_to_5=remaining_to_5,
         referral_url=referral_url,
         whatsapp_url=_whatsapp_share_url(wa_message),
         dashboard_url=f"{app_url}/dashboard/{ambassador.dashboard_code}",
