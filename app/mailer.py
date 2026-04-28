@@ -43,11 +43,12 @@ def is_unsubscribed(ambassador):
     return getattr(ambassador, "unsubscribed_at", None) is not None
 
 
-def _send(to, subject, html, from_name=None, *, template_key=None, ambassador=None):
+def _send(to, subject, html, from_name="MetaKizz Project", *, template_key=None, ambassador=None):
     """Send an email via Resend. Returns True on success.
 
-    from_name overrides the default sender display name for this single send
-    (e.g. "Jesus & Anni" for the welcome email).
+    Default sender display name is "MetaKizz Project" (consistent across all
+    transactional emails — Gmail/Outlook use this for inbox classification).
+    Pass from_name to override (e.g. an internal-style send).
 
     Optional kwargs:
       template_key — logical name (welcome, activation_nudge, ...) for analytics.
@@ -250,7 +251,6 @@ def send_welcome_email(ambassador, app_url):
         ambassador.email,
         "Welcome to Hacking the Urbankiz Code.",
         html,
-        from_name="Jesus & Anni",
         template_key="welcome",
         ambassador=ambassador,
     )
@@ -574,9 +574,6 @@ def send_you_won_email(ambassador, position, app_url):
     else:
         subject = f"You finished {position_text} in The Unplugging."
 
-    # Sign-off override for rama 2 1st place
-    from_name = "Jesus & Anni" if (rama == 2 and position == 1) else None
-
     html = render_template(
         "emails/you_won.html",
         first_name=_first_name(ambassador),
@@ -591,7 +588,7 @@ def send_you_won_email(ambassador, position, app_url):
         unsubscribe_url=_unsubscribe_url(ambassador, app_url),
     )
 
-    return _send(ambassador.email, subject, html, from_name=from_name, template_key="you_won", ambassador=ambassador)
+    return _send(ambassador.email, subject, html, template_key="you_won", ambassador=ambassador)
 
 
 # ─── EMAIL 2 (LEGACY): FIRST REFERRAL ────────────────────────────
