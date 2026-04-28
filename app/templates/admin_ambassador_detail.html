@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}{{ amb.name }} · Admin Detail{% endblock %}
+
+{% block nav_right %}{% endblock %}
+
+{% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+<div class="max-w-5xl mx-auto px-4 pt-4 pb-12">
+
+    <!-- ─── TERMINAL HEADER ─── -->
+    <div class="flex items-center justify-between mb-3 font-mono-term text-[10px] tracking-[0.25em] uppercase">
+        <span class="text-brand-400/80"><span class="text-brand-400">▌</span> METAKIZZ // INSPECT.AMBASSADOR</span>
+        <a href="{{ url_for('admin.index') }}" class="text-gray-500 hover:text-brand-400 transition">← BACK TO ADMIN</a>
+    </div>
+
+    <!-- ─── PROFILE HEADER ─── -->
+    <div class="flex items-start gap-4 mb-5 flex-wrap">
+        {% if amb.profile_picture_url %}
+        <img src="{{ amb.profile_picture_url }}" alt="" class="w-16 h-16 rounded-full object-cover ring-2 ring-brand-400/40 flex-shrink-0">
+        {% else %}
+        <div class="w-16 h-16 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-2xl font-orbitron font-black ring-2 ring-brand-400/40 flex-shrink-0">
+            {{ amb.name[0]|upper }}
+        </div>
+        {% endif %}
+        <div class="flex-1 min-w-0">
+            <h1 class="text-2xl font-display font-bold leading-tight">{{ amb.name }}</h1>
+            <p class="font-mono-term text-xs tracking-wider text-gray-400 mt-1">{{ amb.email }}</p>
+            <div class="flex gap-2 mt-2 flex-wrap">
+                <span class="font-mono-term text-[10px] tracking-wider uppercase px-2 py-0.5 rounded {% if amb.source == 'community' %}bg-blue-900/40 text-blue-300 border border-blue-500/30{% else %}bg-purple-900/40 text-purple-300 border border-purple-500/30{% endif %}">
+                    {{ amb.source }}
+                </span>
+                {% if amb.unsubscribed_at %}
+                <span class="font-mono-term text-[10px] tracking-wider uppercase px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700">
+                    opt-out · {{ amb.unsubscribed_at.strftime('%b %d') }}
+                </span>
+                {% endif %}
+                {% if amb.instagram_handle %}
+                <span class="font-mono-term text-[10px] tracking-wider uppercase px-2 py-0.5 rounded bg-pink-900/30 text-pink-300 border border-pink-500/30">
+                    @{{ amb.instagram_handle }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            <a href="{{ url_for('dashboard.show', code=amb.dashboard_code) }}" target="_blank" class="admin-nav-btn">↗ Public dashboard</a>
+            <form method="POST" action="{{ url_for('admin.reset_ambassador', ambassador_id=amb.id) }}" class="inline"
+                  onsubmit="return confirm('Reset {{ amb.name|e }} to 0 referrals?\n\nDeletes their {{ amb.referral_count }} referral(s).');">
+                <button type="submit" class="admin-nav-btn admin-nav-warn">Reset to 0</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.delete_ambassador', ambassador_id=amb.id) }}" class="inline"
+                  onsubmit="return confirm('DELETE {{ amb.name|e }} ({{ amb.email|e }})?\n\nIrreversible.');">
+                <button type="submit" class="admin-nav-btn admin-nav-danger">Delete</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ─── QUICK STATS ─── -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div class="admin-stat">
+            <p class="admin-stat-label">// UNPLUGS</p>
+            <p class="admin-stat-value {% if amb.referral_count >= 5 %}text-brand-400{% elif amb.referral_count > 0 %}text-yellow-400{% else %}text-gray-500{% endif %}"
+               {% if amb.referral_count >= 5 %}style="text-shadow: 0 0 14px rgba(46,219,153,0.5);"{% endif %}>
+                {{ amb.referral_count }}
+            </p>
+            <p class="admin-stat-sub">people unplugged</p>
+        </div>
+        <div class="admin-stat">
+            <p class="admin-stat-label">// VISITS</p>
+            <p class="admin-stat-value text-cyan-300">{{ amb.dashboard_visit_count or 0 }}</p>
+            <p class="admin-stat-sub">
+                {% if amb.last_dashboard_visit_at %}
+                last {{ amb.last_dashboard_visit_at.strftime('%b %d') }}
+                {% else %}
+                never opened
+                {% endif %}
+            </p>
+        </div>
+        <div class="admin-stat">
+            <p class="admin-stat-label">// JOINED</p>
+            <p class="admin-stat-value text-white">{{ amb.created_at.strftime('%b %d') }}</p>
+            <p class="admin-stat-sub">{{ amb.created_at.strftime('%H:%M') }}</p>
+        </div>
+        <div class="admin-stat">
+            <p class="admin-stat-label">// RISK</p>
+            {% if risk.level == 'high' %}
+            <p class="admin-stat-value text-red-400" style="text-shadow: 0 0 12px rgba(220,38,38,0.5);">⚠ {{ risk.score }}%</p>
+            <p class="admin-stat-sub">{{ risk.reason }}</p>
+            {% elif risk.level == 'watch' %}
+            <p class="admin-stat-value text-yellow-400">👀 {{ risk.score }}%</p>
+            <p class="admin-stat-sub">{{ risk.reason }}</p>
+            {% else %}
+            <p class="admin-stat-value text-brand-400">✓</p>
+            <p class="admin-stat-sub">no clusters</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ─── EMAIL TIMELINE ─── -->
+    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-2">▌ EMAIL TIMELINE</p>
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden mb-6">
+        {% if emails_summary %}
+        <table class="w-full text-sm">
+            <thead class="border-b border-gray-800">
+                <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                    <th class="text-left px-4 py-2.5 font-bold">Template</th>
+                    <th class="text-center px-4 py-2.5 font-bold">Sent</th>
+                    <th class="text-center px-4 py-2.5 font-bold">Delivered</th>
+                    <th class="text-center px-4 py-2.5 font-bold">Opened</th>
+                    <th class="text-center px-4 py-2.5 font-bold">Clicked</th>
+                    <th class="text-center px-4 py-2.5 font-bold">Bounced</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tpl_key, events in emails_summary %}
+                <tr class="border-b border-gray-800/50 last:border-0">
+                    <td class="px-4 py-2.5 font-semibold text-white font-mono-term tracking-wider">{{ tpl_key }}</td>
+                    {% for et in ['sent', 'delivered', 'opened', 'clicked', 'bounced'] %}
+                    <td class="px-4 py-2.5 text-center">
+                        {% set ev = events.get(et) %}
+                        {% if ev %}
+                        <span class="text-{% if et == 'bounced' %}red{% else %}brand{% endif %}-400 font-mono-term text-[10px]" title="{{ ev.created_at.strftime('%Y-%m-%d %H:%M UTC') }}">
+                            ✓ {{ ev.created_at.strftime('%b %d') }}
+                        </span>
+                        {% else %}
+                        <span class="text-gray-700">—</span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="p-6 text-center">
+            <p class="font-mono-term text-xs tracking-wider text-gray-500 mb-1">&gt; NO EMAIL EVENTS RECORDED</p>
+            <p class="text-xs text-gray-500">
+                Either no emails have been sent to this person yet, or sends happened before EmailEvent tracking was wired (Apr 27).
+                Open/click events also require the Resend webhook to be configured.
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ─── REFERRALS LIST ─── -->
+    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-2">
+        ▌ REFERRALS · {{ referrals|length }} {{ 'PERSON' if referrals|length == 1 else 'PEOPLE' }}
+        {% if risk.level != 'clean' %}
+        <span class="ml-2 risk-badge risk-{{ risk.level }}">⚠ {{ risk.reason }}</span>
+        {% endif %}
+    </p>
+
+    {% if ip_clusters %}
+    <!-- IP cluster summary (only show if there are repeats) -->
+    <div class="bg-red-900/15 border border-red-500/30 rounded-xl p-3 mb-3">
+        <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-red-300 mb-2">▌ IP CLUSTERS DETECTED</p>
+        <div class="space-y-1.5">
+            {% for ip, refs in ip_clusters.items() %}
+            <div class="flex items-center gap-3 text-xs">
+                <span class="font-mono-term tracking-wider text-red-300 bg-red-900/30 px-2 py-0.5 rounded border border-red-500/30">{{ ip }}</span>
+                <span class="text-white font-bold">{{ refs|length }}× referrals</span>
+                <span class="text-gray-500 truncate">{{ refs|map(attribute='email')|join(', ') }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        <p class="text-[11px] text-red-300/70 mt-2 italic">
+            ≥2 of their referrals registered from the same IP. Real cases (couples/family on same wifi) typically max at 1-2 same-IP entries; clusters of 3+ are highly suspicious.
+        </p>
+    </div>
+    {% endif %}
+
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden mb-6">
+        {% if referrals %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="border-b border-gray-800">
+                    <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                        <th class="text-left px-4 py-2.5 font-bold">#</th>
+                        <th class="text-left px-4 py-2.5 font-bold">Name</th>
+                        <th class="text-left px-4 py-2.5 font-bold">Email</th>
+                        <th class="text-left px-4 py-2.5 font-bold">When</th>
+                        <th class="text-left px-4 py-2.5 font-bold">IP</th>
+                        <th class="text-left px-4 py-2.5 font-bold hidden lg:table-cell">User-Agent</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ref in referrals %}
+                    {% set ip_repeated = ref.signup_ip and ip_buckets.get(ref.signup_ip, [])|length > 1 %}
+                    <tr class="border-b border-gray-800/50 last:border-0 hover:bg-brand-400/5 {% if ip_repeated %}bg-red-900/10{% endif %}">
+                        <td class="px-4 py-2.5 text-gray-600 font-orbitron font-black text-xs">{{ '%02d' % loop.index }}</td>
+                        <td class="px-4 py-2.5 text-white font-semibold">{{ ref.name }}</td>
+                        <td class="px-4 py-2.5 text-gray-400 font-mono-term text-xs">{{ ref.email }}</td>
+                        <td class="px-4 py-2.5 text-gray-400 text-xs font-mono-term">
+                            {{ ref.registered_at.strftime('%b %d · %H:%M') }}
+                        </td>
+                        <td class="px-4 py-2.5 text-xs font-mono-term">
+                            {% if ref.signup_ip %}
+                                <span class="{% if ip_repeated %}text-red-300 font-bold{% else %}text-cyan-300{% endif %}" title="Click to filter (not implemented)">
+                                    {{ ref.signup_ip }}
+                                </span>
+                                {% if ip_repeated %}
+                                <span class="ml-1 text-[10px] text-red-400">×{{ ip_buckets[ref.signup_ip]|length }}</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-gray-700">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2.5 text-xs text-gray-500 hidden lg:table-cell font-mono-term truncate max-w-xs" title="{{ ref.signup_user_agent or '' }}">
+                            {{ (ref.signup_user_agent or '—')[:60] }}{% if ref.signup_user_agent and ref.signup_user_agent|length > 60 %}…{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center">
+            <p class="font-mono-term text-xs tracking-wider text-gray-500">&gt; NO REFERRALS YET</p>
+            <p class="text-xs text-gray-500 mt-1">This ambassador hasn't unplugged anyone.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ─── METADATA ─── -->
+    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-2">▌ METADATA</p>
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-4 mb-6 space-y-1 text-xs font-mono-term">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
+            <p><span class="text-brand-400/70">// referral_code:</span> <span class="text-white">{{ amb.referral_code }}</span></p>
+            <p><span class="text-brand-400/70">// dashboard_code:</span> <span class="text-white">{{ amb.dashboard_code }}</span></p>
+            <p><span class="text-brand-400/70">// signup_ip:</span> <span class="text-white">{{ amb.signup_ip or '—' }}</span></p>
+            <p><span class="text-brand-400/70">// signup_user_agent:</span> <span class="text-white truncate inline-block max-w-xs align-bottom" title="{{ amb.signup_user_agent or '' }}">{{ (amb.signup_user_agent or '—')[:50] }}{% if amb.signup_user_agent and amb.signup_user_agent|length > 50 %}…{% endif %}</span></p>
+            <p><span class="text-brand-400/70">// welcome_sent_at:</span> <span class="text-white">{{ amb.welcome_sent_at.strftime('%Y-%m-%d %H:%M') if amb.welcome_sent_at else '—' }}</span></p>
+            <p><span class="text-brand-400/70">// shared_on_instagram:</span> <span class="text-white">{{ 'yes' if amb.shared_on_instagram else 'no' }}</span></p>
+        </div>
+    </div>
+
+</div>
+
+<style>
+.font-mono-term { font-family: 'Share Tech Mono', 'Courier New', monospace; }
+.font-orbitron  { font-family: 'Orbitron', 'Arial Black', sans-serif; }
+
+.admin-nav-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(31, 41, 55, 0.6);
+    border: 1px solid rgba(46, 219, 153, 0.2);
+    color: rgb(229 231 235);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 6px 12px;
+    border-radius: 8px;
+    transition: all 180ms;
+    text-decoration: none;
+    cursor: pointer;
+}
+.admin-nav-btn:hover { border-color: rgba(46,219,153,0.5); background: rgba(46,219,153,0.1); color: white; }
+.admin-nav-warn { border-color: rgba(234,179,8,0.4); color: rgb(253,224,71); background: rgba(133,77,14,0.2); }
+.admin-nav-warn:hover { background: rgba(133,77,14,0.4); color: white; }
+.admin-nav-danger { border-color: rgba(220,38,38,0.4); color: rgb(252,165,165); background: rgba(127,29,29,0.2); }
+.admin-nav-danger:hover { background: rgba(127,29,29,0.4); color: white; }
+
+.admin-stat { background: rgba(17, 24, 39, 0.8); border: 1px solid rgba(46, 219, 153, 0.2); border-radius: 12px; padding: 12px 14px; }
+.admin-stat-label { font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(46,219,153,0.7); margin: 0 0 4px 0; }
+.admin-stat-value { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 24px; line-height: 1; margin: 0 0 4px 0; }
+.admin-stat-sub { font-size: 10px; color: rgb(107 114 128); margin: 0; font-family: 'Share Tech Mono', monospace; letter-spacing: 0.05em; }
+
+.risk-badge { display: inline-block; font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 6px; border: 1px solid; }
+.risk-high { background: rgba(220, 38, 38, 0.15); color: rgb(252, 165, 165); border-color: rgba(220, 38, 38, 0.5); }
+.risk-watch { background: rgba(234, 179, 8, 0.12); color: rgb(253, 224, 71); border-color: rgba(234, 179, 8, 0.4); }
+.risk-clean { background: rgba(46, 219, 153, 0.1); color: rgb(46, 219, 153); border-color: rgba(46, 219, 153, 0.3); }
+</style>
+{% endblock %}

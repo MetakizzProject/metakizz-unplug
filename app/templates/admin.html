@@ -388,8 +388,11 @@
                         </td>
                         <td class="px-4 py-3">
                             <div class="flex items-center gap-2 text-xs font-mono-term">
+                                <a href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}"
+                                   class="text-brand-400 hover:text-brand-300 transition" title="Inspect IPs / emails / referrals">Inspect</a>
+                                <span class="text-gray-700">|</span>
                                 <a href="{{ url_for('dashboard.show', code=amb.dashboard_code) }}" target="_blank"
-                                   class="text-brand-400 hover:text-brand-300 transition">View</a>
+                                   class="text-cyan-400 hover:text-cyan-300 transition">↗</a>
                                 <span class="text-gray-700">|</span>
                                 <form method="POST"
                                       action="{{ url_for('admin.reset_ambassador', ambassador_id=amb.id, channel=channel) }}"

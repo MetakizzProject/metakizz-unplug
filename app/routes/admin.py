@@ -846,6 +846,82 @@ def backfill_guaranteed():
     return redirect(url_for("admin.index"))
 
 
+@admin_bp.route("/ambassador/<int:ambassador_id>")
+def ambassador_detail(ambassador_id):
+    """Per-ambassador deep dive: profile, email timeline, referrals with IP
+    clusters, dashboard visit history. The single place to investigate
+    a suspicious ambassador or answer "what happened with this person".
+    """
+    amb = Ambassador.query.get_or_404(ambassador_id)
+
+    referrals = (
+        Referral.query
+        .filter_by(ambassador_id=amb.id)
+        .order_by(Referral.registered_at.desc())
+        .all()
+    )
+
+    email_events = (
+        EmailEvent.query
+        .filter_by(ambassador_id=amb.id)
+        .order_by(EmailEvent.created_at.desc())
+        .all()
+    )
+
+    # Group email events per template, then per event_type, so the template
+    # can render rows like:
+    #   welcome:  sent ✓ · opened ✓ · clicked —
+    #   activation_nudge: sent ✓ · opened —
+    emails_by_template = {}
+    for e in email_events:
+        bucket = emails_by_template.setdefault(e.template_key, {
+            "sent": None, "delivered": None, "opened": None,
+            "clicked": None, "bounced": None, "complained": None,
+        })
+        # Keep the EARLIEST occurrence of each event type (first sent, first opened, etc.)
+        if e.event_type in bucket and bucket[e.event_type] is None:
+            bucket[e.event_type] = e
+    # Convert into a sortable list ordered by 'sent' time desc
+    template_order = [
+        "welcome", "first_unplug", "activation_nudge", "guaranteed_prize",
+        "midway_reminder", "final_48h", "last_6h", "results", "you_won", "broadcast",
+    ]
+    emails_summary = []
+    for key in template_order:
+        if key in emails_by_template:
+            emails_summary.append((key, emails_by_template[key]))
+    # Append unknown templates at end
+    for key, value in emails_by_template.items():
+        if key not in template_order:
+            emails_summary.append((key, value))
+
+    # IP cluster breakdown — what IPs are repeated across this ambassador's referrals?
+    ip_buckets = {}
+    ua_buckets = {}
+    for ref in referrals:
+        if ref.signup_ip:
+            ip_buckets.setdefault(ref.signup_ip, []).append(ref)
+        if ref.signup_user_agent:
+            ua_buckets.setdefault(ref.signup_user_agent, []).append(ref)
+    # Keep only IPs with >1 referral (the suspicious clusters)
+    ip_clusters = {ip: refs for ip, refs in ip_buckets.items() if len(refs) > 1}
+
+    risk = _compute_suspicion(amb)
+
+    return render_template(
+        "admin_ambassador_detail.html",
+        amb=amb,
+        referrals=referrals,
+        email_events=email_events,
+        emails_summary=emails_summary,
+        risk=risk,
+        ip_clusters=ip_clusters,
+        ip_buckets=ip_buckets,
+        ua_buckets=ua_buckets,
+        now_ts=datetime.now(timezone.utc),
+    )
+
+
 @admin_bp.route("/ambassadors/<int:ambassador_id>/reset", methods=["POST"])
 def reset_ambassador(ambassador_id):
     """Per-ambassador reset: delete only this ambassador's referrals + milestone notifs.
