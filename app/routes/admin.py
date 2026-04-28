@@ -670,6 +670,7 @@ def test_email():
             pass
 
         fake = FakeAmbassador()
+        fake.id = None  # so EmailEvent rows from tests use ambassador_id=NULL (no real-user pollution)
         fake.name = ambassador.name or "Tester"
         fake.email = to_email
         fake.referral_code = ambassador.referral_code
