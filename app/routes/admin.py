@@ -1,6 +1,7 @@
 import csv
 import io
 import logging
+import threading
 from collections import defaultdict
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
@@ -332,29 +333,58 @@ def index():
 # ════════════════════════════════════════════════════════════════════
 
 # Templated emails available for one-click "send to segment" actions.
-# Maps a logical name → (mailer fn, segment-key default, idempotency-flag attr).
+# Maps a logical name → (mailer fn, segment-key default, idempotency-flag attr,
+# label, min_age_days). min_age_days mirrors the cron-driven dispatch logic so
+# manual sends from admin behave identically to automatic sends.
 _SEGMENT_TEMPLATES = {
     "activation_nudge": {
         "fn": send_activation_nudge_email,
         "default_segment": "cold",
         "flag": "activation_nudge_sent_at",
         "label": "Activation nudge",
+        "min_age_days": 2,  # don't pester ambassadors registered in the last 48h
     },
     "midway_reminder": {
         "fn": send_midway_reminder_email,
         "default_segment": "sleeping",
         "flag": "midway_sent_at",
         "label": "Midway reminder",
+        "min_age_days": 7,  # midway reminder only for those ≥7 days in
     },
 }
+
+
+# Per-template lock to guarantee only ONE background send runs per template at
+# a time. If a user clicks twice while a send is in flight, the second click
+# returns immediately with an "already in progress" message instead of starting
+# a parallel thread that could double-send to the small race window between
+# "check sent_at" and "set sent_at".
+_SEGMENT_SEND_LOCKS = {}
+_SEGMENT_SEND_LOCKS_GUARD = threading.Lock()
+
+
+def _get_segment_send_lock(key):
+    with _SEGMENT_SEND_LOCKS_GUARD:
+        if key not in _SEGMENT_SEND_LOCKS:
+            _SEGMENT_SEND_LOCKS[key] = threading.Lock()
+        return _SEGMENT_SEND_LOCKS[key]
 
 
 @admin_bp.route("/segment/<segment_name>/send-template", methods=["POST"])
 def segment_send_template(segment_name):
     """Send one of the pre-built emails to every ambassador in a segment.
 
-    Segment is computed live, then we filter to opted-in + (optionally) skip
-    anyone who already received this template (via the *_sent_at flag).
+    Two safeguards layered together:
+      1. Per-template lock — only one background send for a given template
+         can be in flight at any time. A second click is rejected, so a
+         double-click can never produce duplicate emails.
+      2. *_sent_at idempotency flag — within a thread, every ambassador is
+         re-checked just before send. Already-sent ones are skipped.
+      3. min_age_days filter — recently-registered ambassadors (less than
+         N days since signup) are NOT pestered, mirroring cron logic.
+
+    Sends in a background thread so the HTTP request doesn't hit Render's
+    gunicorn worker timeout (~30s) when the segment has hundreds of targets.
     """
     template_key = request.form.get("template", "")
     cfg = _SEGMENT_TEMPLATES.get(template_key)
@@ -369,37 +399,107 @@ def segment_send_template(segment_name):
         flash(f"No ambassadors in segment '{segment_name}'.", "info")
         return redirect(url_for("admin.index"))
 
-    # Skip anyone who already got this email
     flag = cfg["flag"]
-    targets = [a for a in targets if getattr(a, flag, None) is None]
-
-    app_url = current_app.config["APP_URL"]
+    label = cfg["label"]
     fn = cfg["fn"]
+    min_age_days = cfg.get("min_age_days", 0)
 
-    sent, failed = 0, 0
-    for amb in targets:
+    # Filter 1: already-sent
+    eligible = [a for a in targets if getattr(a, flag, None) is None]
+    skipped_already_sent = len(targets) - len(eligible)
+
+    # Filter 2: too recently registered (< min_age_days)
+    skipped_too_new = 0
+    if min_age_days:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=min_age_days)
+
+        def _old_enough(a):
+            c = a.created_at
+            if c is None:
+                return False
+            if c.tzinfo is None:
+                c = c.replace(tzinfo=timezone.utc)
+            return c <= cutoff
+
+        old_enough = [a for a in eligible if _old_enough(a)]
+        skipped_too_new = len(eligible) - len(old_enough)
+        eligible = old_enough
+
+    if not eligible:
+        flash(
+            f"{label}: nothing to send. {skipped_already_sent} already received, "
+            f"{skipped_too_new} too recent (<{min_age_days} days since signup).",
+            "info",
+        )
+        return redirect(url_for("admin.index"))
+
+    # Concurrency lock — refuse second click while a send is in flight
+    lock = _get_segment_send_lock(template_key)
+    if not lock.acquire(blocking=False):
+        flash(
+            f"{label}: already sending in background. Wait a few minutes and refresh "
+            f"to see how many got sent.",
+            "info",
+        )
+        return redirect(url_for("admin.index"))
+
+    target_ids = [a.id for a in eligible]
+    app = current_app._get_current_object()
+    app_url = current_app.config["APP_URL"]
+
+    def background_send():
         try:
-            # Some templates need extra args (rank, days_left, etc.). Use safe defaults.
-            if template_key == "midway_reminder":
-                ok = fn(amb, position=None, days_left=None, app_url=app_url)
-            else:
-                ok = fn(amb, app_url)
-            if ok:
-                setattr(amb, flag, datetime.now(timezone.utc))
-                db.session.commit()
-                sent += 1
-            else:
-                failed += 1
-        except Exception:
-            logger.exception("segment send failed for %s", amb.email)
-            failed += 1
+            with app.app_context():
+                from app.models import db, Ambassador
+                sent_count = failed_count = skipped_in_thread = 0
+                for amb_id in target_ids:
+                    amb = Ambassador.query.get(amb_id)
+                    if amb is None:
+                        continue
+                    if getattr(amb, flag, None) is not None:
+                        # Race-safe: another thread (or admin click) flipped this
+                        # flag while we were processing. Skip silently.
+                        skipped_in_thread += 1
+                        continue
+                    try:
+                        if template_key == "midway_reminder":
+                            ok = fn(amb, position=None, days_left=None, app_url=app_url)
+                        else:
+                            ok = fn(amb, app_url)
+                        if ok:
+                            setattr(amb, flag, datetime.now(timezone.utc))
+                            db.session.commit()
+                            sent_count += 1
+                        else:
+                            failed_count += 1
+                    except Exception:
+                        db.session.rollback()
+                        logger.exception("bg send failed for ambassador_id=%d", amb_id)
+                        failed_count += 1
+                logger.warning(
+                    "BG segment send DONE: segment=%s template=%s sent=%d failed=%d "
+                    "skipped_inthread=%d total_queued=%d",
+                    segment_name, template_key, sent_count, failed_count,
+                    skipped_in_thread, len(target_ids),
+                )
+        finally:
+            lock.release()
+
+    thread = threading.Thread(target=background_send, daemon=True)
+    thread.start()
 
     flash(
-        f"{cfg['label']}: sent {sent}, failed {failed}, skipped {len(segments[segment_name]) - len(targets)} (already received).",
-        "success" if sent else "info",
+        f"{label}: started sending to {len(eligible)} ambassadors in background "
+        f"(skipped {skipped_already_sent} already received, "
+        f"{skipped_too_new} too recent <{min_age_days} days). "
+        f"Refresh /admin in 3-5 min for progress.",
+        "success",
     )
-    logger.warning("ADMIN segment send: segment=%s template=%s sent=%d failed=%d",
-                   segment_name, template_key, sent, failed)
+    logger.warning(
+        "ADMIN segment send STARTED: segment=%s template=%s eligible=%d "
+        "skipped_sent=%d skipped_new=%d",
+        segment_name, template_key, len(eligible), skipped_already_sent, skipped_too_new,
+    )
     return redirect(url_for("admin.index"))
 
 
