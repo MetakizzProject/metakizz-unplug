@@ -66,6 +66,23 @@
                 </span>
                 {% endif %}
             </div>
+            {% if invited_by %}
+            <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-500 mt-2">
+                ▸ INVITED BY
+                <a href="{{ url_for('admin.ambassador_detail', ambassador_id=invited_by.id) }}"
+                   class="text-brand-400 hover:text-brand-300 normal-case font-bold tracking-normal">
+                    {{ invited_by.name }}
+                </a>
+                <span class="text-gray-600">· {{ invited_by.email }}</span>
+                {% if invited_by_referral and invited_by_referral.registered_at %}
+                <span class="text-gray-600">· {{ invited_by_referral.registered_at.strftime('%b %d') }}</span>
+                {% endif %}
+            </p>
+            {% else %}
+            <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-600 mt-2">
+                ▸ INVITED BY <span class="text-gray-700">— direct signup, no referrer</span>
+            </p>
+            {% endif %}
         </div>
         <div class="flex gap-2 flex-wrap">
             <a href="{{ url_for('dashboard.show', code=amb.dashboard_code) }}" target="_blank" class="admin-nav-btn">↗ Public dashboard</a>
@@ -168,12 +185,55 @@
     </div>
 
     <!-- ─── REFERRALS LIST ─── -->
-    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-2">
-        ▌ REFERRALS · {{ referrals|length }} {{ 'PERSON' if referrals|length == 1 else 'PEOPLE' }}
-        {% if risk.level != 'clean' %}
-        <span class="ml-2 risk-badge risk-{{ risk.level }}">⚠ {{ risk.reason }}</span>
-        {% endif %}
-    </p>
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">
+            ▌ REFERRALS · {{ referrals|length }} {{ 'PERSON' if referrals|length == 1 else 'PEOPLE' }}
+            {% if risk.level != 'clean' %}
+            <span class="ml-2 risk-badge risk-{{ risk.level }}">⚠ {{ risk.reason }}</span>
+            {% endif %}
+        </p>
+        <button type="button" onclick="document.getElementById('add-referral-form').classList.toggle('hidden')"
+                class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400 bg-brand-400/10 hover:bg-brand-400/20 border border-brand-400/40 px-3 py-1.5 rounded transition">
+            + Add referral manually
+        </button>
+    </div>
+
+    <!-- ─── MANUAL REFERRAL FORM (toggle) ─── -->
+    <form id="add-referral-form"
+          method="POST"
+          action="{{ url_for('admin.add_referral_manually', ambassador_id=amb.id) }}"
+          class="hidden bg-gray-900/80 border border-brand-400/40 rounded-xl p-4 mb-3"
+          style="box-shadow: 0 0 16px rgba(46,219,153,0.1);"
+          onsubmit="return confirm('Manually credit this person to {{ amb.name|e }}?\n\nNo emails will be sent.');">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3">▌ MANUAL REFERRAL · OVERRIDE</p>
+        <p class="text-xs text-gray-400 mb-3">
+            Use this when someone claims they signed up via {{ amb.name }}'s link but the attribution didn't capture (forgot to click the ref link, used a different device, etc.).
+            Skips Turnstile, velocity throttle, and emails. The referral counts immediately. If they don't have an Ambassador row yet, one is created with <code class="text-brand-400">source=public</code>.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <div>
+                <label class="block text-[10px] font-mono-term tracking-wider uppercase text-brand-400 mb-1">Name</label>
+                <input name="name" required maxlength="200" placeholder="Maria Lopez"
+                       class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-400">
+            </div>
+            <div>
+                <label class="block text-[10px] font-mono-term tracking-wider uppercase text-brand-400 mb-1">Email</label>
+                <input name="email" type="email" required maxlength="200" placeholder="maria@gmail.com"
+                       class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-400 font-mono-term">
+            </div>
+        </div>
+        <div class="flex justify-end gap-2">
+            <button type="button" onclick="document.getElementById('add-referral-form').classList.add('hidden')"
+                    class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-500 hover:text-white px-3 py-1.5">
+                Cancel
+            </button>
+            <button type="submit"
+                    class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-brand-400 hover:bg-brand-300 px-4 py-1.5 rounded font-bold transition"
+                    style="box-shadow: 0 0 12px rgba(46,219,153,0.35);">
+                ▲ Credit referral
+            </button>
+        </div>
+    </form>
 
     {% if ip_clusters %}
     <!-- IP cluster summary (only show if there are repeats) -->

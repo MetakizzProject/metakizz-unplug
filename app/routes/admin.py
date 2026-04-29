@@ -1071,6 +1071,15 @@ def ambassador_detail(ambassador_id):
 
     risk = _compute_suspicion(amb)
 
+    # Who invited THIS ambassador? Look for a Referral row where the email
+    # matches their email — that row's ambassador_id is the inviter.
+    invited_by = None
+    invited_by_referral = (
+        Referral.query.filter_by(email=amb.email).first()
+    )
+    if invited_by_referral is not None:
+        invited_by = Ambassador.query.get(invited_by_referral.ambassador_id)
+
     return render_template(
         "admin_ambassador_detail.html",
         amb=amb,
@@ -1081,8 +1090,116 @@ def ambassador_detail(ambassador_id):
         ip_clusters=ip_clusters,
         ip_buckets=ip_buckets,
         ua_buckets=ua_buckets,
+        invited_by=invited_by,
+        invited_by_referral=invited_by_referral,
         now_ts=datetime.now(timezone.utc),
     )
+
+
+@admin_bp.route("/ambassador/<int:ambassador_id>/add-referral", methods=["POST"])
+def add_referral_manually(ambassador_id):
+    """Admin override: attribute a referral to this ambassador without going
+    through the normal signup flow.
+
+    Use case: people claim they registered via someone's link but the
+    attribution didn't capture (forgot to click ref link, used different
+    device, etc.). The admin manually credits them.
+
+    Logic:
+    - Validates email syntax
+    - Refuses self-referral
+    - If a Referral row with this email already exists (regardless of
+      attributed ambassador) → refuses with explanatory error
+    - If an Ambassador with this email exists → links via new Referral row
+    - If no Ambassador with this email → creates one (source='public')
+      then links via Referral row
+    - DOES NOT send any emails (admin override). The admin can trigger
+      guaranteed_prize via the existing Backfill #4 button if applicable.
+    """
+    from app.services.email_validation import is_valid_email_syntax
+    import secrets
+
+    referrer = Ambassador.query.get_or_404(ambassador_id)
+    name = (request.form.get("name", "") or "").strip()
+    email = (request.form.get("email", "") or "").strip().lower()
+
+    if not name or not email:
+        flash("Name and email are required.", "error")
+        return redirect(url_for("admin.ambassador_detail", ambassador_id=referrer.id))
+
+    if not is_valid_email_syntax(email):
+        flash(f"Email '{email}' doesn't look valid.", "error")
+        return redirect(url_for("admin.ambassador_detail", ambassador_id=referrer.id))
+
+    if email == (referrer.email or "").lower():
+        flash("Can't credit someone with referring themselves.", "error")
+        return redirect(url_for("admin.ambassador_detail", ambassador_id=referrer.id))
+
+    # Already credited to anyone (this referrer or another)?
+    existing_ref = Referral.query.filter_by(email=email).first()
+    if existing_ref is not None:
+        existing_referrer = Ambassador.query.get(existing_ref.ambassador_id)
+        existing_name = existing_referrer.name if existing_referrer else "(deleted)"
+        flash(
+            f"{email} is already credited to {existing_name}. "
+            f"Reset that referral first if you want to reattribute.",
+            "error",
+        )
+        return redirect(url_for("admin.ambassador_detail", ambassador_id=referrer.id))
+
+    # Find or create the Ambassador for this email (so they get a dashboard
+    # too — same as a normal signup but without emails/Turnstile/velocity).
+    target = Ambassador.query.filter_by(email=email).first()
+    target_was_created = False
+    if target is None:
+        # Generate unique codes (same approach as create_signup)
+        def _gen():
+            return secrets.token_urlsafe(6)[:8]
+        ref_code = _gen()
+        while Ambassador.query.filter_by(referral_code=ref_code).first():
+            ref_code = _gen()
+        dash_code = _gen()
+        while Ambassador.query.filter_by(dashboard_code=dash_code).first():
+            dash_code = _gen()
+
+        target = Ambassador(
+            name=name,
+            email=email,
+            referral_code=ref_code,
+            dashboard_code=dash_code,
+            source="public",
+        )
+        db.session.add(target)
+        db.session.flush()  # get target.id without full commit
+        target_was_created = True
+
+    # Create the Referral row crediting `referrer`. No IP/UA — admin manual.
+    referral = Referral(
+        ambassador_id=referrer.id,
+        name=name,
+        email=email,
+    )
+    db.session.add(referral)
+    db.session.commit()
+
+    if target_was_created:
+        flash(
+            f"Manually credited {name} ({email}) to {referrer.name}. "
+            f"Created a new Ambassador row for them too.",
+            "success",
+        )
+    else:
+        flash(
+            f"Manually credited existing ambassador {target.name} ({email}) "
+            f"to {referrer.name}.",
+            "success",
+        )
+
+    logger.warning(
+        "ADMIN MANUAL REFERRAL: %s (id=%d) <- %s (%s)",
+        referrer.email, referrer.id, email, name,
+    )
+    return redirect(url_for("admin.ambassador_detail", ambassador_id=referrer.id))
 
 
 @admin_bp.route("/ambassadors/<int:ambassador_id>/reset", methods=["POST"])
