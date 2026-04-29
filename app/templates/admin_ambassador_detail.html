@@ -428,6 +428,7 @@
                         <th class="text-left px-4 py-2.5 font-bold">Health</th>
                         <th class="text-left px-4 py-2.5 font-bold">IP</th>
                         <th class="text-left px-4 py-2.5 font-bold hidden lg:table-cell">User-Agent</th>
+                        <th class="text-right px-4 py-2.5 font-bold"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -475,6 +476,16 @@
                         </td>
                         <td class="px-4 py-2.5 text-xs text-gray-500 hidden lg:table-cell font-mono-term truncate max-w-xs" title="{{ ref.signup_user_agent or '' }}">
                             {{ (ref.signup_user_agent or '—')[:60] }}{% if ref.signup_user_agent and ref.signup_user_agent|length > 60 %}…{% endif %}
+                        </td>
+                        <td class="px-4 py-2.5 text-right whitespace-nowrap">
+                            <form method="POST" action="{{ url_for('admin.remove_referral', referral_id=ref.id) }}" class="inline"
+                                  onsubmit="return confirm('Remove {{ ref.name|e }} ({{ ref.email|e }}) from {{ amb.name|e }}'s referrals?\n\nThis ONLY deletes the attribution. Their Ambassador record stays — they keep their dashboard.');">
+                                <button type="submit"
+                                        class="font-mono-term text-[10px] tracking-wider uppercase text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30 hover:border-red-500/60 rounded px-2 py-1 transition"
+                                        title="Remove this referral">
+                                    ✕ remove
+                                </button>
+                            </form>
                         </td>
                     </tr>
                     {% endfor %}

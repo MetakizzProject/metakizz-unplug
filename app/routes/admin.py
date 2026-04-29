@@ -1186,6 +1186,44 @@ def ambassador_detail(ambassador_id):
     )
 
 
+@admin_bp.route("/referral/<int:referral_id>/delete", methods=["POST"])
+def remove_referral(referral_id):
+    """Remove ONE Referral row (the attribution). The new Ambassador row
+    that the referral pointed to is left intact — they keep their dashboard
+    and stay registered, just no longer credited to this referrer.
+
+    Use cases:
+    - Admin attributed by mistake
+    - Referrer's referral turned out to be a fake/bot
+    - Referrer asked to drop a specific person
+
+    Note: this does NOT clear guaranteed_prize_sent_at, even if the count
+    drops below 5. The email already went out; we don't unsend.
+    """
+    ref = Referral.query.get_or_404(referral_id)
+    referrer_id = ref.ambassador_id
+    referrer = Ambassador.query.get(referrer_id)
+    referrer_name = referrer.name if referrer else "(deleted)"
+    ref_name = ref.name
+    ref_email = ref.email
+
+    db.session.delete(ref)
+    db.session.commit()
+
+    flash(
+        f"Removed {ref_name} ({ref_email}) from {referrer_name}'s referrals. "
+        f"Their Ambassador record was kept — they still have access to their dashboard.",
+        "success",
+    )
+    logger.warning(
+        "ADMIN REMOVE REFERRAL: referrer=%s (id=%s) <- removed %s (%s)",
+        referrer.email if referrer else "(none)", referrer_id, ref_email, ref_name,
+    )
+    if referrer_id is None:
+        return redirect(url_for("admin.index"))
+    return redirect(url_for("admin.ambassador_detail", ambassador_id=referrer_id))
+
+
 @admin_bp.route("/api/ambassadors/search")
 def api_ambassadors_search():
     """Live-search existing ambassadors by name or email for the manual-
