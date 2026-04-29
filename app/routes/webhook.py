@@ -16,6 +16,7 @@ from app.services.turnstile import (
     verify_token as verify_turnstile,
     extract_token_from_payload as extract_turnstile_token,
     is_enforce_mode as turnstile_enforce_mode,
+    record_rejection as record_turnstile_rejection,
     STATUS_VALID, STATUS_INVALID, STATUS_MISSING,
 )
 from app.models import db, EmailEvent
@@ -156,6 +157,15 @@ def ghl_signup():
         logger.warning(
             "turnstile rejected webhook signup: status=%s codes=%s email=%s",
             ts_result["status"], ts_result["codes"], email,
+        )
+        record_turnstile_rejection(
+            status=ts_result["status"],
+            codes=ts_result["codes"],
+            email_attempted=email,
+            name_attempted=name,
+            ip=request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or None,
+            user_agent=request.headers.get("User-Agent", "") or None,
+            source="webhook",
         )
         return jsonify({
             "error": "turnstile_failed",

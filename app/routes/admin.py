@@ -195,11 +195,10 @@ def _compute_turnstile_stats():
     active.
     """
     from app.services.turnstile import is_enforce_mode
+    from app.models import TurnstileRejection
 
     now = datetime.now(timezone.utc)
     cutoff_24h = now - timedelta(hours=24)
-
-    keys = ("valid", "invalid", "missing", "error", "not_configured", None)
 
     def _bucket(rows):
         out = {"valid": 0, "invalid": 0, "missing": 0, "error": 0,
@@ -219,12 +218,28 @@ def _compute_turnstile_stats():
         Ambassador.created_at >= cutoff_24h
     ).all()
 
+    # Attacks blocked — counts of TurnstileRejection rows (only populated
+    # while enforce-mode is on; in log-only the route doesn't reject).
+    blocked_24h = TurnstileRejection.query.filter(
+        TurnstileRejection.created_at >= cutoff_24h
+    ).count()
+    blocked_all = TurnstileRejection.query.count()
+    recent_blocks = (
+        TurnstileRejection.query
+        .order_by(TurnstileRejection.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
     return {
         "all": _bucket(all_rows),
         "last24h": _bucket(last24_rows),
         "all_total": len(all_rows),
         "last24h_total": len(last24_rows),
         "enforce_mode": is_enforce_mode(),
+        "blocked_24h": blocked_24h,
+        "blocked_all": blocked_all,
+        "recent_blocks": recent_blocks,
     }
 
 

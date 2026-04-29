@@ -92,6 +92,7 @@ def join():
         from app.services.turnstile import (
             verify_token as verify_turnstile,
             is_enforce_mode as turnstile_enforce_mode,
+            record_rejection as record_turnstile_rejection,
             STATUS_INVALID, STATUS_MISSING,
         )
         turnstile_token = (request.form.get("cf-turnstile-response") or "").strip()
@@ -104,6 +105,15 @@ def join():
             current_app.logger.warning(
                 "turnstile rejected /join signup: status=%s codes=%s email=%s",
                 ts_result["status"], ts_result["codes"], email,
+            )
+            record_turnstile_rejection(
+                status=ts_result["status"],
+                codes=ts_result["codes"],
+                email_attempted=email,
+                name_attempted=name,
+                ip=ip_for_limit or None,
+                user_agent=client_user_agent() or None,
+                source="join",
             )
             flash("Verification failed. Please reload the page and try again.", "error")
             return render_template("join.html")

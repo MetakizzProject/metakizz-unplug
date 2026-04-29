@@ -146,6 +146,28 @@ class EmailEvent(db.Model):
     extra = db.Column(db.Text, nullable=True)  # raw webhook payload (JSON string), for debugging
 
 
+class TurnstileRejection(db.Model):
+    """One row per signup rejected by Cloudflare Turnstile in enforce mode.
+
+    Created at the route layer when verify_token() returns 'missing' or
+    'invalid' AND TURNSTILE_ENFORCE=1. Used by the admin to show "attacks
+    blocked" — a counter that grows as bots try and fail (in contrast to
+    Ambassador.turnstile_status, which only tracks signups that DID succeed
+    in being created).
+    """
+    __tablename__ = "turnstile_rejections"
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    status = db.Column(db.String(30), nullable=False, index=True)  # missing | invalid
+    codes = db.Column(db.String(160), nullable=True)
+    email_attempted = db.Column(db.String(200), nullable=True, index=True)
+    name_attempted = db.Column(db.String(200), nullable=True)
+    ip = db.Column(db.String(64), nullable=True, index=True)
+    user_agent = db.Column(db.String(500), nullable=True)
+    source = db.Column(db.String(20), nullable=False)  # 'webhook' | 'join'
+
+
 class PendingReferral(db.Model):
     """A signup attribution (Referral) waiting for admin approval.
 

@@ -317,6 +317,57 @@
             {% endif %}
         </div>
     </div>
+
+    <!-- ─── ATTACKS BLOCKED — TurnstileRejection rows (live counter) ─── -->
+    <div class="flex items-center justify-between mb-3">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ ATTACKS BLOCKED · TURNSTILE</p>
+        <div class="flex items-center gap-3 font-mono-term text-[10px] tracking-[0.2em] uppercase">
+            <span class="text-gray-500">Last 24h: <span class="text-red-400 font-orbitron font-black text-base ml-1">{{ turnstile_stats.blocked_24h }}</span></span>
+            <span class="text-gray-500">All time: <span class="text-red-400 font-orbitron font-black text-base ml-1">{{ turnstile_stats.blocked_all }}</span></span>
+        </div>
+    </div>
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden mb-7">
+        {% if turnstile_stats.recent_blocks %}
+        <table class="w-full text-sm">
+            <thead class="border-b border-gray-800">
+                <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                    <th class="text-left px-4 py-2.5 font-bold">When</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Status</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Email tried</th>
+                    <th class="text-left px-4 py-2.5 font-bold hidden md:table-cell">Source</th>
+                    <th class="text-left px-4 py-2.5 font-bold hidden lg:table-cell">IP</th>
+                    <th class="text-left px-4 py-2.5 font-bold hidden lg:table-cell">Codes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in turnstile_stats.recent_blocks %}
+                <tr class="border-b border-gray-800/50 last:border-0">
+                    <td class="px-4 py-2.5 text-xs font-mono-term text-gray-400 tracking-wider whitespace-nowrap">
+                        {{ r.created_at.strftime('%b %d · %H:%M') if r.created_at else '—' }}
+                    </td>
+                    <td class="px-4 py-2.5">
+                        <span class="font-mono-term text-[10px] tracking-wider uppercase
+                            {% if r.status == 'invalid' %}text-red-400 bg-red-500/10 border border-red-500/40
+                            {% else %}text-yellow-400 bg-yellow-500/10 border border-yellow-500/40
+                            {% endif %} px-2 py-0.5 rounded">
+                            {{ r.status }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-2.5 text-xs text-gray-300 truncate max-w-[16rem]">{{ r.email_attempted or '—' }}</td>
+                    <td class="px-4 py-2.5 text-xs text-gray-500 font-mono-term hidden md:table-cell">{{ r.source }}</td>
+                    <td class="px-4 py-2.5 text-xs text-gray-500 font-mono-term hidden lg:table-cell">{{ r.ip or '—' }}</td>
+                    <td class="px-4 py-2.5 text-xs text-gray-500 font-mono-term hidden lg:table-cell truncate max-w-[14rem]">{{ r.codes or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="p-6 text-center text-gray-500 text-sm">
+            <p class="font-mono-term text-xs tracking-wider mb-2">&gt; NO ATTACKS BLOCKED YET</p>
+            <p>When enforce-mode rejects a bot signup, it will appear here with email, IP, and reason.</p>
+        </div>
+        {% endif %}
+    </div>
     {% endif %}
 
     <!-- ─── BROADCAST MODAL ─── -->

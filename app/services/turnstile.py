@@ -79,6 +79,36 @@ def verify_token(token, remote_ip=None):
     return {"status": STATUS_INVALID, "codes": codes_str}
 
 
+def record_rejection(status, codes, email_attempted, name_attempted,
+                     ip, user_agent, source):
+    """Persist a TurnstileRejection row. Best-effort — never raises.
+
+    Called from the route layer when an enforce-mode rejection happens.
+    Failures here must not poison the request/response, so we swallow
+    everything and log.
+    """
+    try:
+        from app.models import db, TurnstileRejection
+        rej = TurnstileRejection(
+            status=status,
+            codes=codes,
+            email_attempted=(email_attempted or "")[:200] or None,
+            name_attempted=(name_attempted or "")[:200] or None,
+            ip=(ip or "")[:64] or None,
+            user_agent=(user_agent or "")[:500] or None,
+            source=source,
+        )
+        db.session.add(rej)
+        db.session.commit()
+    except Exception:
+        try:
+            from app.models import db
+            db.session.rollback()
+        except Exception:
+            pass
+        logger.exception("failed to persist turnstile rejection")
+
+
 def extract_token_from_payload(payload):
     """Pull the Turnstile token from a JSON webhook payload.
 
