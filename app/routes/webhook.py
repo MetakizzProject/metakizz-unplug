@@ -12,6 +12,12 @@ import logging
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, current_app
 from app.services.signup import create_signup
+from app.services.turnstile import (
+    verify_token as verify_turnstile,
+    extract_token_from_payload as extract_turnstile_token,
+    is_enforce_mode as turnstile_enforce_mode,
+    STATUS_VALID, STATUS_INVALID, STATUS_MISSING,
+)
 from app.models import db, EmailEvent
 
 logger = logging.getLogger(__name__)
@@ -134,8 +140,34 @@ def ghl_signup():
         logger.warning("GHL webhook rejected: no MX record email=%r", email)
         return jsonify({"error": "domain_no_mx", "email": email}), 400
 
+    # Cloudflare Turnstile verification. Log-only by default — only blocks
+    # when TURNSTILE_ENFORCE=1, and even then only on missing/invalid tokens.
+    # error/not_configured fail open so a CF outage doesn't kill signups.
+    turnstile_token = extract_turnstile_token(payload)
+    ts_result = verify_turnstile(
+        turnstile_token,
+        remote_ip=request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or None,
+    )
+    logger.info(
+        "turnstile webhook verify: status=%s codes=%s email=%s",
+        ts_result["status"], ts_result["codes"], email,
+    )
+    if turnstile_enforce_mode() and ts_result["status"] in (STATUS_INVALID, STATUS_MISSING):
+        logger.warning(
+            "turnstile rejected webhook signup: status=%s codes=%s email=%s",
+            ts_result["status"], ts_result["codes"], email,
+        )
+        return jsonify({
+            "error": "turnstile_failed",
+            "status": ts_result["status"],
+        }), 400
+
     try:
-        ambassador, was_new = create_signup(name, email, ref_code)
+        ambassador, was_new = create_signup(
+            name, email, ref_code,
+            turnstile_status=ts_result["status"],
+            turnstile_codes=ts_result["codes"],
+        )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception:

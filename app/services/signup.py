@@ -66,7 +66,11 @@ def _generate_unique_code():
     return code
 
 
-def create_signup(name, email, ref_code=None, signup_ip=None, signup_user_agent=None):
+def create_signup(
+    name, email, ref_code=None,
+    signup_ip=None, signup_user_agent=None,
+    turnstile_status=None, turnstile_codes=None,
+):
     """
     Create (or return existing) Ambassador for a PLF signup, and credit the referrer.
 
@@ -75,6 +79,10 @@ def create_signup(name, email, ref_code=None, signup_ip=None, signup_user_agent=
     signup_ip / signup_user_agent are stored on both the new Ambassador AND the new
     Referral row (when a referrer is credited). They power the admin's fraud-detection
     badge that flags ambassadors with many referrals from the same IP / user agent.
+
+    turnstile_status / turnstile_codes record the Cloudflare Turnstile verification
+    result (see app/services/turnstile.py). They are stored for monitoring; rejection
+    based on them happens in the route layer, not here.
 
     Existing community members imported from Circle still get the welcome email the
     FIRST time they register through the landing (they need their dashboard link),
@@ -119,6 +127,8 @@ def create_signup(name, email, ref_code=None, signup_ip=None, signup_user_agent=
         source="public",
         signup_ip=signup_ip,
         signup_user_agent=signup_user_agent,
+        turnstile_status=turnstile_status,
+        turnstile_codes=turnstile_codes,
     )
     db.session.add(new_ambassador)
 

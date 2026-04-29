@@ -65,6 +65,13 @@ class Ambassador(db.Model):
     # Auto-cleared when admin approves or rejects all of their pending items.
     under_review_at = db.Column(db.DateTime, nullable=True, index=True)
 
+    # Cloudflare Turnstile result captured at signup. Status taxonomy:
+    # 'valid' | 'invalid' | 'missing' | 'error' | 'not_configured' | None (legacy).
+    # turnstile_codes stores Cloudflare's error-codes (comma-separated) on
+    # invalid/error rows so we can debug why a verification failed.
+    turnstile_status = db.Column(db.String(30), nullable=True, index=True)
+    turnstile_codes = db.Column(db.String(160), nullable=True)
+
     referrals = db.relationship("Referral", backref="ambassador", lazy=True)
     notifications = db.relationship("MilestoneNotification", backref="ambassador", lazy=True)
 

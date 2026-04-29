@@ -88,6 +88,26 @@ def join():
             flash("Too many signups from this connection. Please try again in an hour.", "error")
             return render_template("join.html")
 
+        # 5. Cloudflare Turnstile verification (log-only by default).
+        from app.services.turnstile import (
+            verify_token as verify_turnstile,
+            is_enforce_mode as turnstile_enforce_mode,
+            STATUS_INVALID, STATUS_MISSING,
+        )
+        turnstile_token = (request.form.get("cf-turnstile-response") or "").strip()
+        ts_result = verify_turnstile(turnstile_token, remote_ip=ip_for_limit or None)
+        current_app.logger.info(
+            "turnstile /join verify: status=%s codes=%s email=%s",
+            ts_result["status"], ts_result["codes"], email,
+        )
+        if turnstile_enforce_mode() and ts_result["status"] in (STATUS_INVALID, STATUS_MISSING):
+            current_app.logger.warning(
+                "turnstile rejected /join signup: status=%s codes=%s email=%s",
+                ts_result["status"], ts_result["codes"], email,
+            )
+            flash("Verification failed. Please reload the page and try again.", "error")
+            return render_template("join.html")
+
         existing = Ambassador.query.filter_by(email=email).first()
         if existing:
             flash("You're already in the challenge!", "info")
@@ -113,6 +133,8 @@ def join():
             instagram_handle=instagram if instagram else None,
             signup_ip=ip,
             signup_user_agent=ua,
+            turnstile_status=ts_result["status"],
+            turnstile_codes=ts_result["codes"],
         )
         db.session.add(ambassador)
 

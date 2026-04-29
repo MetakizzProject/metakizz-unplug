@@ -187,6 +187,47 @@ def _compute_email_stats():
     return stats
 
 
+def _compute_turnstile_stats():
+    """Aggregate Cloudflare Turnstile verification results across signups.
+
+    Returns counts in two windows (24h and all-time) plus the enforce-mode
+    flag, so the admin panel can show whether log-only or enforcement is
+    active.
+    """
+    from app.services.turnstile import is_enforce_mode
+
+    now = datetime.now(timezone.utc)
+    cutoff_24h = now - timedelta(hours=24)
+
+    keys = ("valid", "invalid", "missing", "error", "not_configured", None)
+
+    def _bucket(rows):
+        out = {"valid": 0, "invalid": 0, "missing": 0, "error": 0,
+               "not_configured": 0, "legacy": 0}
+        for status, in rows:
+            if status is None:
+                out["legacy"] += 1
+            elif status in out:
+                out[status] += 1
+            else:
+                # Unknown status string (forward-compat): bucket as legacy
+                out["legacy"] += 1
+        return out
+
+    all_rows = db.session.query(Ambassador.turnstile_status).all()
+    last24_rows = db.session.query(Ambassador.turnstile_status).filter(
+        Ambassador.created_at >= cutoff_24h
+    ).all()
+
+    return {
+        "all": _bucket(all_rows),
+        "last24h": _bucket(last24_rows),
+        "all_total": len(all_rows),
+        "last24h_total": len(last24_rows),
+        "enforce_mode": is_enforce_mode(),
+    }
+
+
 def _compute_chart_data():
     """Return JSON-serialisable data for the admin charts."""
     now = datetime.now(timezone.utc)
@@ -297,6 +338,7 @@ def index():
     segment_counts = {k: len(v) for k, v in segments.items()}
     charts = _compute_chart_data()
     email_stats = _compute_email_stats()
+    turnstile_stats = _compute_turnstile_stats()
 
     # Engagement: how many ambassadors have opened their dashboard at least once
     visited = sum(1 for a in all_amb_for_stats if a.last_dashboard_visit_at is not None)
@@ -329,6 +371,7 @@ def index():
         risk_by_id=risk_by_id,
         high_risk_total=high_risk_total,
         pending_review_count=pending_review_count,
+        turnstile_stats=turnstile_stats,
     )
 
 

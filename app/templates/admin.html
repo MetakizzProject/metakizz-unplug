@@ -253,6 +253,69 @@
         {% endif %}
     </div>
 
+    <!-- ─── TURNSTILE · CLOUDFLARE BOT VERIFICATION ─── -->
+    {% if turnstile_stats is defined %}
+    <div class="flex items-center justify-between mb-3 mt-6">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ TURNSTILE · BOT VERIFICATION</p>
+        {% if turnstile_stats.enforce_mode %}
+        <span class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400 bg-brand-400/10 border border-brand-400/40 px-2 py-1 rounded">
+            ▲ ENFORCING
+        </span>
+        {% else %}
+        <span class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-yellow-400 bg-yellow-400/10 border border-yellow-400/40 px-2 py-1 rounded">
+            ◯ LOG-ONLY
+        </span>
+        {% endif %}
+    </div>
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden mb-7">
+        <table class="w-full text-sm">
+            <thead class="border-b border-gray-800">
+                <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                    <th class="text-left px-4 py-2.5 font-bold">Window</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Total</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Valid</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Valid %</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Invalid</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Missing</th>
+                    <th class="text-right px-4 py-2.5 font-bold hidden sm:table-cell">Error</th>
+                    <th class="text-right px-4 py-2.5 font-bold hidden sm:table-cell">Legacy</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row_label, row_key in [('Last 24h', 'last24h'), ('All time', 'all')] %}
+                {% set b = turnstile_stats[row_key] %}
+                {% set total = turnstile_stats[row_key ~ '_total'] %}
+                {% set valid_pct = (100 * b.valid // total) if total else 0 %}
+                <tr class="border-b border-gray-800/50 last:border-0">
+                    <td class="px-4 py-2.5 font-semibold text-white font-mono-term tracking-wider">{{ row_label }}</td>
+                    <td class="px-4 py-2.5 text-right font-orbitron font-black text-gray-300 text-base">{{ total }}</td>
+                    <td class="px-4 py-2.5 text-right font-orbitron font-black text-base
+                        {% if valid_pct >= 90 %}text-brand-400{% elif valid_pct >= 50 %}text-yellow-400{% else %}text-gray-500{% endif %}"
+                        {% if valid_pct >= 90 %}style="text-shadow: 0 0 10px rgba(46,219,153,0.4);"{% endif %}>
+                        {{ b.valid }}
+                    </td>
+                    <td class="px-4 py-2.5 text-right text-xs font-mono-term tracking-wider
+                        {% if valid_pct >= 90 %}text-brand-400{% elif valid_pct >= 50 %}text-yellow-400{% else %}text-gray-500{% endif %}">
+                        {{ valid_pct }}%
+                    </td>
+                    <td class="px-4 py-2.5 text-right text-xs {% if b.invalid %}text-red-400{% else %}text-gray-700{% endif %}">{{ b.invalid }}</td>
+                    <td class="px-4 py-2.5 text-right text-xs {% if b.missing %}text-yellow-400{% else %}text-gray-700{% endif %}">{{ b.missing }}</td>
+                    <td class="px-4 py-2.5 text-right text-xs hidden sm:table-cell {% if b.error %}text-orange-400{% else %}text-gray-700{% endif %}">{{ b.error }}</td>
+                    <td class="px-4 py-2.5 text-right text-xs hidden sm:table-cell text-gray-600">{{ b.legacy }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="px-4 py-3 border-t border-gray-800 bg-black/40 text-[11px] text-gray-500 font-mono-term tracking-wider">
+            {% if turnstile_stats.enforce_mode %}
+            &gt; Enforcing — invalid/missing tokens reject signups with HTTP 400.
+            {% else %}
+            &gt; Log-only — every signup is verified but never blocked. Flip env var <span class="text-brand-400">TURNSTILE_ENFORCE=1</span> to enforce after 24h of high valid %.
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- ─── BROADCAST MODAL ─── -->
     <div id="broadcast-modal" class="hidden fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
         <form method="POST" action="{{ url_for('admin.broadcast') }}" class="bg-gray-900 border border-brand-400/40 rounded-xl p-5 max-w-lg w-full"
