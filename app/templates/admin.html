@@ -285,7 +285,10 @@
                 {% for row_label, row_key in [('Last 24h', 'last24h'), ('All time', 'all')] %}
                 {% set b = turnstile_stats[row_key] %}
                 {% set total = turnstile_stats[row_key ~ '_total'] %}
-                {% set valid_pct = (100 * b.valid // total) if total else 0 %}
+                {# Measured = signups created after the migration ran (have a Turnstile status). #}
+                {# Legacy rows are excluded from the % so pre-migration data doesn't drown it out. #}
+                {% set measured = total - b.legacy %}
+                {% set valid_pct = (100 * b.valid // measured) if measured else 0 %}
                 <tr class="border-b border-gray-800/50 last:border-0">
                     <td class="px-4 py-2.5 font-semibold text-white font-mono-term tracking-wider">{{ row_label }}</td>
                     <td class="px-4 py-2.5 text-right font-orbitron font-black text-gray-300 text-base">{{ total }}</td>
