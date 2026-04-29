@@ -118,6 +118,7 @@ def ghl_signup():
     # GHL will retry on 4xx, so use 400 for permanent errors.
     from app.services.email_validation import (
         is_disposable_email, is_valid_email_syntax, has_mx_record,
+        looks_like_bot_email,
     )
     email_lower = email.lower().strip()
     if not is_valid_email_syntax(email_lower):
@@ -126,6 +127,9 @@ def ghl_signup():
     if is_disposable_email(email_lower):
         logger.warning("GHL webhook rejected: disposable email=%r", email)
         return jsonify({"error": "disposable_email", "email": email}), 400
+    if looks_like_bot_email(email_lower):
+        logger.warning("GHL webhook rejected: bot-pattern email=%r", email)
+        return jsonify({"error": "bot_pattern_email", "email": email}), 400
     if not has_mx_record(email_lower):
         logger.warning("GHL webhook rejected: no MX record email=%r", email)
         return jsonify({"error": "domain_no_mx", "email": email}), 400

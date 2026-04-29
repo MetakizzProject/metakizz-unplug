@@ -57,15 +57,68 @@ DISPOSABLE_DOMAINS = {
     # Common disposable specifically used for referral fraud (research)
     "fakemail.net", "fakemailgenerator.com", "trbvm.com",
     "anonbox.net", "anonymbox.com", "asiotraffic.com",
+    # ── Attack 2026-04-28 — bulk fake signups via GHL webhook ──
+    # Auto-generated emails with hex suffixes targeting referral fraud.
+    # Adding eTLD+1 (apex domain); is_disposable_email also catches subdomains.
+    "minitts.net", "allfreemail.net", "inboxorigin.com",
+    "tohal.org", "26ai.org", "accesswiki.net", "cloudvxz.com",
+    "sixthirtydance.org", "mugstock.com", "necub.com", "denipl.net",
+    "deltajohnsons.com", "mailmagnet.co", "easymailer.live",
+    "openmail.pro", "solarnyx.com", "mycreativeinbox.com",
+    "lnovic.com", "ruutukf.com", "wnbaldwy.com", "bltiwd.com",
+    "yzcalo.com", "ozsaip.com", "forexzig.com", "fxzig.com",
 }
 
 
 def is_disposable_email(email):
-    """Return True if email's domain is in the disposable blocklist."""
+    """Return True if email's domain (or its parent domain) is blocklisted.
+
+    Matches the full domain AND any apex/parent domain. So
+        stephanie711fed@uw.tohal.org   → tohal.org is blocked → match
+        daffy711d7a@n6h.tohal.org      → tohal.org is blocked → match
+    Catches the trick where attackers use random subdomains of a
+    disposable apex.
+    """
     if not email or "@" not in email:
         return False
     domain = email.rsplit("@", 1)[1].lower().strip()
-    return domain in DISPOSABLE_DOMAINS
+    if domain in DISPOSABLE_DOMAINS:
+        return True
+    # Check parent / apex by walking left-to-right components
+    parts = domain.split(".")
+    for i in range(1, len(parts) - 1):
+        candidate = ".".join(parts[i:])
+        if candidate in DISPOSABLE_DOMAINS:
+            return True
+    return False
+
+
+# Pattern that matches the auto-generated email signature seen in the
+# 2026-04-28 attack: lowercase prefix + 5+ hex/digit chars + @ random domain.
+# Examples that match:
+#   stephanie711fed@uw.tohal.org   ✓
+#   ondne98992@minitts.net         ✓
+#   daffy711d7a@n6h.tohal.org      ✓
+# Does NOT match real emails like:
+#   alvarohertinez@gmail.com       (no digit suffix)
+#   john2024@gmail.com             (only 4 digits, common year)
+#   maria.lopez@gmail.com          (no digit suffix)
+import re as _re
+_BOT_EMAIL_RE = _re.compile(
+    r"^[a-z][a-z\-_.]{0,30}[0-9a-f]{5,}@",  # 5+ hex/digit suffix attached to a name
+    _re.IGNORECASE,
+)
+
+
+def looks_like_bot_email(email):
+    """Heuristic: matches the hex-suffix signature of email generators.
+
+    Used as a SECONDARY check, AFTER is_disposable_email, since this is
+    fuzzier and could false-positive on real users with weird emails.
+    """
+    if not email or "@" not in email:
+        return False
+    return bool(_BOT_EMAIL_RE.match(email.strip().lower()))
 
 
 def client_ip():

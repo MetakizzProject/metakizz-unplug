@@ -42,7 +42,7 @@ def join():
     if request.method == "POST":
         from app.services.email_validation import (
             is_disposable_email, is_valid_email_syntax, has_mx_record,
-            client_ip, client_user_agent, check_rate_limit,
+            looks_like_bot_email, client_ip, client_user_agent, check_rate_limit,
         )
 
         name = request.form.get("name", "").strip()
@@ -68,6 +68,12 @@ def join():
         # 2. Disposable / temp-mail blocklist.
         if is_disposable_email(email):
             flash("Please use a real email address. Throwaway/temp-mail providers aren't accepted.", "error")
+            return render_template("join.html")
+
+        # 2b. Bot email pattern (auto-generated emails like name711abc@random).
+        if looks_like_bot_email(email):
+            current_app.logger.warning("blocked bot-pattern email on /join: %s", email)
+            flash("Please use a real email address.", "error")
             return render_template("join.html")
 
         # 3. MX record check — domain must accept email.
