@@ -117,22 +117,59 @@ def join():
         db.session.add(ambassador)
 
         # If they came in via someone else's referral link, credit that referrer
-        # with a Referral row carrying the same IP/UA fingerprint. (This was
-        # missing before — /join wasn't crediting referrers!)
+        # — UNLESS the referrer is hitting the velocity threshold, in which case
+        # the attribution goes to the PendingReferral queue for manual review.
         if ref_code:
+            from app.services.signup import (
+                _check_velocity_exceeded, VELOCITY_THRESHOLD_COUNT, VELOCITY_WINDOW_MINUTES,
+            )
+            from app.models import PendingReferral
             referrer = Ambassador.query.filter_by(referral_code=ref_code).first()
             if referrer is not None:
                 already = Referral.query.filter_by(email=email).first()
                 if already is None:
-                    db.session.add(Referral(
-                        ambassador_id=referrer.id,
-                        name=name,
-                        email=email,
-                        signup_ip=ip,
-                        signup_user_agent=ua,
-                    ))
+                    exceeded, recent_count = _check_velocity_exceeded(referrer)
+                    if exceeded:
+                        db.session.add(PendingReferral(
+                            referrer_ambassador_id=referrer.id,
+                            new_ambassador_id=None,  # set after commit
+                            referrer_code=ref_code,
+                            name=name,
+                            email=email,
+                            flagged_reason=(
+                                f"velocity:{recent_count + 1}_in_{VELOCITY_WINDOW_MINUTES}min "
+                                f"(threshold {VELOCITY_THRESHOLD_COUNT})"
+                            ),
+                            signup_ip=ip,
+                            signup_user_agent=ua,
+                            status="pending",
+                        ))
+                        current_app.logger.warning(
+                            "VELOCITY THROTTLE on /join: referrer=%s recent=%d -> queued",
+                            referrer.email, recent_count,
+                        )
+                    else:
+                        db.session.add(Referral(
+                            ambassador_id=referrer.id,
+                            name=name,
+                            email=email,
+                            signup_ip=ip,
+                            signup_user_agent=ua,
+                        ))
 
         db.session.commit()
+
+        # Backfill new_ambassador_id on the PendingReferral if one was just created
+        if ref_code:
+            pending = (
+                PendingReferral.query
+                .filter_by(email=email, status="pending", new_ambassador_id=None)
+                .order_by(PendingReferral.received_at.desc())
+                .first()
+            )
+            if pending:
+                pending.new_ambassador_id = ambassador.id
+                db.session.commit()
 
         try:
             if send_welcome_email(ambassador, current_app.config["APP_URL"]):

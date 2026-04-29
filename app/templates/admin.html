@@ -25,6 +25,13 @@
     <div class="flex items-center justify-between mb-5 flex-wrap gap-2">
         <h1 class="text-2xl font-display font-bold">Admin Console</h1>
         <div class="flex gap-1.5 flex-wrap">
+            {% if pending_review_count is defined and pending_review_count %}
+            <a href="{{ url_for('admin.pending_review') }}" class="admin-nav-btn admin-nav-warn">
+                ⧗ {{ pending_review_count }} pending review
+            </a>
+            {% else %}
+            <a href="{{ url_for('admin.pending_review') }}" class="admin-nav-btn">Pending review</a>
+            {% endif %}
             <a href="{{ url_for('admin.rewards') }}" class="admin-nav-btn">Rewards</a>
             <a href="{{ url_for('admin.test_email') }}" class="admin-nav-btn">Test emails</a>
             <a href="{{ url_for('admin.cron_status') }}" class="admin-nav-btn">Cron</a>

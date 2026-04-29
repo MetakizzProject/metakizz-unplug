@@ -129,3 +129,35 @@ class EmailEvent(db.Model):
     to_email = db.Column(db.String(200), nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     extra = db.Column(db.Text, nullable=True)  # raw webhook payload (JSON string), for debugging
+
+
+class PendingReferral(db.Model):
+    """A signup attribution (Referral) waiting for admin approval.
+
+    Created when a referrer hits the velocity threshold (e.g. 5 new referrals
+    within 30 minutes). The Ambassador row is still created normally for the
+    new signup; only the Referral row is held for review. The referrer's
+    public referral_count does NOT increment until the admin approves.
+
+    On approve → a real Referral row is created (and the referrer's count
+    goes up). On reject → the row stays in this table with status='rejected'
+    for audit, and the new Ambassador can optionally be deleted manually.
+    """
+    __tablename__ = "pending_referrals"
+
+    id = db.Column(db.Integer, primary_key=True)
+    referrer_ambassador_id = db.Column(db.Integer, db.ForeignKey("ambassadors.id"), nullable=True, index=True)
+    new_ambassador_id = db.Column(db.Integer, db.ForeignKey("ambassadors.id"), nullable=True)
+    referrer_code = db.Column(db.String(20), nullable=True)  # captured snapshot
+    name = db.Column(db.String(200), nullable=False)
+    email = db.Column(db.String(200), nullable=False)
+    received_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    flagged_reason = db.Column(db.String(160), nullable=False)  # human-readable
+    signup_ip = db.Column(db.String(64), nullable=True)
+    signup_user_agent = db.Column(db.String(500), nullable=True)
+    status = db.Column(db.String(20), default="pending", index=True)  # pending | approved | rejected
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    reviewed_notes = db.Column(db.Text, nullable=True)
+
+    referrer = db.relationship("Ambassador", foreign_keys=[referrer_ambassador_id])
+    new_ambassador = db.relationship("Ambassador", foreign_keys=[new_ambassador_id])

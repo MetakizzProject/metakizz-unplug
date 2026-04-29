@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Pending Review · Admin{% endblock %}
+
+{% block nav_right %}{% endblock %}
+
+{% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+<div class="max-w-6xl mx-auto px-4 pt-4 pb-12">
+
+    <!-- Terminal header -->
+    <div class="flex items-center justify-between mb-3 font-mono-term text-[10px] tracking-[0.25em] uppercase">
+        <span class="text-brand-400/80"><span class="text-brand-400">▌</span> METAKIZZ // PENDING.REVIEW</span>
+        <a href="{{ url_for('admin.index') }}" class="text-gray-500 hover:text-brand-400 transition">← BACK TO ADMIN</a>
+    </div>
+
+    <h1 class="text-2xl font-display font-bold mb-2">Pending Referral Review</h1>
+    <p class="text-sm text-gray-400 mb-5">
+        Signups whose attribution to a referrer was held because the referrer was receiving too many signups too fast.
+        Approve to credit the referrer. Reject to discard.
+    </p>
+
+    <!-- Status filter chips -->
+    <div class="flex gap-2 mb-5 flex-wrap">
+        <a href="?status=pending" class="px-4 py-2 rounded-full text-xs font-mono-term tracking-wider uppercase
+            {% if status_filter == 'pending' %}bg-yellow-400 text-black font-bold{% else %}bg-gray-800 text-gray-400 hover:text-white{% endif %}">
+            ⧗ Pending ({{ counts.pending }})
+        </a>
+        <a href="?status=approved" class="px-4 py-2 rounded-full text-xs font-mono-term tracking-wider uppercase
+            {% if status_filter == 'approved' %}bg-brand-400 text-black font-bold{% else %}bg-gray-800 text-gray-400 hover:text-white{% endif %}">
+            ✓ Approved ({{ counts.approved }})
+        </a>
+        <a href="?status=rejected" class="px-4 py-2 rounded-full text-xs font-mono-term tracking-wider uppercase
+            {% if status_filter == 'rejected' %}bg-red-500 text-white font-bold{% else %}bg-gray-800 text-gray-400 hover:text-white{% endif %}">
+            ✗ Rejected ({{ counts.rejected }})
+        </a>
+    </div>
+
+    {% if status_filter == 'pending' and by_referrer %}
+    <!-- Bulk actions per referrer (only on pending tab) -->
+    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400/80 mb-2">
+        ▌ BULK ACTIONS · BY REFERRER
+    </p>
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-4 mb-6">
+        <p class="text-xs text-gray-400 mb-3">
+            If you've confirmed a bot attack from a single referrer, bulk-reject all their pending in one click:
+        </p>
+        <div class="space-y-2">
+            {% for referrer_id, pendings in by_referrer.items() %}
+            {% set referrer = pendings[0].referrer %}
+            <div class="flex items-center gap-3 p-3 bg-gray-800/40 rounded-lg flex-wrap">
+                <span class="font-orbitron font-black text-red-300 text-2xl">{{ pendings|length }}</span>
+                <div class="flex-1 min-w-0">
+                    <p class="font-semibold text-white">{{ referrer.name if referrer else '(deleted)' }}</p>
+                    <p class="text-xs text-gray-400 font-mono-term">{{ referrer.email if referrer else '—' }}</p>
+                </div>
+                <a href="{{ url_for('admin.ambassador_detail', ambassador_id=referrer_id) }}"
+                   class="text-xs text-brand-400 hover:text-brand-300 font-mono-term tracking-wider">Inspect →</a>
+                <form method="POST" action="{{ url_for('admin.pending_bulk_reject', referrer_id=referrer_id) }}"
+                      onsubmit="return confirm('Reject ALL {{ pendings|length }} pending referrals from {{ (referrer.name|e) if referrer else 'this referrer' }}?');">
+                    <button type="submit" class="bg-red-900/40 hover:bg-red-800 text-red-300 hover:text-white border border-red-700 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider">
+                        ✗ Reject all {{ pendings|length }}
+                    </button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Item table -->
+    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400/80 mb-2">
+        ▌ {{ status_filter|upper }} · {{ items|length }} {{ 'ITEM' if items|length == 1 else 'ITEMS' }}
+    </p>
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden">
+        {% if items %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="border-b border-gray-800">
+                    <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                        <th class="text-left px-4 py-3">Referrer</th>
+                        <th class="text-left px-4 py-3">New signup</th>
+                        <th class="text-left px-4 py-3 hidden md:table-cell">When</th>
+                        <th class="text-left px-4 py-3 hidden lg:table-cell">Reason</th>
+                        <th class="text-left px-4 py-3 hidden md:table-cell">IP / UA</th>
+                        {% if status_filter == 'pending' %}
+                        <th class="text-right px-4 py-3">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in items %}
+                    <tr class="border-b border-gray-800/50 last:border-0 hover:bg-brand-400/5">
+                        <td class="px-4 py-3">
+                            {% if p.referrer %}
+                            <a href="{{ url_for('admin.ambassador_detail', ambassador_id=p.referrer.id) }}"
+                               class="text-white font-semibold hover:text-brand-400">{{ p.referrer.name }}</a>
+                            <p class="text-xs text-gray-500 font-mono-term">{{ p.referrer.email }}</p>
+                            {% else %}
+                            <span class="text-gray-500 italic">(deleted)</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            <p class="text-white font-medium">{{ p.name }}</p>
+                            <p class="text-xs text-gray-500 font-mono-term">{{ p.email }}</p>
+                        </td>
+                        <td class="px-4 py-3 text-gray-400 text-xs hidden md:table-cell font-mono-term">
+                            {{ p.received_at.strftime('%b %d · %H:%M') }}
+                        </td>
+                        <td class="px-4 py-3 text-xs hidden lg:table-cell font-mono-term text-yellow-300">
+                            {{ p.flagged_reason }}
+                        </td>
+                        <td class="px-4 py-3 text-xs hidden md:table-cell font-mono-term">
+                            {% if p.signup_ip %}
+                            <span class="text-cyan-300">{{ p.signup_ip }}</span>
+                            {% else %}
+                            <span class="text-gray-700">—</span>
+                            {% endif %}
+                        </td>
+                        {% if status_filter == 'pending' %}
+                        <td class="px-4 py-3 text-right">
+                            <div class="inline-flex gap-2">
+                                <form method="POST" action="{{ url_for('admin.pending_approve', pending_id=p.id) }}" class="inline">
+                                    <button type="submit"
+                                            class="bg-brand-400/15 hover:bg-brand-400/30 text-brand-400 border border-brand-400/40 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider"
+                                            onclick="return confirm('Approve {{ p.name|e }}?');">
+                                        ✓ Approve
+                                    </button>
+                                </form>
+                                <form method="POST" action="{{ url_for('admin.pending_reject', pending_id=p.id) }}" class="inline">
+                                    <button type="submit"
+                                            class="bg-red-900/30 hover:bg-red-800 text-red-300 hover:text-white border border-red-700 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider"
+                                            onclick="return confirm('Reject {{ p.name|e }}?');">
+                                        ✗ Reject
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-10 text-center">
+            <p class="font-mono-term text-xs tracking-wider text-gray-500 mb-1">&gt; NO {{ status_filter|upper }} ITEMS</p>
+            <p class="text-sm text-gray-500">
+                {% if status_filter == 'pending' %}
+                No signups currently flagged for review. The system holds attributions when a referrer accumulates
+                more than 5 referrals in 30 minutes.
+                {% else %}
+                Nothing here yet.
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<style>
+.font-mono-term { font-family: 'Share Tech Mono', 'Courier New', monospace; }
+.font-orbitron  { font-family: 'Orbitron', 'Arial Black', sans-serif; }
+</style>
+{% endblock %}

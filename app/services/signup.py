@@ -10,9 +10,28 @@ create_signup() encapsulates:
 
 import secrets
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from flask import current_app
-from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification
+from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, PendingReferral
+
+
+# Velocity throttle — when a referrer accumulates this many referrals in
+# the rolling window, further new signups are queued in PendingReferral
+# instead of being credited immediately. Admin reviews the queue manually.
+VELOCITY_THRESHOLD_COUNT = 5
+VELOCITY_WINDOW_MINUTES = 30
+
+
+def _check_velocity_exceeded(referrer):
+    """Return (exceeded, recent_count) for a referrer over the window."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=VELOCITY_WINDOW_MINUTES)
+    recent = (
+        Referral.query
+        .filter(Referral.ambassador_id == referrer.id)
+        .filter(Referral.registered_at >= cutoff)
+        .count()
+    )
+    return (recent >= VELOCITY_THRESHOLD_COUNT, recent)
 from app.mailer import (
     send_welcome_email,
     send_first_unplug_email,
@@ -103,21 +122,60 @@ def create_signup(name, email, ref_code=None, signup_ip=None, signup_user_agent=
     )
     db.session.add(new_ambassador)
 
-    # 4. If we have a valid referrer, credit them with a new Referral row.
+    # 4. If we have a valid referrer, decide: credit immediately OR queue for review.
     #    Guard against orphan Referral rows from pre-launch data with the same email.
     if referrer is not None:
         existing_referral = Referral.query.filter_by(email=email).first()
         if existing_referral is None:
-            referral = Referral(
-                ambassador_id=referrer.id,
-                name=name,
-                email=email,
-                signup_ip=signup_ip,
-                signup_user_agent=signup_user_agent,
-            )
-            db.session.add(referral)
+            # Velocity throttle — if the referrer has been receiving signups too
+            # fast, divert this attribution into the pending review queue.
+            exceeded, recent_count = _check_velocity_exceeded(referrer)
+            if exceeded:
+                pending = PendingReferral(
+                    referrer_ambassador_id=referrer.id,
+                    new_ambassador_id=None,  # set after Ambassador commit below
+                    referrer_code=ref_code,
+                    name=name,
+                    email=email,
+                    flagged_reason=(
+                        f"velocity:{recent_count + 1}_in_{VELOCITY_WINDOW_MINUTES}min "
+                        f"(threshold {VELOCITY_THRESHOLD_COUNT})"
+                    ),
+                    signup_ip=signup_ip,
+                    signup_user_agent=signup_user_agent,
+                    status="pending",
+                )
+                db.session.add(pending)
+                logger.warning(
+                    "VELOCITY THROTTLE: referrer=%s (id=%d) recent=%d window=%dmin; "
+                    "queued PendingReferral for new=%s",
+                    referrer.email, referrer.id, recent_count,
+                    VELOCITY_WINDOW_MINUTES, email,
+                )
+            else:
+                referral = Referral(
+                    ambassador_id=referrer.id,
+                    name=name,
+                    email=email,
+                    signup_ip=signup_ip,
+                    signup_user_agent=signup_user_agent,
+                )
+                db.session.add(referral)
 
     db.session.commit()
+
+    # If we created a PendingReferral, link it back to the new ambassador now
+    # that we have its id (post-commit).
+    if referrer is not None and Referral.query.filter_by(email=email).first() is None:
+        pending = (
+            PendingReferral.query
+            .filter_by(email=email, status="pending")
+            .order_by(PendingReferral.received_at.desc())
+            .first()
+        )
+        if pending and pending.new_ambassador_id is None:
+            pending.new_ambassador_id = new_ambassador.id
+            db.session.commit()
 
     # 5. Send welcome email to the new ambassador (with their personal share link).
     app_url = current_app.config["APP_URL"]

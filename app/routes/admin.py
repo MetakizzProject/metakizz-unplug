@@ -9,7 +9,7 @@ from flask import (
 )
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func
-from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent
+from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral
 from app.mailer import (
     send_welcome_email,
     send_activation_nudge_email,
@@ -305,6 +305,9 @@ def index():
     risk_by_id = {a.id: _compute_suspicion(a) for a in sorted_ambassadors}
     high_risk_total = sum(1 for a in all_amb_for_stats if _compute_suspicion(a)["level"] == "high")
 
+    # How many velocity-throttled signups are sitting in the review queue
+    pending_review_count = PendingReferral.query.filter_by(status="pending").count()
+
     return render_template(
         "admin.html",
         ambassadors=sorted_ambassadors,
@@ -325,6 +328,7 @@ def index():
         tz_utc=timezone.utc,
         risk_by_id=risk_by_id,
         high_risk_total=high_risk_total,
+        pending_review_count=pending_review_count,
     )
 
 
@@ -1115,6 +1119,112 @@ def reset_test_data():
         public_ambs=public_ambs,
         confirm_phrase=CONFIRM_PHRASE,
     )
+
+
+# ════════════════════════════════════════════════════════════════════
+# Pending referrals review queue (velocity-throttled signups)
+# ════════════════════════════════════════════════════════════════════
+
+@admin_bp.route("/pending")
+def pending_review():
+    """Show signups queued for manual review (velocity-throttled).
+
+    Each row represents a signup whose attribution to a referrer has been
+    held because the referrer was receiving signups too fast. Approve to
+    credit the referrer; reject to discard.
+    """
+    status_filter = request.args.get("status", "pending")
+    q = PendingReferral.query
+    if status_filter in ("pending", "approved", "rejected"):
+        q = q.filter_by(status=status_filter)
+    items = q.order_by(PendingReferral.received_at.desc()).all()
+
+    counts = {
+        "pending": PendingReferral.query.filter_by(status="pending").count(),
+        "approved": PendingReferral.query.filter_by(status="approved").count(),
+        "rejected": PendingReferral.query.filter_by(status="rejected").count(),
+    }
+
+    # Group pending by referrer for the bulk-action UI
+    by_referrer = defaultdict(list)
+    if status_filter == "pending":
+        for p in items:
+            by_referrer[p.referrer_ambassador_id].append(p)
+
+    return render_template(
+        "admin_pending.html",
+        items=items,
+        counts=counts,
+        status_filter=status_filter,
+        by_referrer=by_referrer,
+    )
+
+
+@admin_bp.route("/pending/<int:pending_id>/approve", methods=["POST"])
+def pending_approve(pending_id):
+    """Approve a pending referral → create the real Referral row."""
+    p = PendingReferral.query.get_or_404(pending_id)
+    if p.status != "pending":
+        flash(f"Already {p.status}.", "info")
+        return redirect(url_for("admin.pending_review"))
+
+    # Don't double-credit if a real Referral already exists for that email
+    existing = Referral.query.filter_by(email=p.email).first()
+    if existing is None and p.referrer_ambassador_id is not None:
+        db.session.add(Referral(
+            ambassador_id=p.referrer_ambassador_id,
+            name=p.name,
+            email=p.email,
+            signup_ip=p.signup_ip,
+            signup_user_agent=p.signup_user_agent,
+        ))
+
+    p.status = "approved"
+    p.reviewed_at = datetime.now(timezone.utc)
+    db.session.commit()
+    flash(f"Approved: {p.name} <{p.email}> credited to referrer.", "success")
+    logger.warning("ADMIN PendingReferral APPROVED: id=%d email=%s referrer_id=%s",
+                   p.id, p.email, p.referrer_ambassador_id)
+    return redirect(url_for("admin.pending_review"))
+
+
+@admin_bp.route("/pending/<int:pending_id>/reject", methods=["POST"])
+def pending_reject(pending_id):
+    """Reject a pending referral. No real Referral row is created."""
+    p = PendingReferral.query.get_or_404(pending_id)
+    if p.status != "pending":
+        flash(f"Already {p.status}.", "info")
+        return redirect(url_for("admin.pending_review"))
+
+    p.status = "rejected"
+    p.reviewed_at = datetime.now(timezone.utc)
+    p.reviewed_notes = request.form.get("notes", "").strip() or None
+    db.session.commit()
+    flash(f"Rejected: {p.name} <{p.email}>.", "success")
+    logger.warning("ADMIN PendingReferral REJECTED: id=%d email=%s referrer_id=%s",
+                   p.id, p.email, p.referrer_ambassador_id)
+    return redirect(url_for("admin.pending_review"))
+
+
+@admin_bp.route("/pending/bulk-reject-from/<int:referrer_id>", methods=["POST"])
+def pending_bulk_reject(referrer_id):
+    """Reject ALL pending referrals from a single referrer in one click.
+    Useful when you confirm a bot attack and want to nuke 40 fake signups.
+    """
+    pendings = PendingReferral.query.filter_by(
+        referrer_ambassador_id=referrer_id, status="pending",
+    ).all()
+    now = datetime.now(timezone.utc)
+    n = 0
+    for p in pendings:
+        p.status = "rejected"
+        p.reviewed_at = now
+        p.reviewed_notes = "bulk_reject_from_referrer"
+        n += 1
+    db.session.commit()
+    flash(f"Bulk-rejected {n} pending referrals from referrer #{referrer_id}.", "success")
+    logger.warning("ADMIN bulk reject: referrer_id=%d count=%d", referrer_id, n)
+    return redirect(url_for("admin.pending_review"))
 
 
 @admin_bp.route("/logout")
