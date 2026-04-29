@@ -75,6 +75,21 @@ def _extract_signup_fields(payload):
     return name, email, ref_code
 
 
+def _extract_client_ip(payload):
+    """Pull the original client IP from a GHL payload.
+
+    GHL itself doesn't forward the user's IP in headers (we'd see GHL's IP),
+    so the Lovable form has to capture it client-side (e.g. via api.ipify.org)
+    and pass it through as a JSON field. We tolerate a few naming variants.
+    Returns "" if not present, or a truncated string (max 64 chars).
+    """
+    ip = _pluck(
+        payload,
+        "client_ip", "clientIp", "user_ip", "userIp", "ip",
+    )
+    return ip[:64] if ip else ""
+
+
 @webhook_bp.route("/api/webhook/signup", methods=["POST"])
 def ghl_signup():
     """
@@ -98,6 +113,15 @@ def ghl_signup():
     logger.info("GHL webhook payload: %s", raw_preview)
 
     name, email, ref_code = _extract_signup_fields(payload)
+
+    # Extract the user's real IP — Lovable pre-fetches it (api.ipify.org)
+    # and forwards via GHL custom field. Fall back to the request header
+    # (which on the GHL path is GHL's own IP, useless for fraud, but kept
+    # as a safety net for future direct callers).
+    client_ip = _extract_client_ip(payload)
+    if not client_ip:
+        fwd = request.headers.get("X-Forwarded-For", "")
+        client_ip = fwd.split(",")[0].strip()[:64] if fwd else ""
 
     # Honeypot check — if either trap field arrives non-empty, it's a bot.
     # We accept (200) so the bot thinks it worked, but skip processing.
@@ -145,10 +169,7 @@ def ghl_signup():
     # when TURNSTILE_ENFORCE=1, and even then only on missing/invalid tokens.
     # error/not_configured fail open so a CF outage doesn't kill signups.
     turnstile_token = extract_turnstile_token(payload)
-    ts_result = verify_turnstile(
-        turnstile_token,
-        remote_ip=request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or None,
-    )
+    ts_result = verify_turnstile(turnstile_token, remote_ip=client_ip or None)
     logger.info(
         "turnstile webhook verify: status=%s codes=%s email=%s",
         ts_result["status"], ts_result["codes"], email,
@@ -163,7 +184,7 @@ def ghl_signup():
             codes=ts_result["codes"],
             email_attempted=email,
             name_attempted=name,
-            ip=request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or None,
+            ip=client_ip or None,
             user_agent=request.headers.get("User-Agent", "") or None,
             source="webhook",
         )
@@ -175,6 +196,7 @@ def ghl_signup():
     try:
         ambassador, was_new = create_signup(
             name, email, ref_code,
+            signup_ip=client_ip or None,
             turnstile_status=ts_result["status"],
             turnstile_codes=ts_result["codes"],
         )
