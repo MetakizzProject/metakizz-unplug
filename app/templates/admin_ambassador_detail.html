@@ -235,6 +235,70 @@
         </div>
     </form>
 
+    {% if engagement_summary and engagement_summary.total %}
+    <!-- ─── REFERRAL ENGAGEMENT SUMMARY (forensic) ─── -->
+    {% set s = engagement_summary %}
+    {% set opened_pct = (100 * s.opened // s.total) if s.total else 0 %}
+    {% set ghost_pct = (100 * s.ghost // s.total) if s.total else 0 %}
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-3 mb-3">
+        <div class="flex items-center justify-between mb-2">
+            <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400">▌ REFERRAL HEALTH · WELCOME EMAIL + VISITS</p>
+            <span class="font-mono-term text-[10px] tracking-wider uppercase
+                {% if opened_pct >= 50 and s.bounced == 0 and ghost_pct < 20 %}text-brand-400{% elif s.bounced > 0 or ghost_pct >= 50 %}text-red-400{% else %}text-yellow-400{% endif %}">
+                {% if opened_pct >= 50 and s.bounced == 0 and ghost_pct < 20 %}LOOKS LEGIT
+                {% elif s.bounced > 0 or ghost_pct >= 50 %}HIGH SUSPICION
+                {% else %}MIXED — REVIEW
+                {% endif %}
+            </span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+            <div class="bg-black/40 border border-gray-800 rounded px-3 py-2">
+                <p class="font-mono-term text-[9px] tracking-wider text-gray-500 uppercase">Opened welcome</p>
+                <p class="font-orbitron font-black text-base text-brand-400 mt-0.5">{{ s.opened }} <span class="text-[10px] text-gray-500">/ {{ s.total }}</span></p>
+            </div>
+            <div class="bg-black/40 border border-gray-800 rounded px-3 py-2">
+                <p class="font-mono-term text-[9px] tracking-wider text-gray-500 uppercase">Clicked dashboard</p>
+                <p class="font-orbitron font-black text-base text-brand-400 mt-0.5">{{ s.clicked }}</p>
+            </div>
+            <div class="bg-black/40 border border-gray-800 rounded px-3 py-2">
+                <p class="font-mono-term text-[9px] tracking-wider text-gray-500 uppercase">Visited dashboard</p>
+                <p class="font-orbitron font-black text-base text-cyan-300 mt-0.5">{{ s.visited }}</p>
+            </div>
+            <div class="bg-black/40 border border-gray-800 rounded px-3 py-2">
+                <p class="font-mono-term text-[9px] tracking-wider text-gray-500 uppercase">Bounced</p>
+                <p class="font-orbitron font-black text-base mt-0.5 {% if s.bounced %}text-red-400{% else %}text-gray-700{% endif %}">{{ s.bounced }}</p>
+            </div>
+            <div class="bg-black/40 border border-gray-800 rounded px-3 py-2">
+                <p class="font-mono-term text-[9px] tracking-wider text-gray-500 uppercase">Ghost (no signal)</p>
+                <p class="font-orbitron font-black text-base mt-0.5 {% if s.ghost > s.total / 2 %}text-red-400{% elif s.ghost %}text-yellow-400{% else %}text-gray-700{% endif %}">{{ s.ghost }}</p>
+            </div>
+        </div>
+        <p class="text-[11px] text-gray-500 mt-2 italic">
+            Bounced welcome = email server rejected delivery → fake email confirmed.
+            Ghost = no email events at all AND zero dashboard visits → suspicious phantom signup.
+        </p>
+    </div>
+    {% endif %}
+
+    {% if duplicate_prefix_refs %}
+    <!-- Duplicate-prefix referrals (e.g. tasha@gmail.com + tssha@gmail.co) -->
+    <div class="bg-red-900/15 border border-red-500/30 rounded-xl p-3 mb-3">
+        <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-red-300 mb-2">▌ DUPLICATE-PREFIX EMAILS</p>
+        <p class="text-[11px] text-red-300/80 mb-2 italic">
+            Two or more referrals share the same email prefix (text before @) but on different domains. Often a typo cover-up — fake second registration on a near-miss domain like .co instead of .com.
+        </p>
+        <div class="space-y-1.5">
+            {% for prefix, refs in duplicate_prefix_refs.items() %}
+            <div class="flex items-center gap-3 text-xs flex-wrap">
+                <span class="font-mono-term tracking-wider text-red-300 bg-red-900/30 px-2 py-0.5 rounded border border-red-500/30">{{ prefix }}@</span>
+                <span class="text-white font-bold">{{ refs|length }}× emails</span>
+                <span class="text-gray-400">{{ refs|map(attribute='email')|join(' · ') }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     {% if ip_clusters %}
     <!-- IP cluster summary (only show if there are repeats) -->
     <div class="bg-red-900/15 border border-red-500/30 rounded-xl p-3 mb-3">
@@ -264,6 +328,7 @@
                         <th class="text-left px-4 py-2.5 font-bold">Name</th>
                         <th class="text-left px-4 py-2.5 font-bold">Email</th>
                         <th class="text-left px-4 py-2.5 font-bold">When</th>
+                        <th class="text-left px-4 py-2.5 font-bold">Health</th>
                         <th class="text-left px-4 py-2.5 font-bold">IP</th>
                         <th class="text-left px-4 py-2.5 font-bold hidden lg:table-cell">User-Agent</th>
                     </tr>
@@ -271,12 +336,33 @@
                 <tbody>
                     {% for ref in referrals %}
                     {% set ip_repeated = ref.signup_ip and ip_buckets.get(ref.signup_ip, [])|length > 1 %}
-                    <tr class="border-b border-gray-800/50 last:border-0 hover:bg-brand-400/5 {% if ip_repeated %}bg-red-900/10{% endif %}">
+                    {% set eng = referral_engagement.get(ref.id, {}) %}
+                    {% set health = eng.get('health', 'ghost') %}
+                    <tr class="border-b border-gray-800/50 last:border-0 hover:bg-brand-400/5
+                        {% if ip_repeated or health == 'bounced' %}bg-red-900/10
+                        {% elif health == 'ghost' %}bg-yellow-900/5
+                        {% endif %}">
                         <td class="px-4 py-2.5 text-gray-600 font-orbitron font-black text-xs">{{ '%02d' % loop.index }}</td>
                         <td class="px-4 py-2.5 text-white font-semibold">{{ ref.name }}</td>
                         <td class="px-4 py-2.5 text-gray-400 font-mono-term text-xs">{{ ref.email }}</td>
                         <td class="px-4 py-2.5 text-gray-400 text-xs font-mono-term">
                             {{ ref.registered_at.strftime('%b %d · %H:%M') }}
+                        </td>
+                        <td class="px-4 py-2.5 text-xs whitespace-nowrap">
+                            {% if health == 'bounced' %}
+                                <span class="font-mono-term text-[10px] tracking-wider uppercase text-red-400 bg-red-500/10 border border-red-500/40 px-1.5 py-0.5 rounded">💥 bounced</span>
+                            {% elif health == 'engaged' %}
+                                <span class="font-mono-term text-[10px] tracking-wider uppercase text-brand-400 bg-brand-400/10 border border-brand-400/40 px-1.5 py-0.5 rounded">
+                                    {% if eng.clicked %}🖱 clicked{% else %}👁 opened{% endif %}
+                                </span>
+                                {% if eng.visits %}<span class="text-cyan-400 ml-1">🚪{{ eng.visits }}</span>{% endif %}
+                            {% elif health == 'visited' %}
+                                <span class="font-mono-term text-[10px] tracking-wider uppercase text-cyan-300 bg-cyan-500/10 border border-cyan-500/40 px-1.5 py-0.5 rounded">🚪 visited {{ eng.visits }}×</span>
+                            {% elif health == 'silent' %}
+                                <span class="font-mono-term text-[10px] tracking-wider uppercase text-yellow-400 bg-yellow-500/10 border border-yellow-500/40 px-1.5 py-0.5 rounded" title="Welcome delivered, but never opened or clicked, and never visited dashboard">📬 silent</span>
+                            {% else %}
+                                <span class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500 bg-gray-700/40 border border-gray-700 px-1.5 py-0.5 rounded" title="No email events recorded AND zero dashboard visits — phantom signup">⚪ ghost</span>
+                            {% endif %}
                         </td>
                         <td class="px-4 py-2.5 text-xs font-mono-term">
                             {% if ref.signup_ip %}

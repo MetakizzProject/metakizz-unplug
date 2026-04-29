@@ -1080,6 +1080,93 @@ def ambassador_detail(ambassador_id):
     if invited_by_referral is not None:
         invited_by = Ambassador.query.get(invited_by_referral.ambassador_id)
 
+    # ── Forensic engagement check on each referral ──
+    # For each person they referred, look up the Ambassador row by email
+    # and pull: welcome-email events (sent/delivered/opened/clicked/bounced)
+    # and dashboard_visit_count. Builds a per-referral health badge so the
+    # admin can spot fakes (bounced welcome = fake email; signed up but
+    # never opened email AND never visited dashboard = ghost signup).
+    referral_engagement = {}
+    summary = {
+        "total": len(referrals), "opened": 0, "clicked": 0,
+        "bounced": 0, "delivered": 0, "visited": 0,
+        "ghost": 0,  # no email events AND no dashboard visit
+    }
+    if referrals:
+        emails_lower = [r.email.lower() for r in referrals if r.email]
+        ref_ambs = (
+            Ambassador.query
+            .filter(func.lower(Ambassador.email).in_(emails_lower))
+            .all()
+        )
+        amb_by_email = {a.email.lower(): a for a in ref_ambs}
+
+        # Group EmailEvent welcome rows by ambassador_id, keyed by event_type
+        welcome_events_by_amb = defaultdict(set)
+        if ref_ambs:
+            ref_amb_ids = [a.id for a in ref_ambs]
+            evt_rows = (
+                EmailEvent.query
+                .filter(EmailEvent.ambassador_id.in_(ref_amb_ids))
+                .filter(EmailEvent.template_key == "welcome")
+                .all()
+            )
+            for e in evt_rows:
+                welcome_events_by_amb[e.ambassador_id].add(e.event_type)
+
+        for r in referrals:
+            target = amb_by_email.get((r.email or "").lower())
+            events = welcome_events_by_amb.get(target.id, set()) if target else set()
+            visits = (target.dashboard_visit_count or 0) if target else 0
+
+            engagement = {
+                "has_ambassador": target is not None,
+                "sent": "sent" in events,
+                "delivered": "delivered" in events,
+                "opened": "opened" in events,
+                "clicked": "clicked" in events,
+                "bounced": "bounced" in events,
+                "visits": visits,
+            }
+            # Health classification
+            if engagement["bounced"]:
+                engagement["health"] = "bounced"
+            elif engagement["clicked"] or engagement["opened"]:
+                engagement["health"] = "engaged"
+            elif visits > 0:
+                engagement["health"] = "visited"
+            elif engagement["delivered"] or engagement["sent"]:
+                engagement["health"] = "silent"
+            else:
+                engagement["health"] = "ghost"
+
+            referral_engagement[r.id] = engagement
+            if engagement["opened"]:
+                summary["opened"] += 1
+            if engagement["clicked"]:
+                summary["clicked"] += 1
+            if engagement["bounced"]:
+                summary["bounced"] += 1
+            if engagement["delivered"]:
+                summary["delivered"] += 1
+            if visits > 0:
+                summary["visited"] += 1
+            if engagement["health"] == "ghost":
+                summary["ghost"] += 1
+
+    # Detect duplicate-by-typo emails inside this ambassador's referral list
+    # (e.g. letasha617@gmail.com vs letasha617@gmail.co — telltale of a fake
+    # second registration with the same prefix on a near-miss domain).
+    dup_prefix_groups = {}
+    for r in referrals:
+        if not r.email or "@" not in r.email:
+            continue
+        prefix = r.email.split("@", 1)[0].lower()
+        dup_prefix_groups.setdefault(prefix, []).append(r)
+    duplicate_prefix_refs = {
+        pfx: rs for pfx, rs in dup_prefix_groups.items() if len(rs) > 1
+    }
+
     return render_template(
         "admin_ambassador_detail.html",
         amb=amb,
@@ -1092,6 +1179,9 @@ def ambassador_detail(ambassador_id):
         ua_buckets=ua_buckets,
         invited_by=invited_by,
         invited_by_referral=invited_by_referral,
+        referral_engagement=referral_engagement,
+        engagement_summary=summary,
+        duplicate_prefix_refs=duplicate_prefix_refs,
         now_ts=datetime.now(timezone.utc),
     )
 
