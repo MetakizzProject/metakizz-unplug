@@ -60,6 +60,8 @@ def show(code):
 
     # Calculate leaderboard position within source bucket. Tie-break by
     # join date (earlier wins) so rank stays consistent with /leaderboard.
+    # We compute rank including under-review ambassadors so the viewer always
+    # sees their honest position; the public top10 excludes them.
     all_ambassadors = Ambassador.query.filter_by(source=ambassador.source).all()
     sorted_ambassadors = sorted(
         all_ambassadors,
@@ -70,10 +72,11 @@ def show(code):
         len(sorted_ambassadors),
     )
 
-    # Top 10 for the embedded Ranking tab. Same shape as /leaderboard so
-    # we could later extract this to a shared helper if needed.
+    # Top 10 for the embedded Ranking tab — exclude under-review (matches
+    # public leaderboard view).
+    public_sorted = [a for a in sorted_ambassadors if a.under_review_at is None]
     leaderboard_top10 = []
-    for i, amb in enumerate(sorted_ambassadors[:10]):
+    for i, amb in enumerate(public_sorted[:10]):
         first_name = amb.name.strip().split()[0] if amb.name and amb.name.strip() else "?"
         leaderboard_top10.append({
             "rank": i + 1,
@@ -117,6 +120,8 @@ def show(code):
     # referral link (signup creates both an Ambassador and a Referral for them).
     total_joined = Ambassador.query.count()
 
+    is_under_review = ambassador.under_review_at is not None
+
     return render_template(
         "dashboard.html",
         ambassador=ambassador,
@@ -134,4 +139,5 @@ def show(code):
         progress_remaining=progress_remaining,
         progress_message=progress_message,
         leaderboard_top10=leaderboard_top10,
+        is_under_review=is_under_review,
     )

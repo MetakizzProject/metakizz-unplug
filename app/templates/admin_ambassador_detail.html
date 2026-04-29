@@ -18,6 +18,27 @@
         <a href="{{ url_for('admin.index') }}" class="text-gray-500 hover:text-brand-400 transition">← BACK TO ADMIN</a>
     </div>
 
+    {% if amb.under_review_at %}
+    <!-- ─── UNDER REVIEW BANNER ─── -->
+    <div class="bg-yellow-900/25 border border-yellow-500/50 rounded-xl p-4 mb-5 flex items-start gap-3"
+         style="box-shadow: 0 0 16px rgba(234,179,8,0.15);">
+        <span class="text-yellow-400 text-2xl flex-shrink-0">⏸</span>
+        <div class="flex-1 min-w-0">
+            <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-yellow-300 mb-1">
+                ⚠ AMBASSADOR UNDER REVIEW · since {{ amb.under_review_at.strftime('%b %d · %H:%M') }}
+            </p>
+            <p class="text-sm text-yellow-100">
+                Currently <strong>hidden from the public leaderboard</strong>.
+                All new signups attributed to them go to the pending queue.
+                The flag clears automatically when their last pending item is approved or rejected.
+            </p>
+            <a href="{{ url_for('admin.pending_review') }}" class="inline-block mt-2 text-xs font-mono-term text-yellow-300 hover:text-yellow-100 underline">
+                → Go to pending queue
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- ─── PROFILE HEADER ─── -->
     <div class="flex items-start gap-4 mb-5 flex-wrap">
         {% if amb.profile_picture_url %}

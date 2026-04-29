@@ -347,6 +347,7 @@
                         <td class="px-4 py-3 text-gray-600 font-orbitron font-black text-xs admin-row-num">{{ '%02d' % loop.index }}</td>
                         <td class="px-4 py-3 font-semibold text-white">
                             {{ amb.name }}
+                            {% if amb.under_review_at %}<span class="text-[10px] text-yellow-300 font-mono-term ml-1 px-1.5 py-0.5 bg-yellow-900/40 border border-yellow-500/40 rounded uppercase tracking-wider" title="Hidden from public leaderboard until pending items are processed">⏸ under review</span>{% endif %}
                             {% if amb.unsubscribed_at %}<span class="text-[10px] text-gray-500 font-mono-term ml-1">(opt-out)</span>{% endif %}
                         </td>
                         <td class="px-4 py-3 text-gray-400 hidden sm:table-cell font-mono-term text-xs">{{ amb.email }}</td>

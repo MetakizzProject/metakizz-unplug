@@ -42,6 +42,22 @@
         <span class="text-gray-500">STATUS: <span class="text-brand-400">CONNECTED</span></span>
     </div>
 
+    {% if is_under_review %}
+    <!-- ─── UNDER REVIEW BANNER (visible only to ambassadors with pending review) ─── -->
+    <div class="bg-yellow-900/30 border border-yellow-500/40 rounded-xl p-3 mb-4 flex items-start gap-3">
+        <span class="text-yellow-400 text-xl flex-shrink-0">⏸</span>
+        <div class="flex-1 min-w-0">
+            <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-yellow-300 mb-0.5">
+                Account under review
+            </p>
+            <p class="text-sm text-yellow-200">
+                Your account is paused while we review recent activity.
+                You're temporarily off the public leaderboard. Your stats stay safe; we'll reach out shortly.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- ─── COMPACT PROFILE + UNPLUG BAR (always visible above tabs) ─── -->
     <div class="flex items-center gap-3 mb-3">
         {% if ambassador.profile_picture_url %}

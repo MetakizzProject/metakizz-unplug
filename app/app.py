@@ -64,6 +64,9 @@ def _ensure_unsubscribe_columns(db):
         if "signup_user_agent" not in cols:
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN signup_user_agent VARCHAR(500)"))
             logger.info("added column ambassadors.signup_user_agent")
+        if "under_review_at" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN under_review_at TIMESTAMP"))
+            logger.info("added column ambassadors.under_review_at")
 
         # Same fraud columns on referrals (the more actionable signal — duplicates here
         # mean the same person is registering many "friends" via their own link).

@@ -128,25 +128,38 @@ def join():
             if referrer is not None:
                 already = Referral.query.filter_by(email=email).first()
                 if already is None:
+                    already_under_review = referrer.under_review_at is not None
                     exceeded, recent_count = _check_velocity_exceeded(referrer)
-                    if exceeded:
+                    queue_to_pending = already_under_review or exceeded
+                    if queue_to_pending:
+                        if already_under_review:
+                            reason = "referrer_under_review"
+                        else:
+                            reason = (
+                                f"velocity:{recent_count + 1}_in_{VELOCITY_WINDOW_MINUTES}min "
+                                f"(threshold {VELOCITY_THRESHOLD_COUNT})"
+                            )
                         db.session.add(PendingReferral(
                             referrer_ambassador_id=referrer.id,
                             new_ambassador_id=None,  # set after commit
                             referrer_code=ref_code,
                             name=name,
                             email=email,
-                            flagged_reason=(
-                                f"velocity:{recent_count + 1}_in_{VELOCITY_WINDOW_MINUTES}min "
-                                f"(threshold {VELOCITY_THRESHOLD_COUNT})"
-                            ),
+                            flagged_reason=reason,
                             signup_ip=ip,
                             signup_user_agent=ua,
                             status="pending",
                         ))
+                        # Flag the referrer for review (first time only)
+                        if referrer.under_review_at is None:
+                            referrer.under_review_at = datetime.now(timezone.utc)
+                            current_app.logger.warning(
+                                "AMBASSADOR FLAGGED FOR REVIEW (/join): %s",
+                                referrer.email,
+                            )
                         current_app.logger.warning(
-                            "VELOCITY THROTTLE on /join: referrer=%s recent=%d -> queued",
-                            referrer.email, recent_count,
+                            "VELOCITY THROTTLE on /join: referrer=%s recent=%d reason=%s -> queued",
+                            referrer.email, recent_count, reason,
                         )
                     else:
                         db.session.add(Referral(

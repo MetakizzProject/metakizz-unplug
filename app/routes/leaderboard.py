@@ -25,7 +25,14 @@ def show(channel):
     embed = request.args.get("embed", "false").lower() == "true"
     from_code = (request.args.get("from") or "").strip()
 
-    ambassadors = Ambassador.query.filter_by(source=channel).all()
+    # Public leaderboard excludes ambassadors flagged for admin review.
+    # Their referrals will reappear once approved or rejected.
+    ambassadors = (
+        Ambassador.query
+        .filter_by(source=channel)
+        .filter(Ambassador.under_review_at.is_(None))
+        .all()
+    )
 
     # Sort by referral count desc, breaking ties by who joined first.
     sorted_all = sorted(

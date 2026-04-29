@@ -57,6 +57,14 @@ class Ambassador(db.Model):
     signup_ip = db.Column(db.String(64), nullable=True, index=True)
     signup_user_agent = db.Column(db.String(500), nullable=True)
 
+    # Set when ANY signup attributed to this ambassador is queued in
+    # PendingReferral (i.e. velocity throttle fired). While this is non-NULL:
+    #   - The ambassador is filtered out of public leaderboard / rankings
+    #   - All future incoming referrals go to pending (regardless of velocity)
+    #   - Admin sees them with a "⏸ UNDER REVIEW" badge
+    # Auto-cleared when admin approves or rejects all of their pending items.
+    under_review_at = db.Column(db.DateTime, nullable=True, index=True)
+
     referrals = db.relationship("Referral", backref="ambassador", lazy=True)
     notifications = db.relationship("MilestoneNotification", backref="ambassador", lazy=True)
 

@@ -1160,6 +1160,28 @@ def pending_review():
     )
 
 
+def _maybe_clear_under_review(referrer_ambassador_id):
+    """If a referrer has no remaining pending items, lift their review flag.
+
+    Called after each approve/reject. Idempotent and safe to call when there
+    is no referrer (NULL ambassador_id) — does nothing in that case.
+    """
+    if not referrer_ambassador_id:
+        return
+    has_more = PendingReferral.query.filter_by(
+        referrer_ambassador_id=referrer_ambassador_id, status="pending",
+    ).count()
+    if has_more == 0:
+        amb = Ambassador.query.get(referrer_ambassador_id)
+        if amb and amb.under_review_at is not None:
+            amb.under_review_at = None
+            db.session.commit()
+            logger.warning(
+                "Cleared under_review_at for ambassador %d (%s) — all pending processed",
+                amb.id, amb.email,
+            )
+
+
 @admin_bp.route("/pending/<int:pending_id>/approve", methods=["POST"])
 def pending_approve(pending_id):
     """Approve a pending referral → create the real Referral row."""
@@ -1182,6 +1204,8 @@ def pending_approve(pending_id):
     p.status = "approved"
     p.reviewed_at = datetime.now(timezone.utc)
     db.session.commit()
+    _maybe_clear_under_review(p.referrer_ambassador_id)
+
     flash(f"Approved: {p.name} <{p.email}> credited to referrer.", "success")
     logger.warning("ADMIN PendingReferral APPROVED: id=%d email=%s referrer_id=%s",
                    p.id, p.email, p.referrer_ambassador_id)
@@ -1200,6 +1224,8 @@ def pending_reject(pending_id):
     p.reviewed_at = datetime.now(timezone.utc)
     p.reviewed_notes = request.form.get("notes", "").strip() or None
     db.session.commit()
+    _maybe_clear_under_review(p.referrer_ambassador_id)
+
     flash(f"Rejected: {p.name} <{p.email}>.", "success")
     logger.warning("ADMIN PendingReferral REJECTED: id=%d email=%s referrer_id=%s",
                    p.id, p.email, p.referrer_ambassador_id)
@@ -1222,6 +1248,8 @@ def pending_bulk_reject(referrer_id):
         p.reviewed_notes = "bulk_reject_from_referrer"
         n += 1
     db.session.commit()
+    _maybe_clear_under_review(referrer_id)
+
     flash(f"Bulk-rejected {n} pending referrals from referrer #{referrer_id}.", "success")
     logger.warning("ADMIN bulk reject: referrer_id=%d count=%d", referrer_id, n)
     return redirect(url_for("admin.pending_review"))

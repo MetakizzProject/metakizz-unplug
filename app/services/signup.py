@@ -127,30 +127,47 @@ def create_signup(name, email, ref_code=None, signup_ip=None, signup_user_agent=
     if referrer is not None:
         existing_referral = Referral.query.filter_by(email=email).first()
         if existing_referral is None:
-            # Velocity throttle — if the referrer has been receiving signups too
-            # fast, divert this attribution into the pending review queue.
+            # Two ways a signup ends up in the pending queue:
+            #   (a) referrer is already under review → ALL their incoming
+            #       referrals go to pending until admin clears them
+            #   (b) velocity threshold exceeded for this referrer right now
+            already_under_review = referrer.under_review_at is not None
             exceeded, recent_count = _check_velocity_exceeded(referrer)
-            if exceeded:
+            queue_to_pending = already_under_review or exceeded
+
+            if queue_to_pending:
+                if already_under_review:
+                    reason = "referrer_under_review"
+                else:
+                    reason = (
+                        f"velocity:{recent_count + 1}_in_{VELOCITY_WINDOW_MINUTES}min "
+                        f"(threshold {VELOCITY_THRESHOLD_COUNT})"
+                    )
                 pending = PendingReferral(
                     referrer_ambassador_id=referrer.id,
                     new_ambassador_id=None,  # set after Ambassador commit below
                     referrer_code=ref_code,
                     name=name,
                     email=email,
-                    flagged_reason=(
-                        f"velocity:{recent_count + 1}_in_{VELOCITY_WINDOW_MINUTES}min "
-                        f"(threshold {VELOCITY_THRESHOLD_COUNT})"
-                    ),
+                    flagged_reason=reason,
                     signup_ip=signup_ip,
                     signup_user_agent=signup_user_agent,
                     status="pending",
                 )
                 db.session.add(pending)
+                # Flag the referrer for review (idempotent — only set the
+                # first time, so we preserve the original timestamp).
+                if referrer.under_review_at is None:
+                    referrer.under_review_at = datetime.now(timezone.utc)
+                    logger.warning(
+                        "AMBASSADOR FLAGGED FOR REVIEW: %s (id=%d)",
+                        referrer.email, referrer.id,
+                    )
                 logger.warning(
-                    "VELOCITY THROTTLE: referrer=%s (id=%d) recent=%d window=%dmin; "
-                    "queued PendingReferral for new=%s",
+                    "VELOCITY THROTTLE: referrer=%s (id=%d) recent=%d window=%dmin "
+                    "reason=%s queued for new=%s",
                     referrer.email, referrer.id, recent_count,
-                    VELOCITY_WINDOW_MINUTES, email,
+                    VELOCITY_WINDOW_MINUTES, reason, email,
                 )
             else:
                 referral = Referral(
