@@ -1186,6 +1186,61 @@ def ambassador_detail(ambassador_id):
     )
 
 
+@admin_bp.route("/api/ambassadors/search")
+def api_ambassadors_search():
+    """Live-search existing ambassadors by name or email for the manual-
+    referral picker. Returns up to `limit` results as JSON.
+
+    Each result includes `has_referrer` so the picker can grey out anyone
+    already attributed (we'd refuse the manual add anyway).
+    """
+    from flask import jsonify
+
+    q = (request.args.get("q") or "").strip().lower()
+    limit = min(int(request.args.get("limit") or 8), 25)
+
+    if len(q) < 2:
+        return jsonify([])
+
+    pattern = f"%{q}%"
+    rows = (
+        Ambassador.query
+        .filter(
+            db.or_(
+                func.lower(Ambassador.name).like(pattern),
+                func.lower(Ambassador.email).like(pattern),
+            )
+        )
+        .order_by(Ambassador.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    # Bulk-check who already has a referrer (one Referral row per email)
+    emails_lower = [a.email.lower() for a in rows]
+    referred = set()
+    if emails_lower:
+        ref_rows = (
+            Referral.query
+            .filter(func.lower(Referral.email).in_(emails_lower))
+            .all()
+        )
+        referred = {r.email.lower() for r in ref_rows}
+
+    results = []
+    for a in rows:
+        results.append({
+            "id": a.id,
+            "name": a.name,
+            "email": a.email,
+            "source": a.source,
+            "referral_count": a.referral_count,
+            "has_referrer": a.email.lower() in referred,
+            "created_at": a.created_at.strftime("%b %d") if a.created_at else None,
+        })
+    return jsonify(results)
+
+
 @admin_bp.route("/ambassador/<int:ambassador_id>/add-referral", methods=["POST"])
 def add_referral_manually(ambassador_id):
     """Admin override: attribute a referral to this ambassador without going

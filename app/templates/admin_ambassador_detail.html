@@ -208,20 +208,38 @@
         <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3">▌ MANUAL REFERRAL · OVERRIDE</p>
         <p class="text-xs text-gray-400 mb-3">
             Use this when someone claims they signed up via {{ amb.name }}'s link but the attribution didn't capture (forgot to click the ref link, used a different device, etc.).
-            Skips Turnstile, velocity throttle, and emails. The referral counts immediately. If they don't have an Ambassador row yet, one is created with <code class="text-brand-400">source=public</code>.
+            Skips Turnstile, velocity throttle, and emails. The referral counts immediately.
         </p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-            <div>
-                <label class="block text-[10px] font-mono-term tracking-wider uppercase text-brand-400 mb-1">Name</label>
-                <input name="name" required maxlength="200" placeholder="Maria Lopez"
-                       class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-400">
-            </div>
-            <div>
-                <label class="block text-[10px] font-mono-term tracking-wider uppercase text-brand-400 mb-1">Email</label>
-                <input name="email" type="email" required maxlength="200" placeholder="maria@gmail.com"
-                       class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-400 font-mono-term">
+
+        <!-- ── Search existing ambassadors ── -->
+        <label class="block text-[10px] font-mono-term tracking-wider uppercase text-brand-400 mb-1">
+            🔍 Search existing person <span class="text-gray-500 normal-case tracking-normal">(by name or email)</span>
+        </label>
+        <input id="add-referral-search"
+               type="text"
+               autocomplete="off"
+               placeholder="Type at least 2 chars… e.g. maria"
+               class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-400 mb-2">
+
+        <div id="add-referral-results" class="space-y-1 mb-3 max-h-64 overflow-y-auto"></div>
+
+        <!-- ── Manual fields (filled by picker OR typed directly) ── -->
+        <div class="border-t border-gray-800 pt-3 mt-3">
+            <p class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500 mb-2">▌ OR ENTER MANUALLY</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                <div>
+                    <label class="block text-[10px] font-mono-term tracking-wider uppercase text-brand-400 mb-1">Name</label>
+                    <input id="add-referral-name" name="name" required maxlength="200" placeholder="Maria Lopez"
+                           class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-400">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-mono-term tracking-wider uppercase text-brand-400 mb-1">Email</label>
+                    <input id="add-referral-email" name="email" type="email" required maxlength="200" placeholder="maria@gmail.com"
+                           class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-400 font-mono-term">
+                </div>
             </div>
         </div>
+
         <div class="flex justify-end gap-2">
             <button type="button" onclick="document.getElementById('add-referral-form').classList.add('hidden')"
                     class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-500 hover:text-white px-3 py-1.5">
@@ -234,6 +252,85 @@
             </button>
         </div>
     </form>
+
+    <script>
+    (function() {
+        const searchInput = document.getElementById('add-referral-search');
+        const resultsEl = document.getElementById('add-referral-results');
+        const nameInput = document.getElementById('add-referral-name');
+        const emailInput = document.getElementById('add-referral-email');
+        if (!searchInput) return;
+
+        let debounceTimer = null;
+        let currentRequest = null;
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function renderResults(results) {
+            if (!results || results.length === 0) {
+                resultsEl.innerHTML = '<p class="text-xs text-gray-600 italic px-1">No matches.</p>';
+                return;
+            }
+            resultsEl.innerHTML = results.map(r => {
+                const blocked = r.has_referrer;
+                return `
+                    <button type="button"
+                            data-name="${escapeHtml(r.name)}"
+                            data-email="${escapeHtml(r.email)}"
+                            ${blocked ? 'disabled' : ''}
+                            class="w-full text-left bg-black/40 hover:bg-brand-400/10 border border-gray-800 hover:border-brand-400/40 rounded px-3 py-2 transition ${blocked ? 'opacity-40 cursor-not-allowed' : ''}">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm text-white font-bold truncate">${escapeHtml(r.name)}</p>
+                                <p class="text-xs text-gray-500 font-mono-term truncate">${escapeHtml(r.email)}</p>
+                            </div>
+                            <div class="text-right flex-shrink-0">
+                                <p class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500">
+                                    ${escapeHtml(r.source)} · ${r.referral_count} unplugs
+                                </p>
+                                ${blocked
+                                    ? '<p class="font-mono-term text-[10px] tracking-wider uppercase text-red-400 mt-0.5">⊘ already attributed</p>'
+                                    : '<p class="font-mono-term text-[10px] tracking-wider uppercase text-brand-400 mt-0.5">✓ available · click to pick</p>'
+                                }
+                            </div>
+                        </div>
+                    </button>
+                `;
+            }).join('');
+            resultsEl.querySelectorAll('button[data-email]:not([disabled])').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    nameInput.value = btn.dataset.name;
+                    emailInput.value = btn.dataset.email;
+                    nameInput.focus();
+                    resultsEl.innerHTML = '<p class="text-xs text-brand-400 italic px-1">✓ Picked. Click "Credit referral" to confirm.</p>';
+                });
+            });
+        }
+
+        searchInput.addEventListener('input', () => {
+            const q = searchInput.value.trim();
+            clearTimeout(debounceTimer);
+            if (q.length < 2) {
+                resultsEl.innerHTML = '';
+                return;
+            }
+            debounceTimer = setTimeout(() => {
+                if (currentRequest) currentRequest.abort();
+                const ctrl = new AbortController();
+                currentRequest = ctrl;
+                fetch(`{{ url_for('admin.api_ambassadors_search') }}?q=${encodeURIComponent(q)}`, { signal: ctrl.signal })
+                    .then(r => r.json())
+                    .then(renderResults)
+                    .catch(err => { if (err.name !== 'AbortError') console.error(err); });
+            }, 200);
+        });
+    })();
+    </script>
 
     {% if engagement_summary and engagement_summary.total %}
     <!-- ─── REFERRAL ENGAGEMENT SUMMARY (forensic) ─── -->
