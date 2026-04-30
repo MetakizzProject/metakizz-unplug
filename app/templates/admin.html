@@ -866,45 +866,30 @@
 .world-map-card .map-corner.bottom-left { bottom: 8px; left: 8px;  border-bottom: 2px solid; border-left: 2px solid; }
 .world-map-card .map-corner.bottom-right{ bottom: 8px; right: 8px; border-bottom: 2px solid; border-right: 2px solid; }
 
+/* Unlit countries — recede into the background */
 .world-map-card svg path.country {
-    fill: #0e1612;
-    stroke: rgba(46,219,153,0.18);
-    stroke-width: 0.4;
+    fill: #080c0a;
+    stroke: rgba(46,219,153,0.10);
+    stroke-width: 0.3;
     transition: filter 200ms ease, stroke 200ms ease;
 }
+/* Lit countries — illuminated with crisp brand-400 border + outer halo glow */
 .world-map-card svg path.country.has-data {
     cursor: pointer;
+    stroke: rgba(46, 219, 153, 0.95);
+    stroke-width: 0.7;
+    filter:
+        drop-shadow(0 0 2px rgba(46, 219, 153, 0.6))
+        drop-shadow(0 0 6px rgba(46, 219, 153, 0.32))
+        drop-shadow(0 0 14px rgba(46, 219, 153, 0.15));
 }
 .world-map-card svg path.country.has-data:hover {
-    filter: brightness(1.6) drop-shadow(0 0 8px rgba(46,219,153,0.7));
-    stroke: rgba(46,219,153,0.95);
-    stroke-width: 0.9;
-}
-
-/* Always-visible count labels on top countries */
-.country-label-group { pointer-events: none; }
-.country-label-bg {
-    fill: rgba(0, 0, 0, 0.92);
-    stroke: rgba(46, 219, 153, 0.9);
-    stroke-width: 0.8;
-    filter: drop-shadow(0 0 5px rgba(46, 219, 153, 0.45));
-}
-.country-label-text {
-    font-family: 'Share Tech Mono', 'Courier New', monospace;
-    font-weight: 700;
-    font-size: 8px;
-    letter-spacing: 0.04em;
-    fill: rgb(46 219 153);
-    paint-order: stroke;
-    stroke: rgba(0,0,0,0.55);
-    stroke-width: 1.6;
-    text-transform: uppercase;
-}
-.country-label-leader {
-    fill: none;
-    stroke: rgba(46, 219, 153, 0.55);
-    stroke-width: 0.6;
-    stroke-dasharray: 2 2;
+    filter:
+        brightness(1.3)
+        drop-shadow(0 0 4px rgba(46, 219, 153, 0.9))
+        drop-shadow(0 0 14px rgba(46, 219, 153, 0.55))
+        drop-shadow(0 0 28px rgba(46, 219, 153, 0.3));
+    stroke-width: 1.1;
 }
 
 /* Big stats BANNER — full-width below the map. The hero numbers
@@ -1138,11 +1123,12 @@
         const path = d3.geoPath(projection);
 
         // Color scale — opacity-based so countries fade up as count grows.
-        // Floor at 0.18 so even 1-person countries are visible against the dark bg.
+        // Floor at 0.45 so every lit country reads as "ON", not faded.
+        // The visual story is reach (where), not gradient (how many) — the
+        // bottom banner already communicates the totals.
         function fillFor(count) {
             if (!count) return null;
-            const t = MAX === 1 ? 1 : Math.min(1, 0.18 + 0.82 * (count / MAX));
-            // brand-400 with computed opacity
+            const t = MAX <= 1 ? 1 : Math.min(1, 0.45 + 0.55 * (count / MAX));
             return `rgba(46, 219, 153, ${t.toFixed(3)})`;
         }
 
@@ -1188,104 +1174,9 @@
                 .attr('stroke', 'rgba(46,219,153,0.06)')
                 .attr('stroke-width', 0.5);
 
-            // ── Alpha-2 ISO-code labels on EVERY country with data ──
-            // Two-pass placement so no country is ever silently dropped:
-            //   PASS 1: try the country centroid; if it collides with an
-            //           already-placed label, spiral outward (golden angle)
-            //           up to 200 attempts. Most labels fit cleanly here.
-            //   PASS 2: if 200 attempts still failed, force-place at the
-            //           least-overlapping spot found. Labels may overlap
-            //           slightly in very dense regions (Caucasus, Balkans),
-            //           but coverage > prettiness — the user wanted ALL.
-            const placed = []; // {x, y, w, h}
-            const labelGroup = svg.append('g').attr('class', 'country-labels');
-
-            function rectsOverlap(a, b) {
-                return !(a.x + a.w/2 < b.x - b.w/2 || a.x - a.w/2 > b.x + b.w/2 ||
-                         a.y + a.h/2 < b.y - b.h/2 || a.y - a.h/2 > b.y + b.h/2);
-            }
-            function overlapArea(a, b) {
-                const dx = Math.max(0, Math.min(a.x + a.w/2, b.x + b.w/2) - Math.max(a.x - a.w/2, b.x - b.w/2));
-                const dy = Math.max(0, Math.min(a.y + a.h/2, b.y + b.h/2) - Math.max(a.y - a.h/2, b.y - b.h/2));
-                return dx * dy;
-            }
-            function totalOverlap(r) {
-                return placed.reduce((s, p) => s + overlapArea(r, p), 0);
-            }
-
-            // Render denser countries first so they claim prime real estate
-            const allEntries = Object.entries(GEO)
-                .sort((a, b) => b[1].count - a[1].count);
-
-            allEntries.forEach(([numeric, data]) => {
-                // world-atlas uses numeric ids as strings without padding (e.g. "8", "724")
-                const country = countries.find(c => String(c.id) === String(numeric));
-                if (!country) return;
-                const centroid = path.centroid(country);
-                if (!centroid || isNaN(centroid[0])) return;
-                const cx = centroid[0], cy = centroid[1];
-
-                const text = (data.alpha2 || '').toUpperCase();
-                if (!text) return;
-                const w = Math.max(18, text.length * 6 + 8);
-                const h = 12;
-
-                // Spiral search for a non-colliding position. Track the
-                // best (least-overlapping) candidate as a fallback.
-                let bestX = cx, bestY = cy, bestOverlap = Infinity;
-                let foundClear = false;
-
-                for (let attempt = 0; attempt <= 200; attempt++) {
-                    let x, y;
-                    if (attempt === 0) {
-                        x = cx; y = cy;
-                    } else {
-                        const angle = (attempt * 137.5) * Math.PI / 180;
-                        const dist = 8 + attempt * 1.6;
-                        x = cx + Math.cos(angle) * dist;
-                        y = cy + Math.sin(angle) * dist;
-                    }
-                    // Clamp inside the visible map area (with padding)
-                    x = Math.max(w/2 + 2, Math.min(W - w/2 - 2, x));
-                    y = Math.max(h/2 + 2, Math.min(H - h/2 - 2, y));
-
-                    const r = { x, y, w, h };
-                    if (!placed.some(p => rectsOverlap(r, p))) {
-                        bestX = x; bestY = y; foundClear = true; break;
-                    }
-                    const ov = totalOverlap(r);
-                    if (ov < bestOverlap) {
-                        bestOverlap = ov; bestX = x; bestY = y;
-                    }
-                }
-
-                const x = bestX, y = bestY;
-                placed.push({ x, y, w, h });
-
-                const lg = labelGroup.append('g')
-                    .attr('class', 'country-label-group')
-                    .attr('transform', `translate(${x.toFixed(1)}, ${y.toFixed(1)})`);
-
-                // Leader line back to the country centroid if the label drifted
-                if (Math.hypot(x - cx, y - cy) > 7) {
-                    labelGroup.append('line')
-                        .attr('class', 'country-label-leader')
-                        .attr('x1', cx).attr('y1', cy)
-                        .attr('x2', x).attr('y2', y);
-                }
-
-                lg.append('rect')
-                    .attr('class', 'country-label-bg')
-                    .attr('x', -w/2).attr('y', -h/2)
-                    .attr('width', w).attr('height', h)
-                    .attr('rx', 6);
-
-                lg.append('text')
-                    .attr('class', 'country-label-text')
-                    .attr('text-anchor', 'middle')
-                    .attr('dy', '0.36em')
-                    .text(text);
-            });
+            // No per-country labels — the visual story is reach: lit countries
+            // glow against a dark world. The big banner below the map carries
+            // the total numbers; hover still gives the per-country detail.
 
             if (loadingEl) loadingEl.style.display = 'none';
         }).catch(err => {
