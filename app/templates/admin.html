@@ -134,6 +134,19 @@
             <svg id="chart-world-map" class="w-full h-full" preserveAspectRatio="xMidYMid meet"></svg>
             <div id="map-tooltip" class="map-tooltip"></div>
 
+            <!-- Big stats HUD — total countries + total dancers -->
+            <div class="map-stats-overlay">
+                <div class="stat-block">
+                    <span class="stat-label">▌ Countries</span>
+                    <span class="stat-number">{{ country_dist.distinct_countries }}</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-block">
+                    <span class="stat-label">▌ Dancers</span>
+                    <span class="stat-number">{{ "{:,}".format(country_dist.with_country) }}</span>
+                </div>
+            </div>
+
             <!-- Watermark (visible when screenshotted for Instagram) -->
             <div class="world-map-watermark">
                 <span class="accent">▌</span> METAKIZZ · UNPLUGGING.PROTOCOL
@@ -887,19 +900,72 @@
     filter: drop-shadow(0 0 5px rgba(46, 219, 153, 0.45));
 }
 .country-label-text {
-    font-family: 'Orbitron', 'Arial Black', sans-serif;
-    font-weight: 900;
-    font-size: 11px;
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    font-weight: 700;
+    font-size: 9px;
+    letter-spacing: 0.05em;
     fill: rgb(46 219 153);
     paint-order: stroke;
-    stroke: rgba(0,0,0,0.4);
-    stroke-width: 2;
+    stroke: rgba(0,0,0,0.5);
+    stroke-width: 1.8;
+    text-transform: uppercase;
 }
 .country-label-leader {
     fill: none;
     stroke: rgba(46, 219, 153, 0.55);
-    stroke-width: 0.7;
+    stroke-width: 0.6;
     stroke-dasharray: 2 2;
+}
+
+/* Big stats HUD — top-left corner of the map. The visual centerpiece. */
+.map-stats-overlay {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    z-index: 4;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.88);
+    border: 1px solid rgba(46, 219, 153, 0.55);
+    border-radius: 10px;
+    padding: 10px 16px;
+    box-shadow: 0 0 24px rgba(46, 219, 153, 0.18);
+    display: flex;
+    align-items: stretch;
+    gap: 16px;
+    backdrop-filter: blur(2px);
+}
+.map-stats-overlay .stat-block {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 64px;
+}
+.map-stats-overlay .stat-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    color: rgba(46, 219, 153, 0.7);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+.map-stats-overlay .stat-number {
+    font-family: 'Orbitron', 'Arial Black', sans-serif;
+    font-weight: 900;
+    font-size: 30px;
+    color: rgb(46 219 153);
+    text-shadow: 0 0 14px rgba(46, 219, 153, 0.55);
+    line-height: 1;
+    letter-spacing: 0.02em;
+}
+.map-stats-overlay .stat-divider {
+    width: 1px;
+    background: linear-gradient(to bottom, transparent, rgba(46,219,153,0.4), transparent);
+}
+@media (max-width: 640px) {
+    .map-stats-overlay { padding: 8px 12px; gap: 10px; }
+    .map-stats-overlay .stat-number { font-size: 22px; }
+    .map-stats-overlay .stat-label { font-size: 8px; letter-spacing: 0.18em; }
+    .map-stats-overlay .stat-block { min-width: 48px; }
 }
 
 /* Watermark — visible in screenshots for Instagram sharing */
@@ -1123,14 +1189,13 @@
                 .attr('stroke', 'rgba(46,219,153,0.06)')
                 .attr('stroke-width', 0.5);
 
-            // ── Always-visible count labels on the top 12 countries ──
-            // Greedy placement: label at country centroid, but if that
-            // collides with an already-placed label, push outward radially
-            // until it fits. Small countries with no room get a leader line.
-            const topN = Object.entries(GEO)
-                .sort((a, b) => b[1].count - a[1].count)
-                .slice(0, 12);
-
+            // ── Always-visible alpha-2 ISO-code labels on EVERY country with data ──
+            // Just shows where we have coverage; counts are intentionally hidden
+            // (the HUD overlay communicates totals instead). Greedy placement
+            // around centroids — collisions push labels outward via the golden
+            // angle until they fit; if 30 spiral attempts fail, the label is
+            // skipped (typical for tiny island states clustered in a region
+            // where bigger neighbours already claimed the space).
             const placed = []; // {x, y, w, h}
             const labelGroup = svg.append('g').attr('class', 'country-labels');
 
@@ -1139,7 +1204,11 @@
                          a.y + a.h/2 < b.y - b.h/2 || a.y - a.h/2 > b.y + b.h/2);
             }
 
-            topN.forEach(([numeric, data]) => {
+            // Render denser countries first so they claim the prime real estate
+            const allEntries = Object.entries(GEO)
+                .sort((a, b) => b[1].count - a[1].count);
+
+            allEntries.forEach(([numeric, data]) => {
                 // world-atlas uses numeric ids as strings without padding (e.g. "8", "724")
                 const country = countries.find(c => String(c.id) === String(numeric));
                 if (!country) return;
@@ -1147,31 +1216,33 @@
                 if (!centroid || isNaN(centroid[0])) return;
                 const cx = centroid[0], cy = centroid[1];
 
-                const text = String(data.count);
-                const w = Math.max(22, text.length * 7 + 12);
-                const h = 16;
+                const text = (data.alpha2 || '').toUpperCase();
+                if (!text) return;
+                const w = Math.max(20, text.length * 6.5 + 10);
+                const h = 14;
 
-                // Try centroid first; if it collides, spiral outward
                 let x = cx, y = cy;
                 let attempt = 0;
-                while (attempt < 24) {
+                let placedOk = true;
+                while (true) {
                     const r = { x, y, w, h };
                     if (!placed.some(p => rectsOverlap(r, p))) break;
                     attempt++;
+                    if (attempt > 30) { placedOk = false; break; }
                     const angle = (attempt * 137.5) * Math.PI / 180; // golden angle
-                    const dist = 12 + attempt * 3;
+                    const dist = 10 + attempt * 2.5;
                     x = cx + Math.cos(angle) * dist;
                     y = cy + Math.sin(angle) * dist;
                 }
+                if (!placedOk) return;
                 placed.push({ x, y, w, h });
 
                 const lg = labelGroup.append('g')
                     .attr('class', 'country-label-group')
                     .attr('transform', `translate(${x.toFixed(1)}, ${y.toFixed(1)})`);
 
-                // Leader line if label moved away from centroid
-                const dx = x - cx, dy = y - cy;
-                if (Math.hypot(dx, dy) > 8) {
+                // Leader line back to the country centroid if the label drifted
+                if (Math.hypot(x - cx, y - cy) > 8) {
                     labelGroup.append('line')
                         .attr('class', 'country-label-leader')
                         .attr('x1', cx).attr('y1', cy)
@@ -1182,7 +1253,7 @@
                     .attr('class', 'country-label-bg')
                     .attr('x', -w/2).attr('y', -h/2)
                     .attr('width', w).attr('height', h)
-                    .attr('rx', 8);
+                    .attr('rx', 7);
 
                 lg.append('text')
                     .attr('class', 'country-label-text')
