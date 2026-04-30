@@ -293,13 +293,16 @@ def _compute_country_distribution(limit=40):
             "flag": flag,
         })
 
-    # Geo data for the choropleth — keyed by ISO numeric (matches world-atlas TopoJSON)
+    # Geo data for the choropleth — keyed by ISO numeric WITHOUT leading
+    # zeros to match world-atlas TopoJSON ids ("8" not "008"). The
+    # iso_to_numeric helper returns the zero-padded form for canonical
+    # display elsewhere; here we strip via int() round-trip.
     geo = {}
     for code, c in counts:
         numeric = iso_to_numeric(code)
         if numeric:
             name, flag = lookup_country(code)
-            geo[numeric] = {
+            geo[str(int(numeric))] = {
                 "name": name,
                 "flag": flag,
                 "count": c,

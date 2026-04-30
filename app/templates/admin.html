@@ -134,6 +134,11 @@
             <svg id="chart-world-map" class="w-full h-full" preserveAspectRatio="xMidYMid meet"></svg>
             <div id="map-tooltip" class="map-tooltip"></div>
 
+            <!-- Watermark (visible when screenshotted for Instagram) -->
+            <div class="world-map-watermark">
+                <span class="accent">▌</span> METAKIZZ · UNPLUGGING.PROTOCOL
+            </div>
+
             <!-- Loading state -->
             <div id="map-loading" class="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <span class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400/60 animate-pulse">▌ LOADING TOPOLOGY...</span>
@@ -873,6 +878,47 @@
     stroke-width: 0.9;
 }
 
+/* Always-visible count labels on top countries */
+.country-label-group { pointer-events: none; }
+.country-label-bg {
+    fill: rgba(0, 0, 0, 0.92);
+    stroke: rgba(46, 219, 153, 0.9);
+    stroke-width: 0.8;
+    filter: drop-shadow(0 0 5px rgba(46, 219, 153, 0.45));
+}
+.country-label-text {
+    font-family: 'Orbitron', 'Arial Black', sans-serif;
+    font-weight: 900;
+    font-size: 11px;
+    fill: rgb(46 219 153);
+    paint-order: stroke;
+    stroke: rgba(0,0,0,0.4);
+    stroke-width: 2;
+}
+.country-label-leader {
+    fill: none;
+    stroke: rgba(46, 219, 153, 0.55);
+    stroke-width: 0.7;
+    stroke-dasharray: 2 2;
+}
+
+/* Watermark — visible in screenshots for Instagram sharing */
+.world-map-watermark {
+    position: absolute;
+    right: 14px;
+    bottom: 38px;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: rgba(46, 219, 153, 0.55);
+    text-shadow: 0 0 8px rgba(46, 219, 153, 0.35);
+    pointer-events: none;
+    z-index: 3;
+    text-transform: uppercase;
+}
+.world-map-watermark .accent { color: rgb(46 219 153); }
+
 .map-tooltip {
     position: absolute;
     pointer-events: none;
@@ -1076,6 +1122,74 @@
                 .attr('fill', 'none')
                 .attr('stroke', 'rgba(46,219,153,0.06)')
                 .attr('stroke-width', 0.5);
+
+            // ── Always-visible count labels on the top 12 countries ──
+            // Greedy placement: label at country centroid, but if that
+            // collides with an already-placed label, push outward radially
+            // until it fits. Small countries with no room get a leader line.
+            const topN = Object.entries(GEO)
+                .sort((a, b) => b[1].count - a[1].count)
+                .slice(0, 12);
+
+            const placed = []; // {x, y, w, h}
+            const labelGroup = svg.append('g').attr('class', 'country-labels');
+
+            function rectsOverlap(a, b) {
+                return !(a.x + a.w/2 < b.x - b.w/2 || a.x - a.w/2 > b.x + b.w/2 ||
+                         a.y + a.h/2 < b.y - b.h/2 || a.y - a.h/2 > b.y + b.h/2);
+            }
+
+            topN.forEach(([numeric, data]) => {
+                // world-atlas uses numeric ids as strings without padding (e.g. "8", "724")
+                const country = countries.find(c => String(c.id) === String(numeric));
+                if (!country) return;
+                const centroid = path.centroid(country);
+                if (!centroid || isNaN(centroid[0])) return;
+                const cx = centroid[0], cy = centroid[1];
+
+                const text = String(data.count);
+                const w = Math.max(22, text.length * 7 + 12);
+                const h = 16;
+
+                // Try centroid first; if it collides, spiral outward
+                let x = cx, y = cy;
+                let attempt = 0;
+                while (attempt < 24) {
+                    const r = { x, y, w, h };
+                    if (!placed.some(p => rectsOverlap(r, p))) break;
+                    attempt++;
+                    const angle = (attempt * 137.5) * Math.PI / 180; // golden angle
+                    const dist = 12 + attempt * 3;
+                    x = cx + Math.cos(angle) * dist;
+                    y = cy + Math.sin(angle) * dist;
+                }
+                placed.push({ x, y, w, h });
+
+                const lg = labelGroup.append('g')
+                    .attr('class', 'country-label-group')
+                    .attr('transform', `translate(${x.toFixed(1)}, ${y.toFixed(1)})`);
+
+                // Leader line if label moved away from centroid
+                const dx = x - cx, dy = y - cy;
+                if (Math.hypot(dx, dy) > 8) {
+                    labelGroup.append('line')
+                        .attr('class', 'country-label-leader')
+                        .attr('x1', cx).attr('y1', cy)
+                        .attr('x2', x).attr('y2', y);
+                }
+
+                lg.append('rect')
+                    .attr('class', 'country-label-bg')
+                    .attr('x', -w/2).attr('y', -h/2)
+                    .attr('width', w).attr('height', h)
+                    .attr('rx', 8);
+
+                lg.append('text')
+                    .attr('class', 'country-label-text')
+                    .attr('text-anchor', 'middle')
+                    .attr('dy', '0.36em')
+                    .text(text);
+            });
 
             if (loadingEl) loadingEl.style.display = 'none';
         }).catch(err => {
