@@ -243,14 +243,16 @@ def _compute_turnstile_stats():
     }
 
 
-def _compute_country_distribution(limit=20):
+def _compute_country_distribution(limit=40):
     """Aggregate ambassador counts by ISO country code.
 
-    Returns a dict ready for Chart.js plus a `coverage` percentage so the
-    admin can see how much of the dataset has phone/country attached.
-    Sorts by count desc and caps at `limit` (lumps the rest into 'Other').
+    Returns:
+      - labels / counts / flags  → bar chart (top `limit`, rest in 'Other')
+      - geo  → {numeric_iso: {name, flag, count, alpha2}} for the world map
+      - other_breakdown  → list of (label, count, flag) for what's lumped in 'Other'
+      - coverage_pct, total, with_country, distinct_countries
     """
-    from app.services.phone import lookup_country
+    from app.services.phone import lookup_country, iso_to_numeric
 
     rows = (
         db.session.query(Ambassador.country_code, func.count(Ambassador.id))
@@ -264,7 +266,8 @@ def _compute_country_distribution(limit=20):
     counts.sort(key=lambda x: -x[1])
 
     top = counts[:limit]
-    other_count = sum(c for _, c in counts[limit:])
+    overflow = counts[limit:]
+    other_count = sum(c for _, c in overflow)
 
     labels = []
     counts_list = []  # NOTE: not 'values' — Jinja shadows dict.values method
@@ -279,14 +282,41 @@ def _compute_country_distribution(limit=20):
         counts_list.append(other_count)
         flags.append("")
 
+    # Detail of what's in "Other" so the user can see the long tail
+    other_breakdown = []
+    for code, c in overflow:
+        name, flag = lookup_country(code)
+        other_breakdown.append({
+            "label": f"{flag} {name}".strip() or code,
+            "count": c,
+            "code": code,
+            "flag": flag,
+        })
+
+    # Geo data for the choropleth — keyed by ISO numeric (matches world-atlas TopoJSON)
+    geo = {}
+    for code, c in counts:
+        numeric = iso_to_numeric(code)
+        if numeric:
+            name, flag = lookup_country(code)
+            geo[numeric] = {
+                "name": name,
+                "flag": flag,
+                "count": c,
+                "alpha2": code,
+            }
+
     return {
         "labels": labels,
         "counts": counts_list,
         "flags": flags,
+        "geo": geo,
+        "other_breakdown": other_breakdown,
         "total": total,
         "with_country": with_country,
         "coverage_pct": (round(100 * with_country / total, 1) if total else 0),
         "distinct_countries": len(counts),
+        "max_count": max((c for _, c in counts), default=0),
     }
 
 

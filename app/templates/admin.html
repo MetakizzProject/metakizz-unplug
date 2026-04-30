@@ -105,10 +105,10 @@
         </div>
     </div>
 
-    <!-- ─── COUNTRY DISTRIBUTION ─── -->
-    {% if country_dist %}
-    <div class="flex items-center justify-between mb-3">
-        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ AMBASSADORS BY COUNTRY · TOP 20</p>
+    <!-- ─── WORLD MAP — choropleth ─── -->
+    {% if country_dist and country_dist.geo %}
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ WORLDWIDE REACH · LIVE MAP</p>
         <span class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500">
             Coverage: <span class="{% if country_dist.coverage_pct >= 80 %}text-brand-400{% elif country_dist.coverage_pct >= 30 %}text-yellow-400{% else %}text-gray-400{% endif %} font-bold">{{ country_dist.coverage_pct }}%</span>
             <span class="text-gray-600 mx-1">·</span> {{ country_dist.with_country }} / {{ country_dist.total }} have phone
@@ -116,9 +116,52 @@
             <a href="{{ url_for('admin.backfill_phones') }}" class="ml-3 text-brand-400 hover:text-brand-300">+ Backfill from CSV</a>
         </span>
     </div>
-    <div class="admin-card mb-7">
+    <div class="world-map-card mb-4">
+        <!-- Decorative scanlines + corner brackets -->
+        <span class="map-corner top-left"></span>
+        <span class="map-corner top-right"></span>
+        <span class="map-corner bottom-left"></span>
+        <span class="map-corner bottom-right"></span>
+
+        <!-- Terminal header strip -->
+        <div class="flex items-center justify-between px-4 py-2 border-b border-brand-400/20 font-mono-term text-[10px] tracking-[0.25em] uppercase">
+            <span class="text-brand-400/80"><span class="text-brand-400">▌</span> GLOBAL.MAP — {{ country_dist.distinct_countries }} REGIONS · {{ country_dist.with_country }} DANCERS</span>
+            <span class="text-gray-500 hidden sm:inline">SCAN: <span class="text-brand-400 animate-pulse">ACTIVE</span></span>
+        </div>
+
+        <!-- Map container -->
+        <div class="relative" style="aspect-ratio: 16/9;">
+            <svg id="chart-world-map" class="w-full h-full" preserveAspectRatio="xMidYMid meet"></svg>
+            <div id="map-tooltip" class="map-tooltip"></div>
+
+            <!-- Loading state -->
+            <div id="map-loading" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400/60 animate-pulse">▌ LOADING TOPOLOGY...</span>
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex items-center justify-between px-4 py-2 border-t border-brand-400/20 font-mono-term text-[10px] tracking-[0.2em] uppercase flex-wrap gap-2">
+            <div class="flex items-center gap-2">
+                <span class="text-gray-500">DENSITY</span>
+                <span class="map-legend-bar"></span>
+                <span class="text-gray-500">1</span>
+                <span class="text-gray-700">→</span>
+                <span class="text-brand-400 font-bold">{{ country_dist.max_count }}</span>
+            </div>
+            <span class="text-gray-600 hidden sm:inline">▸ HOVER FOR DETAIL</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ─── COUNTRY DISTRIBUTION (bar chart) ─── -->
+    {% if country_dist %}
+    <div class="flex items-center justify-between mb-3">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ AMBASSADORS BY COUNTRY · TOP 40</p>
+    </div>
+    <div class="admin-card mb-4">
         {% if country_dist.counts %}
-        <div class="relative" style="height: {{ 24 + country_dist.counts|length * 26 }}px;">
+        <div class="relative" style="height: {{ 24 + country_dist.counts|length * 22 }}px;">
             <canvas id="chart-country"></canvas>
         </div>
         {% else %}
@@ -131,6 +174,25 @@
         </div>
         {% endif %}
     </div>
+
+    <!-- "Other" breakdown — show what's lumped beyond the bar chart limit -->
+    {% if country_dist.other_breakdown %}
+    <details class="bg-gray-900/60 border border-gray-800 rounded-xl mb-7 group">
+        <summary class="px-4 py-3 cursor-pointer font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-400 hover:text-brand-400 transition flex items-center justify-between">
+            <span>▸ OTHER · {{ country_dist.other_breakdown|length }} more countries · click to expand</span>
+            <span class="text-gray-600 group-open:hidden">+</span>
+            <span class="text-brand-400 hidden group-open:inline">−</span>
+        </summary>
+        <div class="px-4 pb-3 pt-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-1 text-xs font-mono-term">
+            {% for c in country_dist.other_breakdown %}
+            <div class="flex items-center justify-between border-b border-gray-800/60 py-1">
+                <span class="text-gray-300 truncate">{{ c.label }}</span>
+                <span class="text-brand-400 font-bold ml-2">{{ c.count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
     {% endif %}
 
     <!-- ─── MARKETING SEGMENTS — quick contact actions ─── -->
@@ -769,6 +831,95 @@
     text-decoration: none;
 }
 .admin-chip:hover { color: white; border-color: rgba(46,219,153,0.4); }
+/* World map — Matrix terminal aesthetic */
+.world-map-card {
+    position: relative;
+    background:
+        radial-gradient(ellipse at center, rgba(46,219,153,0.04) 0%, rgba(0,0,0,0) 70%),
+        repeating-linear-gradient(0deg, rgba(46,219,153,0.025) 0, rgba(46,219,153,0.025) 1px, transparent 1px, transparent 3px),
+        rgb(7 12 10);
+    border: 1px solid rgba(46,219,153,0.25);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow:
+        inset 0 0 80px rgba(46,219,153,0.04),
+        0 0 32px rgba(46,219,153,0.06);
+}
+.world-map-card .map-corner {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-color: rgba(46,219,153,0.7);
+    pointer-events: none;
+    z-index: 2;
+}
+.world-map-card .map-corner.top-left    { top: 8px;    left: 8px;  border-top: 2px solid; border-left: 2px solid; }
+.world-map-card .map-corner.top-right   { top: 8px;    right: 8px; border-top: 2px solid; border-right: 2px solid; }
+.world-map-card .map-corner.bottom-left { bottom: 8px; left: 8px;  border-bottom: 2px solid; border-left: 2px solid; }
+.world-map-card .map-corner.bottom-right{ bottom: 8px; right: 8px; border-bottom: 2px solid; border-right: 2px solid; }
+
+.world-map-card svg path.country {
+    fill: #0e1612;
+    stroke: rgba(46,219,153,0.18);
+    stroke-width: 0.4;
+    transition: filter 200ms ease, stroke 200ms ease;
+}
+.world-map-card svg path.country.has-data {
+    cursor: pointer;
+}
+.world-map-card svg path.country.has-data:hover {
+    filter: brightness(1.6) drop-shadow(0 0 8px rgba(46,219,153,0.7));
+    stroke: rgba(46,219,153,0.95);
+    stroke-width: 0.9;
+}
+
+.map-tooltip {
+    position: absolute;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 14px));
+    transition: opacity 120ms ease;
+    background: rgba(0,0,0,0.95);
+    border: 1px solid rgba(46,219,153,0.55);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    font-size: 12px;
+    white-space: nowrap;
+    box-shadow: 0 0 22px rgba(46,219,153,0.35);
+    z-index: 50;
+}
+.map-tooltip.visible { opacity: 1; }
+.map-tooltip .tip-flag { font-size: 18px; vertical-align: middle; margin-right: 6px; }
+.map-tooltip .tip-name { color: white; letter-spacing: 0.08em; text-transform: uppercase; }
+.map-tooltip .tip-count { display: block; margin-top: 4px; color: rgb(46 219 153); font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 18px; letter-spacing: 0.05em; text-shadow: 0 0 12px rgba(46,219,153,0.6); }
+.map-tooltip .tip-label { color: rgba(46,219,153,0.6); font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; }
+
+.map-legend-bar {
+    display: inline-block;
+    width: 100px;
+    height: 8px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(46,219,153,0.15), rgba(46,219,153,0.5), rgba(46,219,153,1));
+    box-shadow: 0 0 10px rgba(46,219,153,0.4);
+}
+
+/* Filter chips */
+.admin-chip {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: rgb(31 41 55);
+    color: rgb(156 163 175);
+    border: 1px solid rgb(55 65 81);
+    transition: all 180ms;
+    text-decoration: none;
+}
+.admin-chip:hover { color: white; border-color: rgba(46,219,153,0.4); }
 .admin-chip-active {
     background: rgb(46 219 153);
     color: black;
@@ -780,6 +931,9 @@
 
 <!-- Chart.js (CDN) -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- D3 + topojson for the world map -->
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
 
 <script>
     // ── Broadcast modal ──────────────────────────────────────────────
@@ -852,7 +1006,86 @@
         }
     });
 
-    // 4. Country distribution (horizontal bar)
+    // 4. World map (D3 choropleth) — Matrix aesthetic
+    {% if country_dist and country_dist.geo %}
+    (function() {
+        const GEO = {{ country_dist.geo | tojson }};
+        const MAX = {{ country_dist.max_count }};
+        if (!GEO || Object.keys(GEO).length === 0) return;
+
+        const svg = d3.select('#chart-world-map');
+        const tooltip = document.getElementById('map-tooltip');
+        const loadingEl = document.getElementById('map-loading');
+
+        // Project to fill the 16:9 box. Equal Earth gives a clean cartographic feel.
+        const W = 960, H = 540;
+        svg.attr('viewBox', `0 0 ${W} ${H}`);
+
+        const projection = d3.geoEqualEarth()
+            .scale(180)
+            .translate([W / 2, H / 2 + 20]);
+        const path = d3.geoPath(projection);
+
+        // Color scale — opacity-based so countries fade up as count grows.
+        // Floor at 0.18 so even 1-person countries are visible against the dark bg.
+        function fillFor(count) {
+            if (!count) return null;
+            const t = MAX === 1 ? 1 : Math.min(1, 0.18 + 0.82 * (count / MAX));
+            // brand-400 with computed opacity
+            return `rgba(46, 219, 153, ${t.toFixed(3)})`;
+        }
+
+        function showTooltip(e, name, flag, count) {
+            tooltip.innerHTML = `
+                <span class="tip-flag">${flag || '🌐'}</span><span class="tip-name">${name}</span>
+                <span class="tip-count">${count}</span>
+                <span class="tip-label">${count === 1 ? 'dancer' : 'dancers'}</span>
+            `;
+            const rect = svg.node().getBoundingClientRect();
+            tooltip.style.left = (e.clientX - rect.left) + 'px';
+            tooltip.style.top  = (e.clientY - rect.top)  + 'px';
+            tooltip.classList.add('visible');
+        }
+        function hideTooltip() { tooltip.classList.remove('visible'); }
+
+        d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(world => {
+            const countries = topojson.feature(world, world.objects.countries).features;
+
+            const g = svg.append('g');
+
+            g.selectAll('path.country')
+                .data(countries)
+                .join('path')
+                .attr('class', d => GEO[d.id] ? 'country has-data' : 'country')
+                .attr('d', path)
+                .attr('fill', d => {
+                    const data = GEO[d.id];
+                    return data ? fillFor(data.count) : null;
+                })
+                .on('mousemove', function(event, d) {
+                    const data = GEO[d.id];
+                    if (data) showTooltip(event, data.name, data.flag, data.count);
+                })
+                .on('mouseleave', hideTooltip);
+
+            // Subtle graticule (latitude/longitude grid) for the cartographic terminal feel
+            const graticule = d3.geoGraticule().step([20, 20]);
+            svg.insert('path', ':first-child')
+                .datum(graticule())
+                .attr('d', path)
+                .attr('fill', 'none')
+                .attr('stroke', 'rgba(46,219,153,0.06)')
+                .attr('stroke-width', 0.5);
+
+            if (loadingEl) loadingEl.style.display = 'none';
+        }).catch(err => {
+            console.error('World map load failed', err);
+            if (loadingEl) loadingEl.innerHTML = '<span class="font-mono-term text-xs text-red-400">▌ TOPOLOGY LOAD FAILED</span>';
+        });
+    })();
+    {% endif %}
+
+    // 5. Country distribution (horizontal bar)
     {% if country_dist and country_dist.counts %}
     const COUNTRY_DATA = {{ country_dist | tojson }};
     new Chart(document.getElementById('chart-country'), {
