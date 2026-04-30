@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Backfill Phones · Admin{% endblock %}
+{% block nav_right %}{% endblock %}
+
+{% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+<div class="max-w-3xl mx-auto px-4 pt-4 pb-12">
+    <div class="flex items-center justify-between mb-3 font-mono-term text-[10px] tracking-[0.25em] uppercase">
+        <span class="text-brand-400/80"><span class="text-brand-400">▌</span> METAKIZZ // BACKFILL.PHONES</span>
+        <a href="{{ url_for('admin.index') }}" class="text-gray-500 hover:text-brand-400 transition">← BACK TO ADMIN</a>
+    </div>
+
+    <h1 class="text-2xl font-display font-bold mb-4">Phone backfill from GHL CSV</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+        <div class="mb-4 px-4 py-3 rounded-lg border text-sm
+            {% if category == 'error' %}bg-red-900/20 border-red-500/40 text-red-200
+            {% elif category == 'success' %}bg-brand-400/10 border-brand-400/40 text-brand-100
+            {% else %}bg-gray-800 border-gray-700 text-gray-200{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    {% endwith %}
+
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-5 mb-5">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3">▌ HOW IT WORKS</p>
+        <ol class="text-sm text-gray-300 space-y-2 list-decimal list-inside">
+            <li>Export your GHL contacts as CSV (Contacts → … → Export).</li>
+            <li>Make sure the CSV has columns named <code class="text-brand-400">email</code> and <code class="text-brand-400">phone</code> (case-insensitive). Other columns are ignored.</li>
+            <li>Upload below. We match each row to an existing Ambassador by email and store the parsed phone (E.164 format) plus country (ISO code).</li>
+            <li>Idempotent: rows that already have a phone are skipped. Re-uploading the same CSV is safe.</li>
+        </ol>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data"
+          class="bg-gray-900/80 border border-brand-400/40 rounded-xl p-5"
+          style="box-shadow: 0 0 20px rgba(46,219,153,0.12);"
+          onsubmit="return confirm('Run phone backfill on this CSV?\n\nIdempotent — already-set ambassadors are skipped.');">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3">▌ UPLOAD CSV</p>
+        <input type="file" name="file" accept=".csv,text/csv" required
+               class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white file:bg-brand-400/20 file:text-brand-400 file:border-0 file:rounded file:px-3 file:py-1 file:mr-3 file:font-mono-term file:text-xs file:tracking-wider file:uppercase mb-4">
+        <div class="flex justify-end gap-2">
+            <a href="{{ url_for('admin.index') }}"
+               class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-500 hover:text-white px-3 py-1.5">
+                Cancel
+            </a>
+            <button type="submit"
+                    class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-brand-400 hover:bg-brand-300 px-4 py-1.5 rounded font-bold transition"
+                    style="box-shadow: 0 0 12px rgba(46,219,153,0.35);">
+                ▲ Run backfill
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

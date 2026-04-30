@@ -73,6 +73,12 @@ def _ensure_unsubscribe_columns(db):
         if "turnstile_codes" not in cols:
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN turnstile_codes VARCHAR(160)"))
             logger.info("added column ambassadors.turnstile_codes")
+        if "phone_number" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN phone_number VARCHAR(30)"))
+            logger.info("added column ambassadors.phone_number")
+        if "country_code" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN country_code VARCHAR(4)"))
+            logger.info("added column ambassadors.country_code")
 
         # Same fraud columns on referrals (the more actionable signal — duplicates here
         # mean the same person is registering many "friends" via their own link).

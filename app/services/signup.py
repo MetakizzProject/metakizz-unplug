@@ -70,6 +70,7 @@ def create_signup(
     name, email, ref_code=None,
     signup_ip=None, signup_user_agent=None,
     turnstile_status=None, turnstile_codes=None,
+    phone_number=None, country_code=None,
 ):
     """
     Create (or return existing) Ambassador for a PLF signup, and credit the referrer.
@@ -129,6 +130,8 @@ def create_signup(
         signup_user_agent=signup_user_agent,
         turnstile_status=turnstile_status,
         turnstile_codes=turnstile_codes,
+        phone_number=phone_number,
+        country_code=country_code,
     )
     db.session.add(new_ambassador)
 

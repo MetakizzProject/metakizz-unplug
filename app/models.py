@@ -72,6 +72,13 @@ class Ambassador(db.Model):
     turnstile_status = db.Column(db.String(30), nullable=True, index=True)
     turnstile_codes = db.Column(db.String(160), nullable=True)
 
+    # Phone number (E.164: "+34612345678") + ISO 3166-1 alpha-2 country code
+    # (e.g. "ES"). Captured at signup from the Lovable form via GHL, or
+    # backfilled from a GHL CSV export. country_code is derived from the
+    # phone via libphonenumber so we can chart distribution by country.
+    phone_number = db.Column(db.String(30), nullable=True, index=True)
+    country_code = db.Column(db.String(4), nullable=True, index=True)
+
     referrals = db.relationship("Referral", backref="ambassador", lazy=True)
     notifications = db.relationship("MilestoneNotification", backref="ambassador", lazy=True)
 

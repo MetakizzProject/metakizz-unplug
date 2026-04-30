@@ -90,6 +90,19 @@ def _extract_client_ip(payload):
     return ip[:64] if ip else ""
 
 
+def _extract_phone(payload):
+    """Pull the user's phone number from a GHL webhook payload.
+
+    GHL forwards `{{contact.phone}}` (or similar). We tolerate variants;
+    return the raw string for the parser to normalize.
+    """
+    return _pluck(
+        payload,
+        "phone", "Phone", "phone_number", "phoneNumber",
+        "contact_phone", "contactPhone",
+    )
+
+
 @webhook_bp.route("/api/webhook/signup", methods=["POST"])
 def ghl_signup():
     """
@@ -193,12 +206,30 @@ def ghl_signup():
             "status": ts_result["status"],
         }), 400
 
+    # Phone + country detection. The Lovable form already collects phone;
+    # GHL needs a custom-data row mapping {{contact.phone}} into the
+    # outbound webhook body. Failures here never block the signup.
+    raw_phone = _extract_phone(payload)
+    phone_e164 = None
+    country_iso = None
+    if raw_phone:
+        try:
+            from app.services.phone import parse as parse_phone
+            parsed = parse_phone(raw_phone)
+            if parsed:
+                phone_e164 = parsed["e164"]
+                country_iso = parsed["country_code"]
+        except Exception:
+            logger.exception("phone parsing failed for %r", raw_phone)
+
     try:
         ambassador, was_new = create_signup(
             name, email, ref_code,
             signup_ip=client_ip or None,
             turnstile_status=ts_result["status"],
             turnstile_codes=ts_result["codes"],
+            phone_number=phone_e164,
+            country_code=country_iso,
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400

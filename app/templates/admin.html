@@ -105,6 +105,34 @@
         </div>
     </div>
 
+    <!-- ─── COUNTRY DISTRIBUTION ─── -->
+    {% if country_dist %}
+    <div class="flex items-center justify-between mb-3">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ AMBASSADORS BY COUNTRY · TOP 20</p>
+        <span class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500">
+            Coverage: <span class="{% if country_dist.coverage_pct >= 80 %}text-brand-400{% elif country_dist.coverage_pct >= 30 %}text-yellow-400{% else %}text-gray-400{% endif %} font-bold">{{ country_dist.coverage_pct }}%</span>
+            <span class="text-gray-600 mx-1">·</span> {{ country_dist.with_country }} / {{ country_dist.total }} have phone
+            <span class="text-gray-600 mx-1">·</span> {{ country_dist.distinct_countries }} countries
+            <a href="{{ url_for('admin.backfill_phones') }}" class="ml-3 text-brand-400 hover:text-brand-300">+ Backfill from CSV</a>
+        </span>
+    </div>
+    <div class="admin-card mb-7">
+        {% if country_dist.counts %}
+        <div class="relative" style="height: {{ 24 + country_dist.counts|length * 26 }}px;">
+            <canvas id="chart-country"></canvas>
+        </div>
+        {% else %}
+        <div class="text-center py-6">
+            <p class="font-mono-term text-xs tracking-wider text-gray-500 mb-2">&gt; NO PHONE/COUNTRY DATA YET</p>
+            <p class="text-xs text-gray-500">
+                Phone numbers arrive via the GHL outbound webhook (custom field <code class="text-brand-400">phone</code>) or via the
+                <a href="{{ url_for('admin.backfill_phones') }}" class="text-brand-400 hover:text-brand-300 underline">CSV backfill</a>.
+            </p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <!-- ─── MARKETING SEGMENTS — quick contact actions ─── -->
     <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3">▌ MARKETING SEGMENTS · 1-CLICK CONTACT</p>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-7">
@@ -823,6 +851,33 @@
             plugins: { legend: {position: 'right', labels: {boxWidth: 10, padding: 8}} },
         }
     });
+
+    // 4. Country distribution (horizontal bar)
+    {% if country_dist and country_dist.counts %}
+    const COUNTRY_DATA = {{ country_dist | tojson }};
+    new Chart(document.getElementById('chart-country'), {
+        type: 'bar',
+        data: {
+            labels: COUNTRY_DATA.labels,
+            datasets: [{
+                data: COUNTRY_DATA.counts,
+                backgroundColor: 'rgba(46,219,153,0.55)',
+                borderColor: 'rgba(46,219,153,0.95)',
+                borderWidth: 1,
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: {display: false} },
+            scales: {
+                x: { beginAtZero: true, grid: {color: 'rgba(46,219,153,0.08)'}, ticks: {precision: 0} },
+                y: { grid: {display: false}, ticks: {font: {size: 11}} },
+            }
+        }
+    });
+    {% endif %}
 
     // 3. Funnel (horizontal bar — drops naturally)
     new Chart(document.getElementById('chart-funnel'), {

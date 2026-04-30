@@ -243,6 +243,53 @@ def _compute_turnstile_stats():
     }
 
 
+def _compute_country_distribution(limit=20):
+    """Aggregate ambassador counts by ISO country code.
+
+    Returns a dict ready for Chart.js plus a `coverage` percentage so the
+    admin can see how much of the dataset has phone/country attached.
+    Sorts by count desc and caps at `limit` (lumps the rest into 'Other').
+    """
+    from app.services.phone import lookup_country
+
+    rows = (
+        db.session.query(Ambassador.country_code, func.count(Ambassador.id))
+        .group_by(Ambassador.country_code)
+        .all()
+    )
+    total = sum(c for _, c in rows)
+    with_country = sum(c for code, c in rows if code)
+
+    counts = [(code, c) for code, c in rows if code]
+    counts.sort(key=lambda x: -x[1])
+
+    top = counts[:limit]
+    other_count = sum(c for _, c in counts[limit:])
+
+    labels = []
+    counts_list = []  # NOTE: not 'values' — Jinja shadows dict.values method
+    flags = []
+    for code, c in top:
+        name, flag = lookup_country(code)
+        labels.append(f"{flag} {name}".strip() or code)
+        counts_list.append(c)
+        flags.append(flag)
+    if other_count:
+        labels.append("Other")
+        counts_list.append(other_count)
+        flags.append("")
+
+    return {
+        "labels": labels,
+        "counts": counts_list,
+        "flags": flags,
+        "total": total,
+        "with_country": with_country,
+        "coverage_pct": (round(100 * with_country / total, 1) if total else 0),
+        "distinct_countries": len(counts),
+    }
+
+
 def _compute_chart_data():
     """Return JSON-serialisable data for the admin charts."""
     now = datetime.now(timezone.utc)
@@ -354,6 +401,7 @@ def index():
     charts = _compute_chart_data()
     email_stats = _compute_email_stats()
     turnstile_stats = _compute_turnstile_stats()
+    country_dist = _compute_country_distribution()
 
     # Engagement: how many ambassadors have opened their dashboard at least once
     visited = sum(1 for a in all_amb_for_stats if a.last_dashboard_visit_at is not None)
@@ -387,6 +435,7 @@ def index():
         high_risk_total=high_risk_total,
         pending_review_count=pending_review_count,
         turnstile_stats=turnstile_stats,
+        country_dist=country_dist,
     )
 
 
@@ -1154,6 +1203,10 @@ def ambassador_detail(ambassador_id):
             if engagement["health"] == "ghost":
                 summary["ghost"] += 1
 
+    # Country lookup for the metadata block (flag + name)
+    from app.services.phone import lookup_country
+    country_name, country_flag = lookup_country(amb.country_code)
+
     # Detect duplicate-by-typo emails inside this ambassador's referral list
     # (e.g. letasha617@gmail.com vs letasha617@gmail.co — telltale of a fake
     # second registration with the same prefix on a near-miss domain).
@@ -1182,8 +1235,108 @@ def ambassador_detail(ambassador_id):
         referral_engagement=referral_engagement,
         engagement_summary=summary,
         duplicate_prefix_refs=duplicate_prefix_refs,
+        country_name=country_name,
+        country_flag=country_flag,
         now_ts=datetime.now(timezone.utc),
     )
+
+
+@admin_bp.route("/backfill-phones", methods=["GET", "POST"])
+def backfill_phones():
+    """Bulk-import phone numbers from a GHL CSV export.
+
+    Accepts a CSV upload with at least these columns (header row required):
+      email,phone
+
+    Other columns are ignored. For each row:
+    - Lower-cases the email and looks up the matching Ambassador
+    - Parses the phone via libphonenumber → E.164 + ISO country
+    - Updates phone_number + country_code on that ambassador
+
+    Idempotent: re-running with the same CSV is a no-op for already-set
+    rows. Phones that fail to parse are logged but don't block the rest.
+    Returns a summary (matched / updated / skipped / unparseable).
+    """
+    if request.method == "GET":
+        return render_template("admin_backfill_phones.html")
+
+    from app.services.phone import parse as parse_phone
+
+    f = request.files.get("file")
+    if f is None or not f.filename:
+        flash("No file uploaded.", "error")
+        return redirect(url_for("admin.backfill_phones"))
+
+    try:
+        text_data = f.stream.read().decode("utf-8-sig", errors="replace")
+    except Exception:
+        flash("Could not decode the file as UTF-8 CSV.", "error")
+        return redirect(url_for("admin.backfill_phones"))
+
+    reader = csv.DictReader(io.StringIO(text_data))
+    if reader.fieldnames is None:
+        flash("CSV has no header row.", "error")
+        return redirect(url_for("admin.backfill_phones"))
+
+    # Find email + phone columns case-insensitively
+    fname_lower = {fn.lower().strip(): fn for fn in reader.fieldnames}
+    email_col = next((fname_lower[k] for k in ("email", "email address", "contact email") if k in fname_lower), None)
+    phone_col = next((fname_lower[k] for k in ("phone", "phone number", "contact phone", "phone_number") if k in fname_lower), None)
+
+    if not email_col or not phone_col:
+        flash(
+            f"CSV must include 'email' and 'phone' columns. "
+            f"Found columns: {', '.join(reader.fieldnames)}",
+            "error",
+        )
+        return redirect(url_for("admin.backfill_phones"))
+
+    stats = {"rows": 0, "matched": 0, "updated": 0, "unparseable": 0, "no_match": 0, "already_set": 0}
+    no_match_emails = []
+
+    for row in reader:
+        stats["rows"] += 1
+        email = (row.get(email_col) or "").strip().lower()
+        raw_phone = (row.get(phone_col) or "").strip()
+        if not email or not raw_phone:
+            continue
+
+        amb = Ambassador.query.filter(func.lower(Ambassador.email) == email).first()
+        if amb is None:
+            stats["no_match"] += 1
+            if len(no_match_emails) < 12:
+                no_match_emails.append(email)
+            continue
+        stats["matched"] += 1
+
+        if amb.phone_number and amb.country_code:
+            stats["already_set"] += 1
+            continue
+
+        parsed = parse_phone(raw_phone)
+        if not parsed:
+            stats["unparseable"] += 1
+            continue
+
+        amb.phone_number = parsed["e164"]
+        amb.country_code = parsed["country_code"]
+        stats["updated"] += 1
+
+    db.session.commit()
+
+    msg = (
+        f"Backfill complete. {stats['rows']} rows · "
+        f"{stats['matched']} matched · "
+        f"{stats['updated']} updated · "
+        f"{stats['already_set']} already had a phone · "
+        f"{stats['no_match']} no Ambassador match · "
+        f"{stats['unparseable']} bad phone numbers."
+    )
+    if no_match_emails:
+        msg += f" Sample no-match: {', '.join(no_match_emails)}"
+    flash(msg, "success")
+    logger.warning("ADMIN PHONE BACKFILL: %s", stats)
+    return redirect(url_for("admin.backfill_phones"))
 
 
 @admin_bp.route("/referral/<int:referral_id>/delete", methods=["POST"])

@@ -506,6 +506,17 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
             <p><span class="text-brand-400/70">// referral_code:</span> <span class="text-white">{{ amb.referral_code }}</span></p>
             <p><span class="text-brand-400/70">// dashboard_code:</span> <span class="text-white">{{ amb.dashboard_code }}</span></p>
+            <p><span class="text-brand-400/70">// phone:</span>
+                {% if amb.phone_number %}
+                <span class="text-white">{{ amb.phone_number }}</span>
+                {% else %}<span class="text-gray-600">—</span>{% endif %}
+            </p>
+            <p><span class="text-brand-400/70">// country:</span>
+                {% if amb.country_code %}
+                <span class="text-white">{{ country_flag }} {{ country_name }}</span>
+                <span class="text-gray-500">({{ amb.country_code }})</span>
+                {% else %}<span class="text-gray-600">—</span>{% endif %}
+            </p>
             <p><span class="text-brand-400/70">// signup_ip:</span> <span class="text-white">{{ amb.signup_ip or '—' }}</span></p>
             <p><span class="text-brand-400/70">// signup_user_agent:</span> <span class="text-white truncate inline-block max-w-xs align-bottom" title="{{ amb.signup_user_agent or '' }}">{{ (amb.signup_user_agent or '—')[:50] }}{% if amb.signup_user_agent and amb.signup_user_agent|length > 50 %}…{% endif %}</span></p>
             <p><span class="text-brand-400/70">// welcome_sent_at:</span> <span class="text-white">{{ amb.welcome_sent_at.strftime('%Y-%m-%d %H:%M') if amb.welcome_sent_at else '—' }}</span></p>
