@@ -1,21 +1,256 @@
 {% extends "admin_base.html" %}
 
 {% block admin_content %}
-<div class="px-4 lg:px-8 pt-6 pb-12">
+<div class="px-4 lg:px-8 pt-6 pb-12 max-w-7xl">
     <div class="flex items-center justify-between mb-3 font-mono-term text-[10px] tracking-[0.25em] uppercase">
         <span class="text-brand-400/80"><span class="text-brand-400">▌</span> METAKIZZ // EMAIL.CONTROL.CENTER</span>
+        <span class="text-gray-500">▶ live · auto-refresh on reload</span>
     </div>
-    <h1 class="text-2xl font-display font-bold mb-6">Email Control Center</h1>
+    <h1 class="text-2xl font-display font-bold mb-1">Email Control Center</h1>
+    <p class="text-sm text-gray-400 mb-6">Every template the system can send, what's working, what's not, and the most recent 50 deliveries. Refresh for live data.</p>
 
-    <div class="bg-gray-900/60 border border-brand-400/30 rounded-xl p-8 text-center">
-        <p class="font-mono-term text-[12px] tracking-[0.3em] uppercase text-brand-400 mb-3 animate-pulse">▌ COMING IN STAGE 3</p>
-        <p class="text-gray-300 max-w-2xl mx-auto leading-relaxed">
-            This will be the centralized dashboard for every email the system can send: lifecycle status, scheduled cron timing, per-template performance, recent send activity feed, Resend webhook health, and unsubscribed-list management.
-        </p>
-        <p class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500 mt-4">
-            For now → <a href="{{ url_for('admin.cron_status') }}" class="text-brand-400 hover:text-brand-300 underline">cron schedules</a> ·
-            <a href="{{ url_for('admin.test_email') }}" class="text-brand-400 hover:text-brand-300 underline">test send</a>
-        </p>
+    {# ── HEALTH HEADER ── #}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
+        <div class="email-health-stat">
+            <p class="email-health-label">▌ Sent · 24h</p>
+            <p class="email-health-num text-brand-400">{{ summary.sent_24h }}</p>
+            <p class="email-health-sub">{{ summary.sent_total }} all time</p>
+        </div>
+        <div class="email-health-stat">
+            <p class="email-health-label">▌ Bounce rate · 24h</p>
+            <p class="email-health-num
+                {% if summary.bounce_rate_24h > 3 %}text-red-400
+                {% elif summary.bounce_rate_24h > 1 %}text-yellow-400
+                {% else %}text-brand-400{% endif %}">{{ summary.bounce_rate_24h }}%</p>
+            <p class="email-health-sub">{{ summary.bounced_24h }} bounced today</p>
+        </div>
+        <div class="email-health-stat">
+            <p class="email-health-label">▌ Webhook health</p>
+            {% if summary.webhook_status == 'good' %}
+            <p class="email-health-num text-brand-400">{{ summary.webhook_age_h }}h</p>
+            <p class="email-health-sub">last event · all good</p>
+            {% elif summary.webhook_status == 'warn' %}
+            <p class="email-health-num text-yellow-400">{{ summary.webhook_age_h }}h</p>
+            <p class="email-health-sub text-yellow-400">no events for {{ summary.webhook_age_h }}h</p>
+            {% elif summary.webhook_status == 'stale' %}
+            <p class="email-health-num text-red-400">{{ summary.webhook_age_h }}h</p>
+            <p class="email-health-sub text-red-400">⚠ stale · check Resend</p>
+            {% else %}
+            <p class="email-health-num text-gray-500">—</p>
+            <p class="email-health-sub text-gray-500">no events received yet</p>
+            {% endif %}
+        </div>
+        <div class="email-health-stat">
+            <p class="email-health-label">▌ Unsubscribed</p>
+            <p class="email-health-num
+                {% if summary.unsubscribed_count == 0 %}text-gray-500
+                {% else %}text-gray-300{% endif %}">{{ summary.unsubscribed_count }}</p>
+            <p class="email-health-sub">opted out</p>
+        </div>
+    </div>
+
+    {# ── ALERTS ── #}
+    {% set alerts = [] %}
+    {% if summary.webhook_status == 'stale' %}
+        {% set alerts = alerts + [('red', '⚠ Resend webhook silent for ' ~ summary.webhook_age_h ~ 'h. Check Resend Dashboard → Webhooks → /api/webhook/resend status.')] %}
+    {% endif %}
+    {% if summary.bounce_rate_24h > 3 %}
+        {% set alerts = alerts + [('red', '⚠ Bounce rate ' ~ summary.bounce_rate_24h ~ '% in last 24h. Verify DKIM/SPF/DMARC + check the bounced rows below.')] %}
+    {% endif %}
+    {% if summary.complained_total %}
+        {% set alerts = alerts + [('red', '⚠ ' ~ summary.complained_total ~ ' spam complaints recorded. Pause sends and investigate.')] %}
+    {% endif %}
+    {% for tpl in lifecycle %}
+        {% if tpl.health == 'critical' %}
+            {% set alerts = alerts + [('red', '⚠ ' ~ tpl.label ~ ' is in critical state — bounce rate ' ~ tpl.bounce_rate ~ '%, sent ' ~ tpl.sent ~ ', opened ' ~ tpl.opened)] %}
+        {% endif %}
+    {% endfor %}
+
+    {% if alerts %}
+    <div class="mb-7">
+        {% for level, msg in alerts %}
+        <div class="px-4 py-3 mb-2 rounded-lg border text-sm
+            {% if level == 'red' %}bg-red-900/25 border-red-500/40 text-red-200
+            {% else %}bg-yellow-900/20 border-yellow-500/40 text-yellow-200{% endif %}">
+            {{ msg }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── PER-TEMPLATE LIFECYCLE TABLE ── #}
+    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3">▌ EMAIL LIFECYCLE · BY TEMPLATE</p>
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden mb-7">
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="border-b border-gray-800">
+                <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                    <th class="text-left px-4 py-2.5 font-bold">Template</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Sent</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Open %</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Click %</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Bounce %</th>
+                    <th class="text-left px-4 py-2.5 font-bold hidden md:table-cell">Last sent</th>
+                    <th class="text-left px-4 py-2.5 font-bold hidden lg:table-cell">Trigger</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tpl in lifecycle %}
+                <tr class="border-b border-gray-800/50 last:border-0 hover:bg-brand-400/5
+                    {% if tpl.health == 'critical' %}bg-red-900/10
+                    {% elif tpl.health == 'warn' %}bg-yellow-900/5{% endif %}">
+                    <td class="px-4 py-2.5">
+                        <div class="flex items-center gap-2">
+                            {% if tpl.health == 'good' %}<span class="email-health-dot bg-brand-400" title="Good"></span>
+                            {% elif tpl.health == 'warn' %}<span class="email-health-dot bg-yellow-400" title="Warning"></span>
+                            {% elif tpl.health == 'critical' %}<span class="email-health-dot bg-red-400" title="Critical"></span>
+                            {% else %}<span class="email-health-dot bg-gray-600" title="Idle — never sent"></span>{% endif %}
+                            <span class="font-mono-term tracking-wider text-white">{{ tpl.label }}</span>
+                        </div>
+                        <span class="text-[10px] text-gray-500 font-mono-term ml-5">{{ tpl.fires }}</span>
+                    </td>
+                    <td class="px-4 py-2.5 text-right font-orbitron font-black text-base text-white">{{ tpl.sent }}</td>
+                    <td class="px-4 py-2.5 text-right font-mono-term tracking-wider text-xs
+                        {% if tpl.open_rate >= 50 %}text-brand-400 font-bold
+                        {% elif tpl.open_rate >= 25 %}text-yellow-400
+                        {% elif tpl.sent == 0 %}text-gray-700
+                        {% else %}text-gray-500{% endif %}">
+                        {% if tpl.sent %}{{ tpl.open_rate }}%{% else %}—{% endif %}
+                    </td>
+                    <td class="px-4 py-2.5 text-right font-mono-term tracking-wider text-xs
+                        {% if tpl.click_rate >= 25 %}text-brand-400 font-bold
+                        {% elif tpl.click_rate >= 10 %}text-yellow-400
+                        {% elif tpl.sent == 0 %}text-gray-700
+                        {% else %}text-gray-500{% endif %}">
+                        {% if tpl.sent %}{{ tpl.click_rate }}%{% else %}—{% endif %}
+                    </td>
+                    <td class="px-4 py-2.5 text-right font-mono-term tracking-wider text-xs
+                        {% if tpl.bounce_rate > 3 %}text-red-400 font-bold
+                        {% elif tpl.bounce_rate > 1 %}text-yellow-400
+                        {% elif tpl.sent == 0 %}text-gray-700
+                        {% else %}text-gray-500{% endif %}">
+                        {% if tpl.sent %}{{ tpl.bounce_rate }}%{% else %}—{% endif %}
+                    </td>
+                    <td class="px-4 py-2.5 text-xs text-gray-400 font-mono-term hidden md:table-cell whitespace-nowrap">
+                        {% if tpl.last_sent_at %}{{ tpl.last_sent_at.strftime('%b %d · %H:%M') }}{% else %}<span class="text-gray-700">never</span>{% endif %}
+                    </td>
+                    <td class="px-4 py-2.5 text-xs text-gray-500 hidden lg:table-cell">{{ tpl.trigger }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-800 bg-black/40 flex items-center gap-4 text-[11px] text-gray-500 font-mono-term tracking-wider flex-wrap">
+            <span class="flex items-center gap-1.5"><span class="email-health-dot bg-brand-400"></span> Good (open ≥15%, bounce &lt;1%)</span>
+            <span class="flex items-center gap-1.5"><span class="email-health-dot bg-yellow-400"></span> Warning (low opens or 1-3% bounce)</span>
+            <span class="flex items-center gap-1.5"><span class="email-health-dot bg-red-400"></span> Critical (&gt;3% bounce or complaints)</span>
+            <span class="flex items-center gap-1.5"><span class="email-health-dot bg-gray-600"></span> Idle (not yet sent)</span>
+        </div>
+    </div>
+
+    {# ── ACTIONS BAR ── #}
+    <div class="flex items-center gap-2 mb-7 flex-wrap">
+        <a href="{{ url_for('admin.test_email') }}" class="font-mono-term text-[10px] tracking-wider uppercase text-brand-400 hover:text-brand-300 border border-brand-400/40 px-3 py-1.5 rounded">▶ Test send</a>
+        <a href="{{ url_for('admin.cron_status') }}" class="font-mono-term text-[10px] tracking-wider uppercase text-brand-400 hover:text-brand-300 border border-brand-400/40 px-3 py-1.5 rounded">⏱ Cron schedules</a>
+        <form method="POST" action="{{ url_for('admin.backfill_guaranteed') }}" class="inline" onsubmit="return confirm('Send Guaranteed Prize email (#4) to any ambassador at 5+ unplugs who hasn\'t received it yet?');">
+            <button type="submit" class="font-mono-term text-[10px] tracking-wider uppercase text-yellow-400 hover:text-yellow-300 border border-yellow-500/40 px-3 py-1.5 rounded">↻ Backfill #4</button>
+        </form>
+        <span class="ml-auto text-[10px] font-mono-term text-gray-500 tracking-wider uppercase">Last send: {% if summary.last_send_at %}{{ summary.last_send_at.strftime('%b %d · %H:%M') }}{% else %}never{% endif %}</span>
+    </div>
+
+    {# ── RECENT ACTIVITY FEED ── #}
+    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-3">▌ RECENT ACTIVITY · LAST {{ recent_events|length }} EVENTS</p>
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden">
+        {% if recent_events %}
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="border-b border-gray-800">
+                <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                    <th class="text-left px-4 py-2.5 font-bold">When</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Event</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Template</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Recipient</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in recent_events %}
+                {% set amb = amb_lookup.get(e.ambassador_id) %}
+                <tr class="border-b border-gray-800/50 last:border-0 hover:bg-brand-400/5">
+                    <td class="px-4 py-2.5 text-xs font-mono-term text-gray-400 whitespace-nowrap">
+                        {{ e.created_at.strftime('%b %d · %H:%M') if e.created_at else '—' }}
+                    </td>
+                    <td class="px-4 py-2.5">
+                        <span class="font-mono-term text-[10px] tracking-wider uppercase px-2 py-0.5 rounded
+                            {% if e.event_type == 'opened' %}text-brand-400 bg-brand-400/10 border border-brand-400/40
+                            {% elif e.event_type == 'clicked' %}text-brand-400 bg-brand-400/15 border border-brand-400/60 font-bold
+                            {% elif e.event_type == 'delivered' %}text-cyan-300 bg-cyan-500/10 border border-cyan-500/40
+                            {% elif e.event_type == 'sent' %}text-gray-300 bg-gray-700/40 border border-gray-700
+                            {% elif e.event_type == 'bounced' %}text-red-400 bg-red-500/10 border border-red-500/50
+                            {% elif e.event_type == 'complained' %}text-red-500 bg-red-500/15 border border-red-500/60 font-bold
+                            {% else %}text-gray-500 bg-gray-800 border border-gray-700{% endif %}">
+                            {% if e.event_type == 'opened' %}👁{% elif e.event_type == 'clicked' %}🖱{% elif e.event_type == 'delivered' %}📬{% elif e.event_type == 'sent' %}✓{% elif e.event_type == 'bounced' %}💥{% elif e.event_type == 'complained' %}🚨{% endif %}
+                            {{ e.event_type }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-2.5 text-xs font-mono-term text-gray-300">{{ e.template_key }}</td>
+                    <td class="px-4 py-2.5 text-xs">
+                        {% if amb %}
+                        <a href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}" class="text-brand-400 hover:text-brand-300">{{ amb.name }}</a>
+                        <span class="text-gray-500 ml-1">{{ e.to_email }}</span>
+                        {% else %}
+                        <span class="text-gray-400">{{ e.to_email or '—' }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-gray-500 text-sm">
+            <p class="font-mono-term text-xs tracking-wider mb-2">&gt; NO EMAIL EVENTS YET</p>
+            <p>Events will appear here once emails are sent and Resend's webhook is configured at <code class="text-brand-400 font-mono-term">/api/webhook/resend</code>.</p>
+        </div>
+        {% endif %}
     </div>
 </div>
+
+<style>
+.email-health-stat {
+    background: rgba(17, 24, 39, 0.7);
+    border: 1px solid rgba(46, 219, 153, 0.18);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+.email-health-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: rgba(46, 219, 153, 0.7);
+    margin: 0 0 6px 0;
+}
+.email-health-num {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: 28px;
+    line-height: 1;
+    margin: 0 0 4px 0;
+    letter-spacing: 0.02em;
+}
+.email-health-sub {
+    font-size: 10px;
+    color: rgb(107 114 128);
+    margin: 0;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 0.05em;
+}
+.email-health-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px currentColor;
+}
+</style>
 {% endblock %}

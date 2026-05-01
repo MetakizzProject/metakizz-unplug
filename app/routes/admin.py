@@ -187,6 +187,168 @@ def _compute_email_stats():
     return stats
 
 
+# ════════════════════════════════════════════════════════════════════
+# Email Control Center — comprehensive email-system data
+# ════════════════════════════════════════════════════════════════════
+
+# Source-of-truth metadata for every template the system can send.
+# Used to populate the Email Control Center; trigger + fires fields are
+# human-readable strings the admin UI shows verbatim.
+EMAIL_TEMPLATES_META = [
+    ("welcome",              "Welcome",            "On every new signup",                      "real-time"),
+    ("first_unplug",         "First Unplug",       "Referrer's count goes 0 → 1",              "real-time"),
+    ("guaranteed_prize",     "Guaranteed Prize",   "Referrer hits 5 unplugs (count 4 → 5)",    "real-time"),
+    ("activation_nudge",     "Activation Nudge",   "Cron · count=0 and 48h+ since signup",     "cron daily"),
+    ("midway_reminder",      "Midway Reminder",    "Cron · 7d+ old and ≥5d to close",          "cron daily"),
+    ("final_48h",            "Final 48h",          "Cron one-shot · 2026-05-05 19:00 Madrid",  "cron one-shot"),
+    ("last_6h",              "Last 6h",            "Cron one-shot · 2026-05-07 13:00 Madrid",  "cron one-shot"),
+    ("results_announcement", "Results",            "Cron one-shot · 2026-05-08 10:00 Madrid",  "cron one-shot"),
+    ("you_won",              "You Won",            "Cron one-shot · 2026-05-08 10:30 Madrid",  "cron one-shot"),
+    ("broadcast",            "Broadcast",          "Admin manual via /admin (broadcast modal)", "admin"),
+]
+
+
+def _compute_email_lifecycle():
+    """Build a per-template email lifecycle dataset for the control center.
+
+    For every template in EMAIL_TEMPLATES_META, returns:
+      sent / opened / clicked / bounced  — distinct recipients per event
+      open_rate / click_rate / bounce_rate — percentages over sent
+      last_sent_at — most recent 'sent' EmailEvent timestamp
+      health — 'good' | 'warn' | 'critical' (heuristic from rates)
+    """
+    rows = (
+        db.session.query(
+            EmailEvent.template_key,
+            EmailEvent.event_type,
+            EmailEvent.resend_email_id,
+            EmailEvent.created_at,
+        )
+        .filter(EmailEvent.template_key != "unknown")
+        .all()
+    )
+
+    raw = defaultdict(lambda: {
+        "sent": set(), "opened": set(), "clicked": set(), "bounced": set(),
+        "delivered": set(), "complained": set(),
+        "last_sent_at": None,
+    })
+    for tpl, evt, rid, ts in rows:
+        b = raw[tpl]
+        if evt in b and rid is not None:
+            b[evt].add(rid)
+        if evt == "sent" and ts is not None:
+            if b["last_sent_at"] is None or ts > b["last_sent_at"]:
+                b["last_sent_at"] = ts
+
+    out = []
+    for key, label, trigger, fires in EMAIL_TEMPLATES_META:
+        b = raw.get(key, {"sent": set(), "opened": set(), "clicked": set(),
+                          "bounced": set(), "delivered": set(), "complained": set(),
+                          "last_sent_at": None})
+        sent = len(b["sent"])
+        opened = len(b["opened"])
+        clicked = len(b["clicked"])
+        bounced = len(b["bounced"])
+        delivered = len(b["delivered"])
+        complained = len(b["complained"])
+        open_rate = round(100 * opened / sent, 1) if sent else 0
+        click_rate = round(100 * clicked / sent, 1) if sent else 0
+        bounce_rate = round(100 * bounced / sent, 1) if sent else 0
+
+        # Health heuristic: red on bounce >3% OR complained >0 OR (sent>50 and opens=0)
+        if sent == 0:
+            health = "idle"
+        elif bounce_rate > 3 or complained > 0:
+            health = "critical"
+        elif sent > 50 and opened == 0:
+            health = "critical"
+        elif bounce_rate > 1 or open_rate < 15:
+            health = "warn"
+        else:
+            health = "good"
+
+        out.append({
+            "key": key, "label": label, "trigger": trigger, "fires": fires,
+            "sent": sent, "opened": opened, "clicked": clicked,
+            "bounced": bounced, "delivered": delivered, "complained": complained,
+            "open_rate": open_rate, "click_rate": click_rate, "bounce_rate": bounce_rate,
+            "last_sent_at": b["last_sent_at"],
+            "health": health,
+        })
+    return out
+
+
+def _compute_email_health_summary():
+    """Top-level health metrics shown in the page header strip."""
+    now = datetime.now(timezone.utc)
+
+    # Most recent webhook event of any kind — proxy for "Resend is talking to us"
+    latest_evt = (
+        EmailEvent.query
+        .filter(EmailEvent.event_type != "sent")
+        .order_by(EmailEvent.created_at.desc())
+        .first()
+    )
+    latest_send = (
+        EmailEvent.query
+        .filter(EmailEvent.event_type == "sent")
+        .order_by(EmailEvent.created_at.desc())
+        .first()
+    )
+
+    last_webhook_at = latest_evt.created_at if latest_evt else None
+    last_send_at = latest_send.created_at if latest_send else None
+
+    # Total counts (last 24h vs all-time)
+    cutoff = now - timedelta(hours=24)
+    sent_24h = (
+        EmailEvent.query
+        .filter(EmailEvent.event_type == "sent")
+        .filter(EmailEvent.created_at >= cutoff)
+        .count()
+    )
+    sent_total = EmailEvent.query.filter(EmailEvent.event_type == "sent").count()
+    bounced_24h = (
+        EmailEvent.query
+        .filter(EmailEvent.event_type == "bounced")
+        .filter(EmailEvent.created_at >= cutoff)
+        .count()
+    )
+    complained_total = EmailEvent.query.filter(EmailEvent.event_type == "complained").count()
+
+    bounce_rate_24h = round(100 * bounced_24h / sent_24h, 2) if sent_24h else 0
+
+    # Webhook age in hours (None if never)
+    webhook_age_h = None
+    if last_webhook_at is not None:
+        delta = now - (last_webhook_at if last_webhook_at.tzinfo else last_webhook_at.replace(tzinfo=timezone.utc))
+        webhook_age_h = round(delta.total_seconds() / 3600, 1)
+
+    # Webhook health classification
+    if webhook_age_h is None:
+        webhook_status = "never"   # never received a webhook
+    elif webhook_age_h > 24:
+        webhook_status = "stale"   # >1 day silent
+    elif webhook_age_h > 6:
+        webhook_status = "warn"
+    else:
+        webhook_status = "good"
+
+    return {
+        "sent_24h": sent_24h,
+        "sent_total": sent_total,
+        "bounced_24h": bounced_24h,
+        "complained_total": complained_total,
+        "bounce_rate_24h": bounce_rate_24h,
+        "last_webhook_at": last_webhook_at,
+        "last_send_at": last_send_at,
+        "webhook_age_h": webhook_age_h,
+        "webhook_status": webhook_status,
+        "unsubscribed_count": Ambassador.query.filter(Ambassador.unsubscribed_at.isnot(None)).count(),
+    }
+
+
 def _compute_turnstile_stats():
     """Aggregate Cloudflare Turnstile verification results across signups.
 
@@ -487,12 +649,36 @@ def reach():
 
 @admin_bp.route("/emails")
 def emails():
-    """Email Control Center — placeholder. Stage 3 will populate this
-    with the full email lifecycle dashboard."""
+    """Email Control Center — central visibility for every email the
+    system can send. Per-template lifecycle stats, recent activity feed,
+    Resend webhook health, unsubscribe count, scheduled sends.
+    """
+    lifecycle = _compute_email_lifecycle()
+    summary = _compute_email_health_summary()
+
+    # Recent activity feed — last 50 events (any type) with ambassador linked
+    recent_events = (
+        EmailEvent.query
+        .order_by(EmailEvent.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    # Pre-resolve ambassador objects to avoid N+1 in the template
+    amb_ids = {e.ambassador_id for e in recent_events if e.ambassador_id}
+    amb_lookup = {}
+    if amb_ids:
+        for a in Ambassador.query.filter(Ambassador.id.in_(amb_ids)).all():
+            amb_lookup[a.id] = a
+
     return render_template(
         "admin_emails.html",
         page_title="Emails",
         active_section="emails",
+        lifecycle=lifecycle,
+        summary=summary,
+        recent_events=recent_events,
+        amb_lookup=amb_lookup,
+        now_ts=datetime.now(timezone.utc),
         **_admin_layout_context(),
     )
 
