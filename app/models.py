@@ -157,6 +157,37 @@ class EmailEvent(db.Model):
     extra = db.Column(db.Text, nullable=True)  # raw webhook payload (JSON string), for debugging
 
 
+class PrizeDelivery(db.Model):
+    """Physical-prize delivery tracking. One row per (ambassador, slot)
+    pair the moment the admin first toggles delivery for that prize.
+
+    slot is one of:
+      'guaranteed'  — earned at 5+ unplugs (one per ambassador)
+      'top3'        — earned by being in top 3 of their source bucket
+
+    Why a separate table from MilestoneNotification: MilestoneNotification
+    is tied to RewardTier rows from the old reward system; the current
+    campaign uses a fixed prize structure derived from referral_count +
+    source bucket directly. This table records ONLY delivery status
+    (the prize itself is computed on the fly from current state).
+    """
+    __tablename__ = "prize_deliveries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ambassador_id = db.Column(db.Integer, db.ForeignKey("ambassadors.id"), nullable=False, index=True)
+    slot = db.Column(db.String(20), nullable=False, index=True)
+    prize_label = db.Column(db.String(200), nullable=False)
+    delivered_at = db.Column(db.DateTime, nullable=True)
+    delivered_notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    ambassador = db.relationship("Ambassador", foreign_keys=[ambassador_id])
+
+    __table_args__ = (
+        db.UniqueConstraint("ambassador_id", "slot", name="uq_prize_amb_slot"),
+    )
+
+
 class TurnstileRejection(db.Model):
     """One row per signup rejected by Cloudflare Turnstile in enforce mode.
 

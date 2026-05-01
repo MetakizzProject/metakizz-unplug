@@ -1,125 +1,270 @@
-{% extends "base.html" %}
-{% set embed = false %}
+{% extends "admin_base.html" %}
 
-{% block title %}Rewards — Admin{% endblock %}
+{% block admin_content %}
+<div class="px-4 lg:px-8 pt-6 pb-12 max-w-7xl">
+    <div class="flex items-center justify-between mb-3 font-mono-term text-[10px] tracking-[0.25em] uppercase">
+        <span class="text-brand-400/80"><span class="text-brand-400">▌</span> METAKIZZ // REWARDS.DELIVERY</span>
+    </div>
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div>
+            <h1 class="text-2xl font-display font-bold mb-1">Rewards Delivery</h1>
+            <p class="text-sm text-gray-400">Live winners list. Computed from current state — top 3 will keep shifting until campaign close. Mark each prize as delivered once you've sent it.</p>
+        </div>
+        <a href="{{ url_for('admin.rewards_export') }}" class="font-mono-term text-[10px] tracking-wider uppercase text-brand-400 hover:text-brand-300 border border-brand-400/40 px-3 py-1.5 rounded">↓ Export CSV</a>
+    </div>
 
-{% block nav_right %}
-<a href="/admin/" class="text-sm text-gray-400 hover:text-brand-400 transition font-medium">Back to Admin</a>
-{% endblock %}
-
-{% block content %}
-<div class="max-w-5xl mx-auto px-4 pt-8 pb-8">
-    <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold">Rewards</h1>
-        <div class="flex gap-2">
-            <a href="{{ url_for('admin.index') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Dashboard</a>
-            <a href="{{ url_for('admin.tiers') }}" class="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition">Manage Tiers</a>
+    {# ── HEADER STATS ── #}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
+        <div class="reward-stat">
+            <p class="reward-stat-label">▌ Guaranteed</p>
+            <p class="reward-stat-num text-brand-400">{{ total_guaranteed }}</p>
+            <p class="reward-stat-sub">5+ unplug winners</p>
+        </div>
+        <div class="reward-stat">
+            <p class="reward-stat-label">▌ Top 3</p>
+            <p class="reward-stat-num text-brand-400">{{ total_top3 }}</p>
+            <p class="reward-stat-sub">ranking podium</p>
+        </div>
+        <div class="reward-stat">
+            <p class="reward-stat-label">▌ Delivered</p>
+            <p class="reward-stat-num {% if total_delivered == total_to_deliver and total_to_deliver > 0 %}text-brand-400{% else %}text-white{% endif %}">{{ total_delivered }} / {{ total_to_deliver }}</p>
+            <p class="reward-stat-sub">prizes shipped</p>
+        </div>
+        <div class="reward-stat">
+            <p class="reward-stat-label">▌ Pending</p>
+            <p class="reward-stat-num {% if total_pending > 0 %}text-yellow-400{% else %}text-gray-500{% endif %}">{{ total_pending }}</p>
+            <p class="reward-stat-sub">to deliver</p>
         </div>
     </div>
 
-    <!-- Stats -->
-    <div class="grid grid-cols-3 gap-3 mb-6">
-        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold text-brand-400">{{ total_earned }}</div>
-            <div class="text-xs text-gray-400 mt-1">Prizes Earned</div>
-        </div>
-        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold text-green-400">{{ total_delivered }}</div>
-            <div class="text-xs text-gray-400 mt-1">Delivered</div>
-        </div>
-        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold text-yellow-400">{{ total_pending }}</div>
-            <div class="text-xs text-gray-400 mt-1">Pending</div>
-        </div>
+    {# ─────────── TOP 3 PER SOURCE ─────────── #}
+    {% for src in ['community', 'public'] %}
+    <div class="flex items-center justify-between mb-3 mt-2">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ TOP 3 · {{ src|upper }}</p>
+        <span class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500">Podium prizes · still shifting until 2026-05-07 19:00</span>
     </div>
-
-    <!-- Filters -->
-    <div class="flex gap-2 mb-6 flex-wrap">
-        <div class="flex gap-1 bg-gray-900 rounded-lg p-1">
-            <a href="{{ url_for('admin.rewards', channel='all', status=status) }}"
-               class="text-xs px-3 py-1.5 rounded-md transition {% if channel == 'all' %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-white{% endif %}">All</a>
-            <a href="{{ url_for('admin.rewards', channel='community', status=status) }}"
-               class="text-xs px-3 py-1.5 rounded-md transition {% if channel == 'community' %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-white{% endif %}">Community</a>
-            <a href="{{ url_for('admin.rewards', channel='public', status=status) }}"
-               class="text-xs px-3 py-1.5 rounded-md transition {% if channel == 'public' %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-white{% endif %}">Public</a>
-        </div>
-        <div class="flex gap-1 bg-gray-900 rounded-lg p-1">
-            <a href="{{ url_for('admin.rewards', channel=channel, status='all') }}"
-               class="text-xs px-3 py-1.5 rounded-md transition {% if status == 'all' %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-white{% endif %}">All Status</a>
-            <a href="{{ url_for('admin.rewards', channel=channel, status='pending') }}"
-               class="text-xs px-3 py-1.5 rounded-md transition {% if status == 'pending' %}bg-yellow-900/50 text-yellow-300{% else %}text-gray-400 hover:text-white{% endif %}">Pending</a>
-            <a href="{{ url_for('admin.rewards', channel=channel, status='delivered') }}"
-               class="text-xs px-3 py-1.5 rounded-md transition {% if status == 'delivered' %}bg-green-900/50 text-green-300{% else %}text-gray-400 hover:text-white{% endif %}">Delivered</a>
-        </div>
-    </div>
-
-    <!-- Rewards Table -->
-    {% if results %}
-    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden mb-7">
+        {% if top3_by_source[src] %}
+        <div class="overflow-x-auto">
         <table class="w-full text-sm">
-            <thead>
-                <tr class="border-b border-gray-800 text-gray-400 text-xs uppercase tracking-wider">
-                    <th class="px-4 py-3 text-left">Ambassador</th>
-                    <th class="px-4 py-3 text-left">Tier</th>
-                    <th class="px-4 py-3 text-left">Prize</th>
-                    <th class="px-4 py-3 text-left">Earned</th>
-                    <th class="px-4 py-3 text-left">Status</th>
-                    <th class="px-4 py-3 text-right">Action</th>
+            <thead class="border-b border-gray-800">
+                <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                    <th class="text-left px-4 py-2.5 font-bold w-12">#</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Winner</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Email</th>
+                    <th class="text-left px-4 py-2.5 font-bold hidden md:table-cell">Phone</th>
+                    <th class="text-left px-4 py-2.5 font-bold hidden lg:table-cell">Country</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Unplugs</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Prize</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Status</th>
+                    <th class="text-right px-4 py-2.5 font-bold"></th>
                 </tr>
             </thead>
             <tbody>
-                {% for notification, ambassador, tier in results %}
-                <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
-                    <td class="px-4 py-3">
-                        <div class="font-medium text-white">{{ ambassador.name }}</div>
-                        <div class="text-xs text-gray-500">{{ ambassador.email }}</div>
-                        <span class="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded
-                            {% if ambassador.source == 'community' %}bg-blue-900/50 text-blue-300
-                            {% else %}bg-purple-900/50 text-purple-300{% endif %}">
-                            {{ ambassador.source }}
-                        </span>
+                {% for w in top3_by_source[src] %}
+                <tr class="border-b border-gray-800/50 last:border-0 {% if w.delivered %}bg-brand-400/5{% endif %}">
+                    <td class="px-4 py-2.5 text-center">
+                        <span class="rank-badge rank-{{ w.rank }}">{{ w.rank }}</span>
                     </td>
-                    <td class="px-4 py-3">
-                        <span class="text-brand-400 font-medium">{{ tier.name }}</span>
-                        <div class="text-xs text-gray-500">{{ tier.threshold }} dancers</div>
+                    <td class="px-4 py-2.5 text-sm">
+                        <a href="{{ url_for('admin.ambassador_detail', ambassador_id=w.amb.id) }}" class="text-white font-semibold hover:text-brand-400">{{ w.amb.name }}</a>
+                        {% if w.amb.under_review_at %}<span class="ml-2 text-[10px] text-yellow-300 font-mono-term px-1.5 py-0.5 bg-yellow-900/40 border border-yellow-500/40 rounded uppercase">⏸</span>{% endif %}
                     </td>
-                    <td class="px-4 py-3 text-gray-300">{{ tier.reward }}</td>
-                    <td class="px-4 py-3 text-gray-400 text-xs">
-                        {{ notification.sent_at.strftime('%b %d, %Y') if notification.sent_at else '—' }}
-                    </td>
-                    <td class="px-4 py-3">
-                        {% if notification.delivered %}
-                        <span class="text-green-400 text-xs font-medium">
-                            Delivered {{ notification.delivered_at.strftime('%b %d') if notification.delivered_at else '' }}
-                        </span>
+                    <td class="px-4 py-2.5 text-xs text-gray-300 font-mono-term">{{ w.amb.email }}</td>
+                    <td class="px-4 py-2.5 text-xs text-gray-300 font-mono-term hidden md:table-cell">{{ w.amb.phone_number or '—' }}</td>
+                    <td class="px-4 py-2.5 text-xs text-gray-400 hidden lg:table-cell">{{ w.amb.country_code or '—' }}</td>
+                    <td class="px-4 py-2.5 text-right font-orbitron font-black text-base text-brand-400">{{ w.amb.referral_count }}</td>
+                    <td class="px-4 py-2.5 text-xs text-gray-200">{{ w.prize }}</td>
+                    <td class="px-4 py-2.5">
+                        {% if w.delivered %}
+                        <span class="font-mono-term text-[10px] tracking-wider uppercase text-brand-400 bg-brand-400/10 border border-brand-400/40 px-2 py-1 rounded">✓ delivered</span>
                         {% else %}
-                        <span class="text-yellow-400 text-xs font-medium">Pending</span>
+                        <span class="font-mono-term text-[10px] tracking-wider uppercase text-yellow-400 bg-yellow-500/10 border border-yellow-500/40 px-2 py-1 rounded">⧗ pending</span>
                         {% endif %}
                     </td>
-                    <td class="px-4 py-3 text-right">
-                        {% if notification.delivered %}
-                        <form method="POST" action="{{ url_for('admin.undeliver_reward', channel=channel, status=status) }}" class="inline">
-                            <input type="hidden" name="notification_id" value="{{ notification.id }}">
-                            <button type="submit" class="text-xs text-gray-500 hover:text-red-400 transition">Undo</button>
+                    <td class="px-4 py-2.5 text-right">
+                        {% if w.delivered %}
+                        <form method="POST" action="{{ url_for('admin.mark_prize_delivered', ambassador_id=w.amb.id, slot=w.slot) }}" class="inline" onsubmit="return confirm('Revert delivery for {{ w.amb.name|e }}?');">
+                            <input type="hidden" name="delivered" value="0">
+                            <input type="hidden" name="prize_label" value="{{ w.prize|e }}">
+                            <button type="submit" class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500 hover:text-yellow-400 px-2">↻ revert</button>
                         </form>
                         {% else %}
-                        <form method="POST" action="{{ url_for('admin.deliver_reward', channel=channel, status=status) }}" class="inline">
-                            <input type="hidden" name="notification_id" value="{{ notification.id }}">
-                            <button type="submit" class="text-xs bg-brand-600 hover:bg-brand-500 text-white px-3 py-1 rounded-md transition">
-                                Mark Delivered
-                            </button>
-                        </form>
+                        <button type="button" data-amb-id="{{ w.amb.id }}" data-slot="{{ w.slot }}" data-prize="{{ w.prize|e }}" data-name="{{ w.amb.name|e }}" class="mark-btn font-mono-term text-[10px] tracking-wider uppercase text-black bg-brand-400 hover:bg-brand-300 px-3 py-1 rounded font-bold transition">▶ Mark delivered</button>
                         {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-gray-500 text-sm">
+            <p class="font-mono-term text-xs tracking-wider mb-2">&gt; NO {{ src|upper }} CONTENDERS YET</p>
+            <p>The first {{ src }} ambassador to get an unplug will appear here.</p>
+        </div>
+        {% endif %}
     </div>
-    {% else %}
-    <div class="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-        <p class="text-gray-500">No rewards earned yet.</p>
+    {% endfor %}
+
+    {# ─────────── GUARANTEED REWARD WINNERS ─────────── #}
+    <div class="flex items-center justify-between mb-3 mt-2">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ GUARANTEED REWARD · 5+ UNPLUGS</p>
+        <span class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500">{{ guaranteed_winners|length }} winners locked in</span>
     </div>
-    {% endif %}
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden mb-7">
+        {% if guaranteed_winners %}
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="border-b border-gray-800">
+                <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                    <th class="text-left px-4 py-2.5 font-bold">Winner</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Email</th>
+                    <th class="text-left px-4 py-2.5 font-bold hidden md:table-cell">Phone</th>
+                    <th class="text-left px-4 py-2.5 font-bold hidden lg:table-cell">Country</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Source</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Unplugs</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Prize</th>
+                    <th class="text-left px-4 py-2.5 font-bold">Status</th>
+                    <th class="text-right px-4 py-2.5 font-bold"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in guaranteed_winners %}
+                <tr class="border-b border-gray-800/50 last:border-0 {% if w.delivered %}bg-brand-400/5{% endif %}">
+                    <td class="px-4 py-2.5 text-sm">
+                        <a href="{{ url_for('admin.ambassador_detail', ambassador_id=w.amb.id) }}" class="text-white font-semibold hover:text-brand-400">{{ w.amb.name }}</a>
+                        {% if w.amb.under_review_at %}<span class="ml-2 text-[10px] text-yellow-300 font-mono-term px-1.5 py-0.5 bg-yellow-900/40 border border-yellow-500/40 rounded uppercase">⏸ under review</span>{% endif %}
+                    </td>
+                    <td class="px-4 py-2.5 text-xs text-gray-300 font-mono-term">{{ w.amb.email }}</td>
+                    <td class="px-4 py-2.5 text-xs text-gray-300 font-mono-term hidden md:table-cell">{{ w.amb.phone_number or '—' }}</td>
+                    <td class="px-4 py-2.5 text-xs text-gray-400 hidden lg:table-cell">{{ w.amb.country_code or '—' }}</td>
+                    <td class="px-4 py-2.5">
+                        <span class="font-mono-term text-[10px] tracking-wider uppercase px-1.5 py-0.5 rounded
+                            {% if w.amb.source == 'community' %}bg-blue-900/40 text-blue-300 border border-blue-500/30
+                            {% else %}bg-purple-900/40 text-purple-300 border border-purple-500/30{% endif %}">{{ w.amb.source }}</span>
+                    </td>
+                    <td class="px-4 py-2.5 text-right font-orbitron font-black text-base text-brand-400">{{ w.amb.referral_count }}</td>
+                    <td class="px-4 py-2.5 text-xs text-gray-200">{{ w.prize }}</td>
+                    <td class="px-4 py-2.5">
+                        {% if w.delivered %}
+                        <span class="font-mono-term text-[10px] tracking-wider uppercase text-brand-400 bg-brand-400/10 border border-brand-400/40 px-2 py-1 rounded">✓ delivered</span>
+                        {% else %}
+                        <span class="font-mono-term text-[10px] tracking-wider uppercase text-yellow-400 bg-yellow-500/10 border border-yellow-500/40 px-2 py-1 rounded">⧗ pending</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2.5 text-right">
+                        {% if w.delivered %}
+                        <form method="POST" action="{{ url_for('admin.mark_prize_delivered', ambassador_id=w.amb.id, slot=w.slot) }}" class="inline" onsubmit="return confirm('Revert delivery for {{ w.amb.name|e }}?');">
+                            <input type="hidden" name="delivered" value="0">
+                            <input type="hidden" name="prize_label" value="{{ w.prize|e }}">
+                            <button type="submit" class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500 hover:text-yellow-400 px-2">↻ revert</button>
+                        </form>
+                        {% else %}
+                        <button type="button" data-amb-id="{{ w.amb.id }}" data-slot="{{ w.slot }}" data-prize="{{ w.prize|e }}" data-name="{{ w.amb.name|e }}" class="mark-btn font-mono-term text-[10px] tracking-wider uppercase text-black bg-brand-400 hover:bg-brand-300 px-3 py-1 rounded font-bold transition">▶ Mark delivered</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-gray-500 text-sm">
+            <p class="font-mono-term text-xs tracking-wider mb-2">&gt; NO GUARANTEED WINNERS YET</p>
+            <p>Anyone reaching 5+ unplugs lands here automatically.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ─── MARK DELIVERED MODAL ─── #}
+    <div id="mark-modal" class="hidden fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+        <form id="mark-form" method="POST" action="" class="bg-gray-900 border border-brand-400/40 rounded-xl p-5 max-w-md w-full" style="box-shadow: 0 0 32px rgba(46,219,153,0.25);">
+            <input type="hidden" name="delivered" value="1">
+            <input type="hidden" name="prize_label" id="mark-prize-label">
+            <div class="flex items-center justify-between mb-4">
+                <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ MARK PRIZE DELIVERED</p>
+                <button type="button" id="mark-close-btn" class="text-gray-500 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <p class="text-sm text-gray-300 mb-2">Mark <strong id="mark-name" class="text-brand-400">—</strong> as delivered:</p>
+            <p class="text-sm text-gray-400 mb-4 italic" id="mark-prize">—</p>
+            <label class="block text-[10px] font-mono-term tracking-wider uppercase text-brand-400 mb-1">Notes (optional)</label>
+            <textarea name="notes" rows="3" placeholder="Tracking number, masterclass access date, etc." class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-400 mb-4 font-mono-term"></textarea>
+            <div class="flex justify-end gap-2">
+                <button type="button" id="mark-cancel-btn" class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-500 hover:text-white px-3 py-1.5">Cancel</button>
+                <button type="submit" class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-brand-400 hover:bg-brand-300 px-4 py-1.5 rounded font-bold transition" style="box-shadow: 0 0 12px rgba(46,219,153,0.35);">▲ Confirm delivery</button>
+            </div>
+        </form>
+    </div>
 </div>
+
+<style>
+.reward-stat {
+    background: rgba(17, 24, 39, 0.7);
+    border: 1px solid rgba(46, 219, 153, 0.18);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+.reward-stat-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: rgba(46, 219, 153, 0.7);
+    margin: 0 0 6px 0;
+}
+.reward-stat-num {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: 28px;
+    line-height: 1;
+    margin: 0 0 4px 0;
+}
+.reward-stat-sub {
+    font-size: 10px;
+    color: rgb(107 114 128);
+    margin: 0;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 0.05em;
+}
+.rank-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 999px;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: 14px;
+}
+.rank-1 { background: linear-gradient(135deg, #fde047, #ca8a04); color: #1a1a1a; box-shadow: 0 0 12px rgba(253,224,71,0.55); }
+.rank-2 { background: linear-gradient(135deg, #e5e7eb, #6b7280); color: #1a1a1a; box-shadow: 0 0 8px rgba(229,231,235,0.35); }
+.rank-3 { background: linear-gradient(135deg, #fb923c, #9a3412); color: #1a1a1a; box-shadow: 0 0 8px rgba(251,146,60,0.4); }
+</style>
+
+<script>
+(function() {
+    const modal = document.getElementById('mark-modal');
+    const form = document.getElementById('mark-form');
+    const labelInput = document.getElementById('mark-prize-label');
+    const nameEl = document.getElementById('mark-name');
+    const prizeEl = document.getElementById('mark-prize');
+
+    function openModal(ambId, slot, prize, name) {
+        form.action = '/admin/rewards/' + ambId + '/' + slot + '/mark';
+        labelInput.value = prize;
+        prizeEl.textContent = prize;
+        nameEl.textContent = name;
+        modal.classList.remove('hidden');
+    }
+    function closeModal() { modal.classList.add('hidden'); }
+
+    document.querySelectorAll('.mark-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            openModal(btn.dataset.ambId, btn.dataset.slot, btn.dataset.prize, btn.dataset.name);
+        });
+    });
+    document.getElementById('mark-close-btn').addEventListener('click', closeModal);
+    document.getElementById('mark-cancel-btn').addEventListener('click', closeModal);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+})();
+</script>
 {% endblock %}

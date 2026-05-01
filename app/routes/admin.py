@@ -9,7 +9,7 @@ from flask import (
 )
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func
-from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral
+from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery
 from app.mailer import (
     send_welcome_email,
     send_activation_nudge_email,
@@ -1106,43 +1106,207 @@ def tiers():
     return render_template("admin_tiers.html", community_tiers=community_tiers, public_tiers=public_tiers)
 
 
+# ════════════════════════════════════════════════════════════════════
+# Prize structure — source of truth for which physical prize each
+# winner gets, computed from referral_count + source bucket. Centralized
+# here so the rewards page, CSV export, and any future automation
+# all read the same labels.
+# ════════════════════════════════════════════════════════════════════
+
+PRIZE_GUARANTEED = {
+    "community": "1 month of MetaDancers, free",
+    "public":    "Live musicality masterclass with Jesus & Anni (€97)",
+}
+
+PRIZE_TOP3 = {
+    "community": [
+        "1 year of MetaDancers, free (€1,000+)",
+        "Video feedback on your dancing (€150+)",
+        "Personalized MetaKizz hoodie (€60+)",
+    ],
+    "public": [
+        "Video feedback on your dancing (€150+)",
+        "Personalized MetaKizz hoodie (€60+)",
+        "Personalized MetaKizz t-shirt (€30+)",
+    ],
+}
+
+
+def _build_winners():
+    """Compute the live list of prize winners from current ambassador state.
+
+    Returns a tuple (guaranteed_winners, top3_by_source, delivery_lookup):
+      - guaranteed_winners: list of dicts (one per ambassador with 5+ unplugs)
+      - top3_by_source:     {'community': [up to 3 dicts], 'public': [...]}
+      - delivery_lookup:    {(ambassador_id, slot): PrizeDelivery row}
+
+    Excludes ambassadors flagged under_review_at — they're hidden from
+    the public leaderboard, so they shouldn't claim ranking prizes.
+    """
+    all_amb = Ambassador.query.all()
+
+    # Pull existing delivery records once so we can decorate each winner
+    deliveries = PrizeDelivery.query.all()
+    delivery_lookup = {(d.ambassador_id, d.slot): d for d in deliveries}
+
+    # ── Guaranteed (5+ unplugs, any source) ──
+    qualifying = [a for a in all_amb if a.referral_count >= 5]
+    qualifying.sort(key=lambda a: (-a.referral_count, a.created_at))
+    guaranteed_winners = []
+    for a in qualifying:
+        prize_label = PRIZE_GUARANTEED.get(a.source, "Guaranteed reward")
+        guaranteed_winners.append({
+            "amb": a,
+            "prize": prize_label,
+            "slot": "guaranteed",
+            "delivered": delivery_lookup.get((a.id, "guaranteed")) is not None
+                         and delivery_lookup[(a.id, "guaranteed")].delivered_at is not None,
+            "delivery": delivery_lookup.get((a.id, "guaranteed")),
+        })
+
+    # ── Top 3 per source bucket (excluding under-review) ──
+    top3_by_source = {}
+    for src in ("community", "public"):
+        eligible = [a for a in all_amb
+                    if a.source == src
+                    and a.under_review_at is None
+                    and a.referral_count > 0]
+        eligible.sort(key=lambda a: (-a.referral_count, a.created_at))
+        prizes = PRIZE_TOP3.get(src, [])
+        rows = []
+        for i, a in enumerate(eligible[:3]):
+            slot = f"top3_{src}_{i+1}"
+            prize_label = prizes[i] if i < len(prizes) else f"Top {i+1}"
+            rows.append({
+                "amb": a,
+                "rank": i + 1,
+                "prize": prize_label,
+                "slot": slot,
+                "delivered": delivery_lookup.get((a.id, slot)) is not None
+                             and delivery_lookup[(a.id, slot)].delivered_at is not None,
+                "delivery": delivery_lookup.get((a.id, slot)),
+            })
+        top3_by_source[src] = rows
+
+    return guaranteed_winners, top3_by_source, delivery_lookup
+
+
 @admin_bp.route("/rewards")
 def rewards():
-    """View all earned rewards with delivery tracking."""
-    channel = request.args.get("channel", "all")
-    status = request.args.get("status", "all")
+    """Live prize delivery list — who has won what + contact info +
+    delivery status. Recomputed on every load from current ambassador
+    state so the list reflects the leaderboard as it stands right now.
+    """
+    guaranteed_winners, top3_by_source, _ = _build_winners()
 
-    query = (
-        db.session.query(MilestoneNotification, Ambassador, RewardTier)
-        .join(Ambassador, MilestoneNotification.ambassador_id == Ambassador.id)
-        .join(RewardTier, MilestoneNotification.reward_tier_id == RewardTier.id)
-    )
-
-    if channel != "all":
-        query = query.filter(Ambassador.source == channel)
-    if status == "pending":
-        query = query.filter(MilestoneNotification.delivered == False)
-    elif status == "delivered":
-        query = query.filter(MilestoneNotification.delivered == True)
-
-    results = query.order_by(MilestoneNotification.sent_at.desc()).all()
-
-    # Stats
-    total_earned = MilestoneNotification.query.count()
-    total_delivered = MilestoneNotification.query.filter_by(delivered=True).count()
-    total_pending = total_earned - total_delivered
+    total_guaranteed = len(guaranteed_winners)
+    total_top3 = sum(len(rows) for rows in top3_by_source.values())
+    total_delivered = sum(1 for w in guaranteed_winners if w["delivered"]) \
+                      + sum(1 for rows in top3_by_source.values() for w in rows if w["delivered"])
+    total_to_deliver = total_guaranteed + total_top3
+    total_pending = total_to_deliver - total_delivered
 
     return render_template(
         "admin_rewards.html",
-        results=results,
-        total_earned=total_earned,
+        page_title="Rewards",
+        active_section="rewards",
+        guaranteed_winners=guaranteed_winners,
+        top3_by_source=top3_by_source,
+        total_guaranteed=total_guaranteed,
+        total_top3=total_top3,
         total_delivered=total_delivered,
         total_pending=total_pending,
-        channel=channel,
-        status=status,
+        total_to_deliver=total_to_deliver,
+        **_admin_layout_context(),
     )
 
 
+@admin_bp.route("/rewards/<int:ambassador_id>/<slot>/mark", methods=["POST"])
+def mark_prize_delivered(ambassador_id, slot):
+    """Toggle delivery state for a single (ambassador, slot) prize."""
+    amb = Ambassador.query.get_or_404(ambassador_id)
+    delivered_now = request.form.get("delivered", "1") == "1"
+    notes = (request.form.get("notes", "") or "").strip()
+    prize_label = (request.form.get("prize_label", "") or "").strip() or "(unspecified)"
+
+    row = PrizeDelivery.query.filter_by(
+        ambassador_id=ambassador_id, slot=slot
+    ).first()
+
+    if row is None:
+        row = PrizeDelivery(
+            ambassador_id=ambassador_id,
+            slot=slot,
+            prize_label=prize_label,
+        )
+        db.session.add(row)
+
+    if delivered_now:
+        row.delivered_at = datetime.now(timezone.utc)
+    else:
+        row.delivered_at = None
+    if notes:
+        row.delivered_notes = notes
+    if prize_label and prize_label != "(unspecified)":
+        row.prize_label = prize_label
+
+    db.session.commit()
+    action = "marked delivered" if delivered_now else "reverted to pending"
+    flash(f"{amb.name} · {slot} · {action}.", "success")
+    logger.warning("PRIZE %s: amb=%s (id=%d) slot=%s", action.upper(), amb.email, amb.id, slot)
+    return redirect(url_for("admin.rewards"))
+
+
+@admin_bp.route("/rewards/export")
+def rewards_export():
+    """CSV export of all winners with full contact info — for prize fulfillment."""
+    guaranteed_winners, top3_by_source, _ = _build_winners()
+
+    output = io.StringIO()
+    w = csv.writer(output)
+    w.writerow([
+        "slot", "rank", "name", "email", "phone", "country",
+        "source", "unplugs", "prize", "delivered_at", "delivered_notes",
+        "dashboard_url",
+    ])
+
+    app_url = current_app.config.get("APP_URL", "").rstrip("/")
+
+    for row in guaranteed_winners:
+        a = row["amb"]
+        d = row.get("delivery")
+        w.writerow([
+            "guaranteed", "",
+            a.name, a.email, a.phone_number or "", a.country_code or "",
+            a.source, a.referral_count, row["prize"],
+            d.delivered_at.isoformat() if d and d.delivered_at else "",
+            (d.delivered_notes or "") if d else "",
+            f"{app_url}/dashboard/{a.dashboard_code}" if app_url else a.dashboard_code,
+        ])
+
+    for src, rows in top3_by_source.items():
+        for row in rows:
+            a = row["amb"]
+            d = row.get("delivery")
+            w.writerow([
+                f"top3-{src}", row["rank"],
+                a.name, a.email, a.phone_number or "", a.country_code or "",
+                a.source, a.referral_count, row["prize"],
+                d.delivered_at.isoformat() if d and d.delivered_at else "",
+                (d.delivered_notes or "") if d else "",
+                f"{app_url}/dashboard/{a.dashboard_code}" if app_url else a.dashboard_code,
+            ])
+
+    csv_data = output.getvalue()
+    response = Response(csv_data, mimetype="text/csv")
+    response.headers["Content-Disposition"] = (
+        f"attachment; filename=metakizz_winners_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+    )
+    return response
+
+
+# Old MilestoneNotification routes kept for backward-compat with any
+# in-flight links. The new rewards page uses PrizeDelivery instead.
 @admin_bp.route("/rewards/deliver", methods=["POST"])
 def deliver_reward():
     """Mark a reward as delivered."""
