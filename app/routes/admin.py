@@ -390,6 +390,36 @@ def require_admin():
         return redirect(url_for("admin.login"))
 
 
+def _admin_layout_context():
+    """Common context dict for the sidebar layout. Computes countdown,
+    pending-review badge, and which routes exist (so the sidebar can
+    render placeholders gracefully when a section hasn't shipped yet).
+    """
+    ctx = {
+        "admin_routes": ["overview", "live", "emails", "security", "reach"],
+        "pending_review_count": PendingReferral.query.filter_by(status="pending").count(),
+    }
+    # Campaign close countdown — short label like "T-7D" or "6H".
+    close_iso = current_app.config.get("CAMPAIGN_CLOSE_ISO", "")
+    if close_iso:
+        try:
+            close_dt = datetime.fromisoformat(close_iso)
+            now = datetime.now(close_dt.tzinfo)
+            delta = close_dt - now
+            secs = delta.total_seconds()
+            if secs <= 0:
+                ctx["countdown_short"] = "CLOSED"
+            elif secs < 3600:
+                ctx["countdown_short"] = f"{int(secs // 60)}M"
+            elif secs < 86400:
+                ctx["countdown_short"] = f"{int(secs // 3600)}H"
+            else:
+                ctx["countdown_short"] = f"T-{int(secs // 86400)}D"
+        except Exception:
+            ctx["countdown_short"] = None
+    return ctx
+
+
 @admin_bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -399,6 +429,84 @@ def login():
             return redirect(url_for("admin.index"))
         flash("Wrong password.", "error")
     return render_template("admin_login.html")
+
+
+@admin_bp.route("/security")
+def security():
+    """Security & anti-fraud center: Turnstile stats, attacks blocked,
+    pending review queue summary, and high-risk ambassadors. Lives
+    here so the main Overview page stays focused on growth metrics.
+    """
+    turnstile_stats = _compute_turnstile_stats()
+
+    # High-risk ambassadors — sorted by suspicion score, top 30
+    all_amb = Ambassador.query.all()
+    risk_rows = []
+    for a in all_amb:
+        risk = _compute_suspicion(a)
+        if risk["level"] in ("high", "watch"):
+            risk_rows.append({"amb": a, "risk": risk})
+    risk_rows.sort(key=lambda r: -r["risk"]["score"])
+    risk_rows = risk_rows[:30]
+
+    # Recent pending review preview (last 10)
+    recent_pending = (
+        PendingReferral.query
+        .filter_by(status="pending")
+        .order_by(PendingReferral.received_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    return render_template(
+        "admin_security.html",
+        page_title="Security",
+        active_section="security",
+        turnstile_stats=turnstile_stats,
+        risk_rows=risk_rows,
+        recent_pending=recent_pending,
+        **_admin_layout_context(),
+    )
+
+
+@admin_bp.route("/reach")
+def reach():
+    """Worldwide reach: the illuminated world map + country distribution
+    bar chart + phone backfill access. Moved out of the main Overview to
+    declutter the admin home.
+    """
+    country_dist = _compute_country_distribution()
+    return render_template(
+        "admin_reach.html",
+        page_title="Reach",
+        active_section="reach",
+        country_dist=country_dist,
+        **_admin_layout_context(),
+    )
+
+
+@admin_bp.route("/emails")
+def emails():
+    """Email Control Center — placeholder. Stage 3 will populate this
+    with the full email lifecycle dashboard."""
+    return render_template(
+        "admin_emails.html",
+        page_title="Emails",
+        active_section="emails",
+        **_admin_layout_context(),
+    )
+
+
+@admin_bp.route("/live")
+def live():
+    """Live Monitor — placeholder. Stage 4 will populate this with the
+    recent-signups feed + countdown + auto-refresh."""
+    return render_template(
+        "admin_live.html",
+        page_title="Live Monitor",
+        active_section="live",
+        **_admin_layout_context(),
+    )
 
 
 @admin_bp.route("/")
@@ -446,8 +554,12 @@ def index():
     # How many velocity-throttled signups are sitting in the review queue
     pending_review_count = PendingReferral.query.filter_by(status="pending").count()
 
+    layout_ctx = _admin_layout_context()
+    layout_ctx["pending_review_count"] = pending_review_count  # already computed below
     return render_template(
         "admin.html",
+        page_title="Overview",
+        active_section="overview",
         ambassadors=sorted_ambassadors,
         total_ambassadors=len(all_amb_for_stats),
         total_referrals=total_referrals,
@@ -466,9 +578,9 @@ def index():
         tz_utc=timezone.utc,
         risk_by_id=risk_by_id,
         high_risk_total=high_risk_total,
-        pending_review_count=pending_review_count,
         turnstile_stats=turnstile_stats,
         country_dist=country_dist,
+        **layout_ctx,
     )
 
 

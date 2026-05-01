@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% set embed = true %}
+
+{% block title %}Admin · {{ page_title or "MetaKizz" }}{% endblock %}
+
+{% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+<div class="admin-shell">
+    <!-- ─── SIDEBAR ─── -->
+    <aside class="admin-sidebar" id="admin-sidebar">
+        <div class="admin-sidebar-header">
+            <a href="{{ url_for('admin.index') }}" class="flex items-center gap-2">
+                <img src="{{ url_for('static', filename='brand/organized/logo-green.png') }}" alt="MetaKizz" class="h-4 w-auto">
+                <span class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">Admin</span>
+            </a>
+            <button class="admin-sidebar-close lg:hidden" onclick="document.getElementById('admin-sidebar').classList.remove('open')">×</button>
+        </div>
+
+        <nav class="admin-nav">
+            {% set active = active_section or '' %}
+            <a href="{{ url_for('admin.index') }}" class="admin-nav-link {{ 'active' if active == 'overview' }}">
+                <span class="nav-icon">▌</span>
+                <span class="nav-label">Overview</span>
+            </a>
+            <a href="{{ url_for('admin.live') if 'live' in admin_routes else '#' }}" class="admin-nav-link {{ 'active' if active == 'live' }}">
+                <span class="nav-icon">⚡</span>
+                <span class="nav-label">Live Monitor</span>
+                {% if countdown_short %}<span class="nav-badge nav-badge-amber">{{ countdown_short }}</span>{% endif %}
+            </a>
+            <a href="{{ url_for('admin.emails') if 'emails' in admin_routes else '#' }}" class="admin-nav-link {{ 'active' if active == 'emails' }}">
+                <span class="nav-icon">📧</span>
+                <span class="nav-label">Emails</span>
+            </a>
+            <a href="{{ url_for('admin.security') if 'security' in admin_routes else '#' }}" class="admin-nav-link {{ 'active' if active == 'security' }}">
+                <span class="nav-icon">🛡</span>
+                <span class="nav-label">Security</span>
+                {% if pending_review_count is defined and pending_review_count %}<span class="nav-badge nav-badge-red">{{ pending_review_count }}</span>{% endif %}
+            </a>
+            <a href="{{ url_for('admin.reach') if 'reach' in admin_routes else '#' }}" class="admin-nav-link {{ 'active' if active == 'reach' }}">
+                <span class="nav-icon">🌍</span>
+                <span class="nav-label">Reach</span>
+            </a>
+
+            <div class="admin-nav-divider"></div>
+
+            <a href="{{ url_for('admin.rewards') }}" class="admin-nav-link {{ 'active' if active == 'rewards' }}">
+                <span class="nav-icon">🎁</span>
+                <span class="nav-label">Rewards</span>
+            </a>
+            <a href="{{ url_for('admin.cron_status') }}" class="admin-nav-link {{ 'active' if active == 'cron' }}">
+                <span class="nav-icon">⏱</span>
+                <span class="nav-label">Cron / Schedules</span>
+            </a>
+            <a href="{{ url_for('admin.test_email') }}" class="admin-nav-link {{ 'active' if active == 'tools' }}">
+                <span class="nav-icon">🔧</span>
+                <span class="nav-label">Tools</span>
+            </a>
+            <a href="{{ url_for('admin.backfill_phones') }}" class="admin-nav-link {{ 'active' if active == 'backfill' }}">
+                <span class="nav-icon">↻</span>
+                <span class="nav-label">CSV Backfill</span>
+            </a>
+        </nav>
+
+        <div class="admin-sidebar-footer">
+            <a href="{{ url_for('home.index') }}" class="font-mono-term text-[10px] tracking-wider uppercase text-gray-600 hover:text-brand-400 transition">↗ Public site</a>
+        </div>
+    </aside>
+
+    <!-- ─── MAIN AREA ─── -->
+    <div class="admin-main">
+        <!-- Top bar (mobile-only burger + page title for context) -->
+        <header class="admin-topbar lg:hidden">
+            <button class="admin-burger" onclick="document.getElementById('admin-sidebar').classList.add('open')">☰</button>
+            <span class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">{{ page_title or 'Admin' }}</span>
+            <span class="w-6"></span>
+        </header>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="px-4 lg:px-6 pt-3">
+                {% for category, message in messages %}
+                <div class="rounded-lg px-4 py-3 mb-2 text-sm
+                    {% if category == 'error' %}bg-red-900/30 text-red-200 border border-red-700
+                    {% elif category == 'success' %}bg-brand-900/30 text-brand-200 border border-brand-700
+                    {% else %}bg-blue-900/30 text-blue-200 border border-blue-700{% endif %}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Page content -->
+        {% block admin_content %}{% endblock %}
+    </div>
+</div>
+
+<style>
+.font-mono-term { font-family: 'Share Tech Mono', 'Courier New', monospace; }
+.font-orbitron  { font-family: 'Orbitron', 'Arial Black', sans-serif; }
+
+/* ── Shell layout ── */
+.admin-shell {
+    min-height: 100vh;
+    display: flex;
+    background: rgb(7 12 10);
+}
+
+.admin-sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.6);
+    border-right: 1px solid rgba(46, 219, 153, 0.18);
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    z-index: 40;
+}
+
+.admin-sidebar-header {
+    padding: 18px 18px 14px;
+    border-bottom: 1px solid rgba(46, 219, 153, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.admin-sidebar-close {
+    background: none; border: none; color: #9ca3af; font-size: 22px; line-height: 1; padding: 0 6px; cursor: pointer;
+}
+
+.admin-nav {
+    flex: 1;
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.admin-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    color: rgb(156 163 175);
+    text-decoration: none;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: all 160ms;
+    border: 1px solid transparent;
+    position: relative;
+}
+.admin-nav-link:hover {
+    background: rgba(46, 219, 153, 0.06);
+    color: white;
+    border-color: rgba(46, 219, 153, 0.18);
+}
+.admin-nav-link.active {
+    background: rgba(46, 219, 153, 0.12);
+    color: rgb(46 219 153);
+    border-color: rgba(46, 219, 153, 0.45);
+    box-shadow: 0 0 14px rgba(46, 219, 153, 0.15);
+}
+.admin-nav-link .nav-icon {
+    width: 18px;
+    text-align: center;
+    color: rgba(46, 219, 153, 0.7);
+    font-size: 12px;
+}
+.admin-nav-link.active .nav-icon { color: rgb(46 219 153); }
+.admin-nav-link .nav-label { flex: 1; }
+.admin-nav-link .nav-badge {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    line-height: 1;
+}
+.admin-nav-link .nav-badge-red    { background: rgba(220, 38, 38, 0.2); color: rgb(248 113 113); border: 1px solid rgba(220, 38, 38, 0.4); }
+.admin-nav-link .nav-badge-amber  { background: rgba(234, 179, 8, 0.18); color: rgb(252 211 77); border: 1px solid rgba(234, 179, 8, 0.4); }
+
+.admin-nav-divider {
+    height: 1px;
+    margin: 14px 12px;
+    background: linear-gradient(to right, transparent, rgba(46, 219, 153, 0.2), transparent);
+}
+
+.admin-sidebar-footer {
+    padding: 14px 18px;
+    border-top: 1px solid rgba(46, 219, 153, 0.12);
+}
+
+.admin-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.admin-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.7);
+    border-bottom: 1px solid rgba(46, 219, 153, 0.18);
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    backdrop-filter: blur(6px);
+}
+.admin-burger {
+    background: none; border: 1px solid rgba(46, 219, 153, 0.25); color: rgb(46 219 153);
+    font-size: 16px; line-height: 1; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+}
+
+@media (max-width: 1023px) {
+    .admin-sidebar {
+        position: fixed;
+        top: 0; left: 0; bottom: 0;
+        transform: translateX(-100%);
+        transition: transform 220ms ease;
+    }
+    .admin-sidebar.open {
+        transform: translateX(0);
+        box-shadow: 0 0 32px rgba(0, 0, 0, 0.7);
+    }
+}
+</style>
+{% endblock %}

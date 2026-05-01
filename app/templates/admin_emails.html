@@ -1,0 +1,21 @@
+{% extends "admin_base.html" %}
+
+{% block admin_content %}
+<div class="px-4 lg:px-8 pt-6 pb-12">
+    <div class="flex items-center justify-between mb-3 font-mono-term text-[10px] tracking-[0.25em] uppercase">
+        <span class="text-brand-400/80"><span class="text-brand-400">▌</span> METAKIZZ // EMAIL.CONTROL.CENTER</span>
+    </div>
+    <h1 class="text-2xl font-display font-bold mb-6">Email Control Center</h1>
+
+    <div class="bg-gray-900/60 border border-brand-400/30 rounded-xl p-8 text-center">
+        <p class="font-mono-term text-[12px] tracking-[0.3em] uppercase text-brand-400 mb-3 animate-pulse">▌ COMING IN STAGE 3</p>
+        <p class="text-gray-300 max-w-2xl mx-auto leading-relaxed">
+            This will be the centralized dashboard for every email the system can send: lifecycle status, scheduled cron timing, per-template performance, recent send activity feed, Resend webhook health, and unsubscribed-list management.
+        </p>
+        <p class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500 mt-4">
+            For now → <a href="{{ url_for('admin.cron_status') }}" class="text-brand-400 hover:text-brand-300 underline">cron schedules</a> ·
+            <a href="{{ url_for('admin.test_email') }}" class="text-brand-400 hover:text-brand-300 underline">test send</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
