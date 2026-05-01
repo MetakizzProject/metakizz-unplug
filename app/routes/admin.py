@@ -685,12 +685,55 @@ def emails():
 
 @admin_bp.route("/live")
 def live():
-    """Live Monitor — placeholder. Stage 4 will populate this with the
-    recent-signups feed + countdown + auto-refresh."""
+    """Live Monitor — countdown to campaign close, last 50 signups feed,
+    last 20 referrals (unplugs) so the admin can keep the page open during
+    a viral moment or attack and watch what's coming in real-time.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff_1h = now - timedelta(hours=1)
+    cutoff_24h = now - timedelta(hours=24)
+
+    # Last 50 signups (newest first)
+    recent_signups = (
+        Ambassador.query
+        .order_by(Ambassador.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    # Last 20 referrals
+    recent_refs = (
+        Referral.query
+        .order_by(Referral.registered_at.desc())
+        .limit(20)
+        .all()
+    )
+    # Pre-resolve referrers for the feed
+    ref_amb_ids = {r.ambassador_id for r in recent_refs}
+    ref_lookup = {a.id: a for a in Ambassador.query.filter(Ambassador.id.in_(ref_amb_ids)).all()} if ref_amb_ids else {}
+
+    # Velocity counters
+    signups_1h = Ambassador.query.filter(Ambassador.created_at >= cutoff_1h).count()
+    signups_24h = Ambassador.query.filter(Ambassador.created_at >= cutoff_24h).count()
+    refs_1h = Referral.query.filter(Referral.registered_at >= cutoff_1h).count()
+    refs_24h = Referral.query.filter(Referral.registered_at >= cutoff_24h).count()
+
+    # Campaign close info for the big countdown clock
+    close_iso = current_app.config.get("CAMPAIGN_CLOSE_ISO", "")
+
     return render_template(
         "admin_live.html",
         page_title="Live Monitor",
         active_section="live",
+        recent_signups=recent_signups,
+        recent_refs=recent_refs,
+        ref_lookup=ref_lookup,
+        signups_1h=signups_1h,
+        signups_24h=signups_24h,
+        refs_1h=refs_1h,
+        refs_24h=refs_24h,
+        close_iso=close_iso,
+        now_ts=now,
         **_admin_layout_context(),
     )
 
