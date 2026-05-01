@@ -224,8 +224,10 @@ def create_signup(
         try:
             new_count = Referral.query.filter_by(ambassador_id=referrer.id).count()
 
-            if new_count == 1:
-                send_first_unplug_email(referrer, name, app_url)
+            if new_count == 1 and referrer.first_unplug_sent_at is None:
+                if send_first_unplug_email(referrer, name, app_url):
+                    referrer.first_unplug_sent_at = datetime.now(timezone.utc)
+                    db.session.commit()
 
             elif new_count >= 5 and referrer.guaranteed_prize_sent_at is None:
                 rank = _rank_in_bucket(referrer)

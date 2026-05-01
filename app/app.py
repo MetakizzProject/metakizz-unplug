@@ -38,6 +38,9 @@ def _ensure_unsubscribe_columns(db):
         if "guaranteed_prize_sent_at" not in cols:
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN guaranteed_prize_sent_at TIMESTAMP"))
             logger.info("added column ambassadors.guaranteed_prize_sent_at")
+        if "first_unplug_sent_at" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN first_unplug_sent_at TIMESTAMP"))
+            logger.info("added column ambassadors.first_unplug_sent_at")
         # Cron-driven email idempotency flags.
         for col in (
             "activation_nudge_sent_at",

@@ -71,6 +71,29 @@ def _send(to, subject, html, from_name="MetaKizz Project", *, template_key=None,
         logger.warning("RESEND_API_KEY not set, skipping email to %s", to)
         return False
 
+    # RFC 8058 List-Unsubscribe headers — Gmail/Outlook need these to render
+    # the native one-click unsubscribe button. Without them, our emails get
+    # classified as bulk and degrade sender reputation over time.
+    email_payload = {
+        "from": email_from,
+        "to": [to],
+        "subject": subject,
+        "html": html,
+    }
+    if ambassador is not None:
+        try:
+            from flask import current_app
+            app_url = current_app.config.get("APP_URL", "")
+            unsub_url = _unsubscribe_url(ambassador, app_url) if app_url else None
+            if unsub_url:
+                email_payload["headers"] = {
+                    "List-Unsubscribe": f"<{unsub_url}>",
+                    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+                }
+        except Exception:
+            # No request context (e.g. cron fallback) — skip the header gracefully.
+            pass
+
     try:
         resp = http_requests.post(
             RESEND_API_URL,
@@ -78,12 +101,7 @@ def _send(to, subject, html, from_name="MetaKizz Project", *, template_key=None,
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
-            json={
-                "from": email_from,
-                "to": [to],
-                "subject": subject,
-                "html": html,
-            },
+            json=email_payload,
             timeout=10,
         )
         if resp.status_code < 300:
