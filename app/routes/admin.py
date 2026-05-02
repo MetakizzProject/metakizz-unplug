@@ -596,10 +596,68 @@ def login():
 @admin_bp.route("/security")
 def security():
     """Security & anti-fraud center: Turnstile stats, attacks blocked,
-    pending review queue summary, and high-risk ambassadors. Lives
-    here so the main Overview page stays focused on growth metrics.
+    pending review queue summary, and high-risk ambassadors. Supports
+    ?email=xxx to drill into all rejections for a single email — the
+    investigation view used when a recurring email shows up in attacks.
     """
+    from app.models import TurnstileRejection
+    from collections import Counter
+
+    email_filter = (request.args.get("email") or "").strip().lower() or None
+
     turnstile_stats = _compute_turnstile_stats()
+
+    # ── Top emails by rejection count — surfaces patterns at a glance ──
+    top_email_rows = (
+        db.session.query(
+            TurnstileRejection.email_attempted,
+            func.count(TurnstileRejection.id).label("cnt"),
+            func.max(TurnstileRejection.created_at).label("last_at"),
+            func.count(func.distinct(TurnstileRejection.ip)).label("distinct_ips"),
+        )
+        .filter(TurnstileRejection.email_attempted.isnot(None))
+        .group_by(TurnstileRejection.email_attempted)
+        .order_by(func.count(TurnstileRejection.id).desc())
+        .limit(15)
+        .all()
+    )
+
+    # ── Email investigation drill-in ──
+    investigation = None
+    if email_filter:
+        rows = (
+            TurnstileRejection.query
+            .filter(func.lower(TurnstileRejection.email_attempted) == email_filter)
+            .order_by(TurnstileRejection.created_at.desc())
+            .all()
+        )
+        # Aggregates
+        ip_counter = Counter(r.ip or "—" for r in rows)
+        ua_counter = Counter((r.user_agent or "—")[:200] for r in rows)
+        source_counter = Counter(r.source or "—" for r in rows)
+        status_counter = Counter(r.status or "—" for r in rows)
+
+        # Decide whether the email belongs to an existing Ambassador
+        existing_amb = (
+            Ambassador.query
+            .filter(func.lower(Ambassador.email) == email_filter)
+            .first()
+        )
+
+        investigation = {
+            "email": email_filter,
+            "rows": rows,
+            "total": len(rows),
+            "distinct_ips": len(set(r.ip for r in rows if r.ip)),
+            "distinct_uas": len(set(r.user_agent for r in rows if r.user_agent)),
+            "first_at": min((r.created_at for r in rows if r.created_at), default=None),
+            "last_at": max((r.created_at for r in rows if r.created_at), default=None),
+            "ip_top": ip_counter.most_common(10),
+            "ua_top": ua_counter.most_common(5),
+            "source_top": source_counter.most_common(),
+            "status_top": status_counter.most_common(),
+            "existing_ambassador": existing_amb,
+        }
 
     # High-risk ambassadors — sorted by suspicion score, top 30
     all_amb = Ambassador.query.all()
@@ -627,6 +685,8 @@ def security():
         turnstile_stats=turnstile_stats,
         risk_rows=risk_rows,
         recent_pending=recent_pending,
+        top_email_rows=top_email_rows,
+        investigation=investigation,
         **_admin_layout_context(),
     )
 

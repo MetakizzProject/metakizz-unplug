@@ -6,7 +6,149 @@
         <span class="text-brand-400/80"><span class="text-brand-400">▌</span> METAKIZZ // SECURITY.CENTER</span>
     </div>
     <h1 class="text-2xl font-display font-bold mb-1">Security &amp; Anti-Fraud</h1>
-    <p class="text-sm text-gray-400 mb-6">Cloudflare Turnstile, blocked attacks, pending review queue, and high-risk ambassadors — all in one place.</p>
+    <p class="text-sm text-gray-400 mb-4">Cloudflare Turnstile, blocked attacks, pending review queue, and high-risk ambassadors — all in one place.</p>
+
+    {# ── Email search bar ── #}
+    <form method="GET" class="flex items-center gap-2 mb-6 flex-wrap">
+        <span class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-gray-500">▌ INVESTIGATE EMAIL</span>
+        <input type="text" name="email" value="{{ investigation.email if investigation else '' }}" placeholder="alvarohertinez@gmail.com"
+               class="bg-black/60 border border-gray-700 rounded px-3 py-1.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-400 font-mono-term flex-1 min-w-[220px] max-w-md">
+        <button type="submit" class="font-mono-term text-[10px] tracking-wider uppercase text-black bg-brand-400 hover:bg-brand-300 px-3 py-1.5 rounded font-bold transition">▶ Drill in</button>
+        {% if investigation %}
+        <a href="{{ url_for('admin.security') }}" class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500 hover:text-white px-3 py-1.5">× Clear</a>
+        {% endif %}
+    </form>
+
+    {# ─────────── INVESTIGATION VIEW (when ?email=xxx is set) ─────────── #}
+    {% if investigation %}
+    <div class="bg-yellow-900/15 border-2 border-yellow-500/40 rounded-xl p-5 mb-7" style="box-shadow: 0 0 28px rgba(234,179,8,0.12);">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-yellow-300">▌ INVESTIGATION · {{ investigation.email }}</p>
+            <span class="font-mono-term text-[10px] tracking-wider uppercase text-yellow-400/80">
+                {% if investigation.existing_ambassador %}
+                ✓ Email belongs to registered Ambassador <span class="text-yellow-200 normal-case ml-1">{{ investigation.existing_ambassador.name }}</span> · ID {{ investigation.existing_ambassador.id }}
+                {% else %}
+                ✗ NOT a registered Ambassador
+                {% endif %}
+            </span>
+        </div>
+
+        {# Summary stats #}
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div class="bg-black/40 border border-yellow-500/25 rounded px-3 py-2.5">
+                <p class="font-mono-term text-[9px] tracking-wider uppercase text-yellow-400/70 mb-1">Rejected attempts</p>
+                <p class="font-orbitron font-black text-2xl text-red-400">{{ investigation.total }}</p>
+            </div>
+            <div class="bg-black/40 border border-yellow-500/25 rounded px-3 py-2.5">
+                <p class="font-mono-term text-[9px] tracking-wider uppercase text-yellow-400/70 mb-1">Distinct IPs</p>
+                <p class="font-orbitron font-black text-2xl {% if investigation.distinct_ips > 5 %}text-red-400{% else %}text-yellow-300{% endif %}">{{ investigation.distinct_ips }}</p>
+            </div>
+            <div class="bg-black/40 border border-yellow-500/25 rounded px-3 py-2.5">
+                <p class="font-mono-term text-[9px] tracking-wider uppercase text-yellow-400/70 mb-1">Distinct user-agents</p>
+                <p class="font-orbitron font-black text-2xl text-yellow-300">{{ investigation.distinct_uas }}</p>
+            </div>
+            <div class="bg-black/40 border border-yellow-500/25 rounded px-3 py-2.5">
+                <p class="font-mono-term text-[9px] tracking-wider uppercase text-yellow-400/70 mb-1">Time span</p>
+                <p class="text-xs text-yellow-200 font-mono-term mt-1">
+                    {% if investigation.first_at %}{{ investigation.first_at.strftime('%b %d %H:%M') }}{% endif %}
+                    <br><span class="text-yellow-500/70">→ {% if investigation.last_at %}{{ investigation.last_at.strftime('%b %d %H:%M') }}{% endif %}</span>
+                </p>
+            </div>
+        </div>
+
+        {# Diagnosis hint — heuristic based on attempt+IP shape #}
+        <div class="bg-black/50 border border-yellow-500/30 rounded p-3 mb-4 text-xs text-yellow-100 font-mono-term tracking-wider leading-relaxed">
+            {% if investigation.distinct_ips >= 3 %}
+            <p class="text-red-300 mb-1">⚠ <strong>HIGH SUSPICION · LIKELY BOT/SCRAPER</strong></p>
+            <p>{{ investigation.total }} attempts from {{ investigation.distinct_ips }} different IPs = automated tool rotating proxies. Status='missing' confirms the client did NOT execute JavaScript — Cloudflare Turnstile token never loaded. A real human form-fill would always carry a token.</p>
+            {% elif investigation.distinct_ips == 2 %}
+            <p class="text-yellow-300 mb-1">⚠ TWO-IP PATTERN</p>
+            <p>Could be one person on two networks (home + mobile) OR two coordinated retries. Worth watching but not conclusive.</p>
+            {% elif investigation.distinct_ips == 1 %}
+            <p class="text-yellow-300">SINGLE-SOURCE PATTERN · could be one person retrying or one device behind a stable IP.</p>
+            {% else %}
+            <p>{{ investigation.total }} attempts, {{ investigation.distinct_ips }} IPs. Review the per-IP and per-user-agent breakdowns below for shape.</p>
+            {% endif %}
+            {% if investigation.existing_ambassador %}
+            <p class="mt-2 text-brand-300">✓ <strong>YOUR DATA IS SAFE.</strong> The registered Ambassador account ({{ investigation.existing_ambassador.email }}) cannot be modified by these attempts — they all bounced at Turnstile before reaching the dedup-by-email layer. No new rows were created.</p>
+            {% endif %}
+        </div>
+
+        {# IP breakdown #}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div>
+                <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-yellow-400/80 mb-2">▌ IPs · TOP 10 BY COUNT</p>
+                <div class="bg-black/40 border border-yellow-500/20 rounded overflow-hidden">
+                    <table class="w-full text-xs">
+                        {% for ip, cnt in investigation.ip_top %}
+                        <tr class="border-b border-yellow-500/10 last:border-0">
+                            <td class="px-3 py-1.5 font-mono-term text-yellow-200">{{ ip }}</td>
+                            <td class="px-3 py-1.5 text-right font-orbitron font-black text-base {% if cnt > 5 %}text-red-400{% else %}text-yellow-300{% endif %}">{{ cnt }}×</td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </div>
+            </div>
+            <div>
+                <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-yellow-400/80 mb-2">▌ USER-AGENTS · TOP 5</p>
+                <div class="bg-black/40 border border-yellow-500/20 rounded overflow-hidden">
+                    <table class="w-full text-xs">
+                        {% for ua, cnt in investigation.ua_top %}
+                        <tr class="border-b border-yellow-500/10 last:border-0">
+                            <td class="px-3 py-1.5 font-mono-term text-yellow-200 truncate max-w-[26rem]" title="{{ ua }}">{{ ua[:80] }}{% if ua|length > 80 %}…{% endif %}</td>
+                            <td class="px-3 py-1.5 text-right font-orbitron font-black text-base text-yellow-300 whitespace-nowrap">{{ cnt }}×</td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {# Sources + status #}
+        <div class="flex items-center gap-4 mb-4 flex-wrap text-xs font-mono-term">
+            <span class="text-yellow-400/70 uppercase tracking-wider">Sources:</span>
+            {% for src, cnt in investigation.source_top %}
+            <span class="text-yellow-200">{{ src }} <span class="text-yellow-500/60">({{ cnt }})</span></span>
+            {% endfor %}
+            <span class="text-yellow-400/70 uppercase tracking-wider ml-3">Status:</span>
+            {% for status, cnt in investigation.status_top %}
+            <span class="text-yellow-200">{{ status }} <span class="text-yellow-500/60">({{ cnt }})</span></span>
+            {% endfor %}
+        </div>
+
+        {# Full timeline of attempts #}
+        <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-yellow-400/80 mb-2 mt-2">▌ FULL TIMELINE · {{ investigation.rows|length }} ATTEMPTS</p>
+        <div class="bg-black/40 border border-yellow-500/20 rounded overflow-hidden max-h-[480px] overflow-y-auto">
+            <table class="w-full text-xs">
+                <thead class="bg-black/80 sticky top-0">
+                    <tr class="font-mono-term text-[9px] tracking-wider uppercase text-yellow-400/70">
+                        <th class="text-left px-3 py-2">When</th>
+                        <th class="text-left px-3 py-2">Status</th>
+                        <th class="text-left px-3 py-2">IP</th>
+                        <th class="text-left px-3 py-2 hidden md:table-cell">User-Agent</th>
+                        <th class="text-left px-3 py-2 hidden md:table-cell">Source</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in investigation.rows %}
+                    <tr class="border-b border-yellow-500/10 last:border-0">
+                        <td class="px-3 py-1.5 font-mono-term text-yellow-200 whitespace-nowrap">{{ r.created_at.strftime('%b %d · %H:%M:%S') if r.created_at else '—' }}</td>
+                        <td class="px-3 py-1.5">
+                            <span class="font-mono-term text-[9px] tracking-wider uppercase
+                                {% if r.status == 'invalid' %}text-red-400 bg-red-500/10 border border-red-500/40
+                                {% else %}text-yellow-400 bg-yellow-500/10 border border-yellow-500/40
+                                {% endif %} px-1.5 py-0.5 rounded">{{ r.status }}</span>
+                        </td>
+                        <td class="px-3 py-1.5 font-mono-term text-yellow-200">{{ r.ip or '—' }}</td>
+                        <td class="px-3 py-1.5 font-mono-term text-yellow-200/70 hidden md:table-cell truncate max-w-[20rem]" title="{{ r.user_agent or '' }}">{{ (r.user_agent or '—')[:60] }}{% if r.user_agent and r.user_agent|length > 60 %}…{% endif %}</td>
+                        <td class="px-3 py-1.5 font-mono-term text-yellow-300 hidden md:table-cell">{{ r.source }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- ─── TURNSTILE ─── -->
     {% if turnstile_stats is defined %}
@@ -102,6 +244,54 @@
             <p>When enforce-mode rejects a bot signup, it will appear here with email, IP, and reason.</p>
         </div>
         {% endif %}
+    </div>
+    {% endif %}
+
+    {# ─── TOP EMAILS BY REJECTION COUNT ─── #}
+    {% if top_email_rows %}
+    <div class="flex items-center justify-between mb-3 mt-2">
+        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ TOP TARGETED EMAILS · BY REJECTION COUNT</p>
+        <span class="font-mono-term text-[10px] tracking-wider uppercase text-gray-500">Click any row to drill in</span>
+    </div>
+    <div class="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden mb-7">
+        <table class="w-full text-sm">
+            <thead class="border-b border-gray-800">
+                <tr class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400/70">
+                    <th class="text-left px-4 py-2.5 font-bold">Email</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Attempts</th>
+                    <th class="text-right px-4 py-2.5 font-bold">Distinct IPs</th>
+                    <th class="text-left px-4 py-2.5 font-bold hidden md:table-cell">Last attempt</th>
+                    <th class="text-right px-4 py-2.5 font-bold"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for email, cnt, last_at, distinct_ips in top_email_rows %}
+                <tr class="border-b border-gray-800/50 last:border-0 hover:bg-brand-400/5
+                    {% if cnt >= 10 %}bg-red-900/10{% elif cnt >= 5 %}bg-yellow-900/5{% endif %}">
+                    <td class="px-4 py-2.5 text-xs font-mono-term">
+                        <a href="?email={{ email }}" class="text-white hover:text-brand-400">{{ email }}</a>
+                    </td>
+                    <td class="px-4 py-2.5 text-right font-orbitron font-black text-base
+                        {% if cnt >= 10 %}text-red-400
+                        {% elif cnt >= 5 %}text-yellow-400
+                        {% else %}text-gray-300{% endif %}">{{ cnt }}</td>
+                    <td class="px-4 py-2.5 text-right font-orbitron font-black text-base
+                        {% if distinct_ips >= 5 %}text-red-400
+                        {% elif distinct_ips >= 3 %}text-yellow-400
+                        {% else %}text-gray-400{% endif %}">{{ distinct_ips }}</td>
+                    <td class="px-4 py-2.5 text-xs text-gray-400 font-mono-term hidden md:table-cell whitespace-nowrap">
+                        {{ last_at.strftime('%b %d · %H:%M') if last_at else '—' }}
+                    </td>
+                    <td class="px-4 py-2.5 text-right">
+                        <a href="?email={{ email }}" class="font-mono-term text-[10px] tracking-wider uppercase text-brand-400 hover:text-brand-300 border border-brand-400/40 px-2 py-0.5 rounded">▶ Investigate</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="px-4 py-3 border-t border-gray-800 bg-black/40 text-[11px] text-gray-500 font-mono-term tracking-wider">
+            &gt; ≥10 attempts (red) and ≥5 distinct IPs (red) suggest automated tools rotating proxies.
+        </div>
     </div>
     {% endif %}
 
