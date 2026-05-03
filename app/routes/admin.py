@@ -13,6 +13,7 @@ from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotificati
 from app.mailer import (
     send_welcome_email,
     send_activation_nudge_email,
+    send_activation_push_email,
     send_first_unplug_email,
     send_guaranteed_prize_email,
     send_midway_reminder_email,
@@ -59,18 +60,20 @@ def _compute_segments(ambassadors):
 
     cold = [a for a in reachable if a.referral_count == 0]
     sleeping = [a for a in reachable if 1 <= a.referral_count < 5]
+    needs_activation = [a for a in reachable if a.referral_count < 5]  # cold ∪ sleeping
     champions = [a for a in reachable if a.referral_count >= 5]
     top10 = sorted(reachable, key=lambda a: -a.referral_count)[:10]
     inactive_7d = [a for a in reachable if days_since_last_referral(a) >= 7]
     never_visited = [a for a in reachable if a.last_dashboard_visit_at is None]
 
     return {
-        "cold": cold,                    # 0 unplugs (need a kick)
-        "sleeping": sleeping,            # 1-4 unplugs (need momentum)
-        "champions": champions,          # 5+ unplugs (lock the prize)
-        "top10": top10,                  # current top performers
-        "inactive_7d": inactive_7d,      # no activity in 7 days
-        "never_visited": never_visited,  # never opened their dashboard
+        "cold": cold,                          # 0 unplugs (need a kick)
+        "sleeping": sleeping,                  # 1-4 unplugs (need momentum)
+        "needs_activation": needs_activation,  # 0-4 unplugs (haven't unlocked yet)
+        "champions": champions,                # 5+ unplugs (lock the prize)
+        "top10": top10,                        # current top performers
+        "inactive_7d": inactive_7d,            # no activity in 7 days
+        "never_visited": never_visited,        # never opened their dashboard
     }
 
 
@@ -195,16 +198,17 @@ def _compute_email_stats():
 # Used to populate the Email Control Center; trigger + fires fields are
 # human-readable strings the admin UI shows verbatim.
 EMAIL_TEMPLATES_META = [
-    ("welcome",              "Welcome",            "On every new signup",                      "real-time"),
-    ("first_unplug",         "First Unplug",       "Referrer's count goes 0 → 1",              "real-time"),
-    ("guaranteed_prize",     "Guaranteed Prize",   "Referrer hits 5 unplugs (count 4 → 5)",    "real-time"),
-    ("activation_nudge",     "Activation Nudge",   "Cron · count=0 and 48h+ since signup",     "cron daily"),
-    ("midway_reminder",      "Midway Reminder",    "Cron · 7d+ old and ≥5d to close",          "cron daily"),
-    ("final_48h",            "Final 48h",          "Cron one-shot · 2026-05-05 19:00 Madrid",  "cron one-shot"),
-    ("last_6h",              "Last 6h",            "Cron one-shot · 2026-05-07 13:00 Madrid",  "cron one-shot"),
-    ("results_announcement", "Results",            "Cron one-shot · 2026-05-08 10:00 Madrid",  "cron one-shot"),
-    ("you_won",              "You Won",            "Cron one-shot · 2026-05-08 10:30 Madrid",  "cron one-shot"),
-    ("broadcast",            "Broadcast",          "Admin manual via /admin (broadcast modal)", "admin"),
+    ("welcome",              "Welcome",            "On every new signup",                              "real-time"),
+    ("first_unplug",         "First Unplug",       "Referrer's count goes 0 → 1",                      "real-time"),
+    ("guaranteed_prize",     "Guaranteed Prize",   "Referrer hits 5 unplugs (count 4 → 5)",            "real-time"),
+    ("activation_nudge",     "Activation Nudge",   "Cron · count=0 and 48h+ since signup",             "cron daily"),
+    ("activation_push",      "Activation Push",    "Admin manual · personalized 'X away' to count 0-4", "admin manual"),
+    ("midway_reminder",      "Midway Reminder",    "Cron · 7d+ old and ≥5d to close",                  "cron daily"),
+    ("final_48h",            "Final 48h",          "Cron one-shot · 2026-05-05 19:00 Madrid",          "cron one-shot"),
+    ("last_6h",              "Last 6h",            "Cron one-shot · 2026-05-07 13:00 Madrid",          "cron one-shot"),
+    ("results_announcement", "Results",            "Cron one-shot · 2026-05-08 10:00 Madrid",          "cron one-shot"),
+    ("you_won",              "You Won",            "Cron one-shot · 2026-05-08 10:30 Madrid",          "cron one-shot"),
+    ("broadcast",            "Broadcast",          "Admin manual via /admin (broadcast modal)",        "admin"),
 ]
 
 
@@ -716,6 +720,17 @@ def emails():
     lifecycle = _compute_email_lifecycle()
     summary = _compute_email_health_summary()
 
+    # Compute the eligible audience for the activation_push button
+    # (segment = needs_activation, minus those already pushed once)
+    push_eligible = (
+        Ambassador.query
+        .filter(Ambassador.unsubscribed_at.is_(None))
+        .filter(Ambassador.activation_push_sent_at.is_(None))
+        .all()
+    )
+    push_eligible = [a for a in push_eligible if a.referral_count < 5]
+    push_eligible_count = len(push_eligible)
+
     # Recent activity feed — last 50 events (any type) with ambassador linked
     recent_events = (
         EmailEvent.query
@@ -738,6 +753,7 @@ def emails():
         summary=summary,
         recent_events=recent_events,
         amb_lookup=amb_lookup,
+        push_eligible_count=push_eligible_count,
         now_ts=datetime.now(timezone.utc),
         **_admin_layout_context(),
     )
@@ -888,6 +904,13 @@ _SEGMENT_TEMPLATES = {
         "flag": "activation_nudge_sent_at",
         "label": "Activation nudge",
         "min_age_days": 2,  # don't pester ambassadors registered in the last 48h
+    },
+    "activation_push": {
+        "fn": send_activation_push_email,
+        "default_segment": "needs_activation",
+        "flag": "activation_push_sent_at",
+        "label": "Activation push (0-4 unplugs)",
+        "min_age_days": 0,  # admin-triggered final push, no min age
     },
     "midway_reminder": {
         "fn": send_midway_reminder_email,
@@ -1511,6 +1534,12 @@ def test_email():
             elif email_type == "activation_nudge":
                 fake.referral_count = 0
                 success = send_activation_nudge_email(fake, app_url)
+
+            elif email_type == "activation_push":
+                # Test the personalized "X away from your reward" push.
+                # Default count = 3 so the recipient sees "2 unplugs left".
+                fake.referral_count = 3
+                success = send_activation_push_email(fake, app_url)
 
             elif email_type == "first_unplug":
                 fake.referral_count = 1

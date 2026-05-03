@@ -44,6 +44,7 @@ def _ensure_unsubscribe_columns(db):
         # Cron-driven email idempotency flags.
         for col in (
             "activation_nudge_sent_at",
+            "activation_push_sent_at",
             "midway_sent_at",
             "final_48h_sent_at",
             "last_6h_sent_at",

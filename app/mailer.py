@@ -361,6 +361,50 @@ def _next_step_for_position(source, position):
 
 # ─── EMAIL 2: ACTIVATION NUDGE ───────────────────────────────────
 
+def send_activation_push_email(ambassador, app_url):
+    """Manual admin "almost there" push for ambassadors at 0-4 unplugs.
+
+    Personalised: subject line and body both adapt to the recipient's
+    current count + remaining-to-5. Skips opted-out and ambassadors
+    who already have 5+ unplugs (the prize is theirs — no nudge needed).
+    """
+    if is_unsubscribed(ambassador):
+        return False
+    count = ambassador.referral_count
+    if count >= 5:
+        return False  # already unlocked, this template doesn't apply
+
+    remaining_to_5 = 5 - count
+    referral_url = _share_url(ambassador)
+    wa_message = (
+        f"Hey, just registered for a free Urbankiz training with Jesus & Anni (MetaKizz). "
+        f"2 videos + 1 live. Thought of you. {referral_url}"
+    )
+
+    html = render_template(
+        "emails/activation_push.html",
+        first_name=_first_name(ambassador),
+        community=(ambassador.source == "community"),
+        count=count,
+        remaining_to_5=remaining_to_5,
+        referral_url=referral_url,
+        whatsapp_url=_whatsapp_share_url(wa_message),
+        dashboard_url=f"{app_url}/dashboard/{ambassador.dashboard_code}",
+        unsubscribe_url=_unsubscribe_url(ambassador, app_url),
+    )
+
+    subject = (
+        f"{remaining_to_5} {'unplug' if remaining_to_5 == 1 else 'unplugs'} to your reward"
+    )
+    return _send(
+        ambassador.email,
+        subject,
+        html,
+        template_key="activation_push",
+        ambassador=ambassador,
+    )
+
+
 def send_activation_nudge_email(ambassador, app_url):
     """Send the activation nudge email (Day 2-3, only if 0 referrals)."""
     if is_unsubscribed(ambassador):

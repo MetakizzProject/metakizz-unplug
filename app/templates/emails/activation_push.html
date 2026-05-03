@@ -1,0 +1,165 @@
+{% extends "emails/_shell.html" %}
+
+{% block title %}{{ remaining_to_5 }} {{ 'unplug' if remaining_to_5 == 1 else 'unplugs' }} to your reward, {{ first_name }}{% endblock %}
+{% block preheader %}4 days to close. Your link is still live. Keep going.{% endblock %}
+{% block header_left %}METAKIZZ // ACTIVATION.PUSH{% endblock %}
+{% block header_right %}REFERRALS: <span style="color:#FFC857;">{{ '%02d' % count }}</span>{% endblock %}
+
+{% block content %}
+
+<!-- Hero greeting -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:32px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0 0 8px 0;">
+      &gt; Hey <span style="color:#FFFFFF;">{{ first_name }}</span>_
+    </p>
+    {% if count == 0 %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.6;margin:14px 0 0 0;">
+      Your link's still at zero. <strong>5 unplugs unlock everything.</strong> 4 days left.
+    </p>
+    {% else %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.6;margin:14px 0 0 0;">
+      You're already at <strong>{{ count }}</strong>. Just <strong>{{ remaining_to_5 }} more</strong> and the reward locks in.
+    </p>
+    {% endif %}
+  </td>
+</tr>
+</table>
+
+<!-- Big remaining counter -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a1f15" style="background:#0a1f15;border:2px solid #2EDB99;border-radius:12px;box-shadow:0 0 20px rgba(46,219,153,0.2);">
+    <tr>
+      <td align="center" style="padding:28px 22px 22px 22px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin:0 0 6px 0;">
+          ▌ The reward you're {{ '%02d' % remaining_to_5 }} dancers away from
+        </p>
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:64px;line-height:1;letter-spacing:2px;margin:14px 0 6px 0;text-shadow:0 0 24px rgba(46,219,153,0.65);">
+          {{ '%02d' % remaining_to_5 }}
+        </p>
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin:0 0 18px 0;">
+          {{ 'unplug' if remaining_to_5 == 1 else 'unplugs' }} left
+        </p>
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:18px;line-height:1.35;margin:8px 0 6px 0;text-shadow:0 0 12px rgba(46,219,153,0.5);">
+          {% if community %}
+          1 month of MetaDancers, free
+          {% else %}
+          Live musicality masterclass with Jesus &amp; Anni
+          {% endif %}
+        </p>
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#9CA3AF;font-size:12px;line-height:1.55;margin:0;">
+          {% if community %}€30+ value{% else %}€97 value{% endif %} · locked the moment you hit 5 unplugs.
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Body context -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.65;margin:0;">
+      {% if count == 0 %}
+      Pick the dancer who'd love a free Urbankiz training week with us. Send them your link. That's the whole game.
+      {% elif remaining_to_5 == 1 %}
+      <strong style="color:#FFFFFF;">One more dancer.</strong> One. That's all that's between you and the reward.
+      {% else %}
+      Send your link to <strong style="color:#FFFFFF;">{{ remaining_to_5 }} more dancers</strong> in your circle. People who'd love a free Urbankiz training week with us.
+      {% endif %}
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- Pre-written WhatsApp message for friction-free sharing -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:18px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d1610" style="background-color:#0d1610;border:1px dashed #2EDB99;border-radius:8px;">
+    <tr>
+      <td style="padding:16px 18px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 10px 0;">
+          // Copy-paste this
+        </p>
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.55;margin:0;word-break:break-word;">
+          Hey, just registered for a free Urbankiz training with Jesus &amp; Anni (MetaKizz). 2 videos + 1 live. Thought of you. <span style="color:#2EDB99;">{{ referral_url }}</span>
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Big WhatsApp CTA -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:24px 32px 0 32px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr>
+      <td align="center" bgcolor="#25D366" style="background:#25D366;border:2px solid #25D366;border-radius:8px;box-shadow:0 0 20px rgba(37,211,102,0.4);">
+        <a href="{{ whatsapp_url }}" class="mob-cta-text" style="display:inline-block;padding:18px 36px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:14px;letter-spacing:2.5px;text-transform:uppercase;color:#FFFFFF;text-decoration:none;">
+          ▶ Share on WhatsApp
+        </a>
+      </td>
+    </tr>
+    </table>
+    <p style="margin:14px 0 0 0;">
+      <a href="{{ dashboard_url }}" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;text-decoration:underline;">
+        Open my dashboard →
+      </a>
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- Deadline banner -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a1407" style="background:#1a1407;border:1px solid #FFC857;border-radius:6px;">
+    <tr>
+      <td align="center" style="padding:14px 18px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:12px;letter-spacing:3.5px;text-transform:uppercase;margin:0;">
+          ⧗ Closes May 7 · 19:00 Madrid
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- Sign-off -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 32px 32px;">
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      MetaKizz Team
+    </p>
+  </td>
+</tr>
+</table>
+
+{% endblock %}
+
+{% block prominent_unsubscribe %}
+<tr>
+  <td style="padding:18px 0 0 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid #2D2D44;border-radius:10px;">
+    <tr>
+      <td align="center" style="padding:18px 20px;">
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;margin:0 0 6px 0;">Don't want to keep receiving these emails?</p>
+        <p style="margin:0;"><a href="{{ unsubscribe_url }}" style="color:#2EDB99;text-decoration:underline;font-size:14px;font-weight:bold;">Click here to stop them.</a></p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+{% endblock %}

@@ -46,6 +46,8 @@ class Ambassador(db.Model):
 
     # Idempotency flags for the 6 cron-driven emails. Each is set after a successful send.
     activation_nudge_sent_at = db.Column(db.DateTime, nullable=True)  # #2
+    # Manual admin "almost there" / activation-push send (count 0-4 audience)
+    activation_push_sent_at = db.Column(db.DateTime, nullable=True)
     midway_sent_at = db.Column(db.DateTime, nullable=True)            # #5
     final_48h_sent_at = db.Column(db.DateTime, nullable=True)         # #6
     last_6h_sent_at = db.Column(db.DateTime, nullable=True)           # #7
