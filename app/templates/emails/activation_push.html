@@ -1,7 +1,7 @@
 {% extends "emails/_shell.html" %}
 
 {% block title %}{{ remaining_to_5 }} {{ 'unplug' if remaining_to_5 == 1 else 'unplugs' }} to your reward, {{ first_name }}{% endblock %}
-{% block preheader %}Hacking the Urbankizz Code starts tomorrow · 3 live sessions · your link is still open{% endblock %}
+{% block preheader %}Hacking the Urbankizz Code starts tomorrow · your link is still open{% endblock %}
 {% block header_left %}METAKIZZ // ACTIVATION.PUSH{% endblock %}
 {% block header_right %}REFERRALS: <span style="color:#FFC857;">{{ '%02d' % count }}</span>{% endblock %}
 
@@ -20,11 +20,8 @@
         <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:32px;line-height:1.1;letter-spacing:1px;margin:0;text-shadow:0 0 20px rgba(46,219,153,0.65);text-transform:uppercase;">
           Hacking the<br>Urbankizz Code
         </p>
-        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:26px;line-height:1.1;letter-spacing:2.5px;margin:18px 0 10px 0;text-shadow:0 0 22px rgba(46,219,153,0.85);text-transform:uppercase;">
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:26px;line-height:1.1;letter-spacing:2.5px;margin:18px 0 0 0;text-shadow:0 0 22px rgba(46,219,153,0.85);text-transform:uppercase;">
           Starts tomorrow
-        </p>
-        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:12px;letter-spacing:2.8px;text-transform:uppercase;margin:0;">
-          First class May 4 · also live May 5 &amp; 7 · 3 sessions
         </p>
       </td>
     </tr>
