@@ -1,47 +1,30 @@
 {% extends "emails/_shell.html" %}
 
 {% block title %}{{ remaining_to_5 }} {{ 'unplug' if remaining_to_5 == 1 else 'unplugs' }} to your reward, {{ first_name }}{% endblock %}
-{% block preheader %}4 days to close. Your link is still live. Keep going.{% endblock %}
+{% block preheader %}Hacking the Urbankizz Code starts tomorrow · 4 days live · your link is still open{% endblock %}
 {% block header_left %}METAKIZZ // ACTIVATION.PUSH{% endblock %}
 {% block header_right %}REFERRALS: <span style="color:#FFC857;">{{ '%02d' % count }}</span>{% endblock %}
 
 {% block content %}
 
-<!-- 1. GREETING -->
+<!-- 0. INCOMING ANNOUNCEMENT — first thing they see, big and clear -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-  <td class="mob-pad" style="padding:32px 32px 0 32px;">
-    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0 0 8px 0;">
-      &gt; Hey <span style="color:#FFFFFF;">{{ first_name }}</span>_
-    </p>
-    {% if count == 0 %}
-    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.6;margin:14px 0 0 0;">
-      Your link's still at zero. <strong>5 unplugs unlock everything.</strong>
-    </p>
-    {% else %}
-    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.6;margin:14px 0 0 0;">
-      You're already at <strong>{{ count }}</strong>. Just <strong>{{ remaining_to_5 }} more</strong> and you unlock the reward below.
-    </p>
-    {% endif %}
-  </td>
-</tr>
-</table>
-
-<!-- 2. BIG COUNTER — just the number, no prize text. The image carries the prize. -->
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr>
-  <td class="mob-pad" style="padding:24px 32px 0 32px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a1f15" style="background:#0a1f15;border:2px solid #2EDB99;border-radius:12px;box-shadow:0 0 20px rgba(46,219,153,0.2);">
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050a08" style="background:#050a08;border:2px solid #2EDB99;border-radius:12px;box-shadow:0 0 32px rgba(46,219,153,0.35);">
     <tr>
-      <td align="center" style="padding:24px 22px 20px 22px;">
-        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin:0 0 6px 0;">
-          ▌ Unplugs to unlock your reward
+      <td align="center" style="padding:24px 18px 22px 18px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:3.5px;text-transform:uppercase;margin:0 0 14px 0;">
+          ▌ Incoming transmission
         </p>
-        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:72px;line-height:1;letter-spacing:2px;margin:14px 0 6px 0;text-shadow:0 0 28px rgba(46,219,153,0.7);">
-          {{ '%02d' % remaining_to_5 }}
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:32px;line-height:1.1;letter-spacing:1px;margin:0;text-shadow:0 0 20px rgba(46,219,153,0.65);text-transform:uppercase;">
+          Hacking the<br>Urbankizz Code
         </p>
-        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin:0;">
-          {{ 'unplug' if remaining_to_5 == 1 else 'unplugs' }} left
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:26px;line-height:1.1;letter-spacing:2.5px;margin:18px 0 10px 0;text-shadow:0 0 22px rgba(46,219,153,0.85);text-transform:uppercase;">
+          ▶ Starts tomorrow
+        </p>
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:12px;letter-spacing:2.8px;text-transform:uppercase;margin:0;">
+          First class · May 4 → May 7 · 4 days live
         </p>
       </td>
     </tr>
@@ -50,21 +33,31 @@
 </tr>
 </table>
 
-<!-- 3. PRIZE LABEL — minimal, the image carries the actual prize visually -->
+<!-- 1. GREETING + motivating message — warm, conversational, prize-led -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-  <td class="mob-pad" align="center" style="padding:24px 32px 14px 32px;">
-    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin:0;">
-      ▌ The reward you unlock at 5
+  <td class="mob-pad" style="padding:32px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0 0 14px 0;">
+      &gt; Hey <span style="color:#FFFFFF;">{{ first_name }}</span>_
+    </p>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:16px;line-height:1.6;margin:0;">
+      Don't forget — you're still in time to win
+      <strong style="color:#2EDB99;text-shadow:0 0 12px rgba(46,219,153,0.5);">
+      {% if community %}
+      your free month of MetaDancers.
+      {% else %}
+      your Live Musicality Masterclass with Jesús &amp; Anni.
+      {% endif %}
+      </strong>
     </p>
   </td>
 </tr>
 </table>
 
-<!-- 4. HERO IMAGE — the visual prize reveal, source-aware -->
+<!-- 2. HERO IMAGE — visual reveal of the prize -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-  <td align="center" style="padding:0 16px;background:#000000;line-height:0;font-size:0;">
+  <td align="center" style="padding:22px 16px 0 16px;background:#000000;line-height:0;font-size:0;">
     {% if community %}
     <img src="{{ app_url }}/static/email/hero_metadancers.jpg"
          alt="1 month of MetaDancers, free — unlock with 5 unplugs · MetaKizz"
@@ -80,7 +73,36 @@
 </tr>
 </table>
 
-<!-- 5. YOUR LINK / CODE TO SHARE -->
+<!-- 3. BIG COUNTER — what they have left, with personalized framing -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a1f15" style="background:#0a1f15;border:2px solid #2EDB99;border-radius:12px;box-shadow:0 0 20px rgba(46,219,153,0.2);">
+    <tr>
+      <td align="center" style="padding:22px 22px 18px 22px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin:0 0 6px 0;">
+          {% if count == 0 %}
+          ▌ Unplugs you need to unlock it
+          {% elif remaining_to_5 == 1 %}
+          ▌ You're one dancer away
+          {% else %}
+          ▌ You're at {{ count }} · Just this many more
+          {% endif %}
+        </p>
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:72px;line-height:1;letter-spacing:2px;margin:12px 0 6px 0;text-shadow:0 0 28px rgba(46,219,153,0.7);">
+          {{ '%02d' % remaining_to_5 }}
+        </p>
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#C9CFD4;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin:0;">
+          {{ 'unplug' if remaining_to_5 == 1 else 'unplugs' }} left
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 4. YOUR LINK / CODE TO SHARE -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
   <td class="mob-pad" style="padding:28px 32px 0 32px;">
@@ -89,9 +111,9 @@
     </p>
     <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.65;margin:0 0 14px 0;">
       {% if count == 0 %}
-      Pick the dancer who'd love a free Urbankiz training with us. Send them this. That's the whole game.
+      Pick the dancer who'd love a free Urbankiz training week with us. Send them this. That's the whole game.
       {% elif remaining_to_5 == 1 %}
-      <strong style="color:#FFFFFF;">One more dancer.</strong> One. That's all that's between you and the reward above.
+      <strong style="color:#FFFFFF;">One more dancer.</strong> One. That's all that's between you and the reward.
       {% else %}
       Send this to <strong style="color:#FFFFFF;">{{ remaining_to_5 }} more dancers</strong> in your circle who'd love a free Urbankiz training week with us.
       {% endif %}
