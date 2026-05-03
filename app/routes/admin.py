@@ -730,6 +730,14 @@ def emails():
     )
     push_eligible = [a for a in push_eligible if a.referral_count < 5]
     push_eligible_count = len(push_eligible)
+    push_eligible_community = sum(1 for a in push_eligible if a.source == "community")
+    push_eligible_public = sum(1 for a in push_eligible if a.source == "public")
+    # Per-count breakdown (0/1/2/3/4) so the founder sees who's at what stage
+    push_eligible_by_count = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    for a in push_eligible:
+        c = a.referral_count
+        if 0 <= c <= 4:
+            push_eligible_by_count[c] += 1
 
     # Recent activity feed — last 50 events (any type) with ambassador linked
     recent_events = (
@@ -754,6 +762,9 @@ def emails():
         recent_events=recent_events,
         amb_lookup=amb_lookup,
         push_eligible_count=push_eligible_count,
+        push_eligible_community=push_eligible_community,
+        push_eligible_public=push_eligible_public,
+        push_eligible_by_count=push_eligible_by_count,
         now_ts=datetime.now(timezone.utc),
         **_admin_layout_context(),
     )

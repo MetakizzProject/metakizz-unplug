@@ -391,11 +391,18 @@ def send_activation_push_email(ambassador, app_url):
         whatsapp_url=_whatsapp_share_url(wa_message),
         dashboard_url=f"{app_url}/dashboard/{ambassador.dashboard_code}",
         unsubscribe_url=_unsubscribe_url(ambassador, app_url),
+        app_url=app_url.rstrip('/'),
     )
 
-    subject = (
-        f"{remaining_to_5} {'unplug' if remaining_to_5 == 1 else 'unplugs'} to your reward"
-    )
+    # Subject phrased conversationally — avoids hard-promo words like "free" /
+    # "now" that can flag Gmail's promotions classifier. Keeps the personalized
+    # number for curiosity-driven open rate. Subject prize differs by source.
+    first = ambassador.name.split()[0] if ambassador.name else "Hey"
+    n_word = "unplug" if remaining_to_5 == 1 else "unplugs"
+    if ambassador.source == "community":
+        subject = f"{first}, {remaining_to_5} {n_word} from MetaDancers"
+    else:
+        subject = f"{first}, {remaining_to_5} {n_word} to your masterclass"
     return _send(
         ambassador.email,
         subject,
