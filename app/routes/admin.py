@@ -711,6 +711,83 @@ def reach():
     )
 
 
+# 61 ambassadors who received the activation_push email accidentally during a
+# local smoke test on 2026-05-03 ~18:08 UTC. Hardcoded so the admin can
+# one-click pre-flag them in PROD before the official mass send, avoiding
+# duplicate emails. Auto-marked by /admin/emails/auto-mark-leaked.
+LEAKED_ACTIVATION_PUSH_EMAILS = [
+    "cameleonek@iinet.net.au",         "myriam.robert98@gmail.com",
+    "rita.pant@icloud.com",            "pavlo.sherin@tanecvplzni.cz",
+    "jana.kucerova@tanecvplzni.cz",    "erik9.9@web.de",
+    "linke.sandra97@web.de",           "neznoummm@gmail.com",
+    "akathelopez92@gmail.com",         "djbachakizcr@gmail.com",
+    "georgemappouras07@gmail.com",     "lnky0823@gmail.com",
+    "maria.christou.isaac@gmail.com",  "vandenengel.thijs@gmail.com",
+    "knoblochjk@gmail.com",            "lbenes24@gmail.com",
+    "martravelinside@gmail.com",       "przemekstolarski@outlook.com",
+    "leontear@gmail.com",              "wc_5306@yahoo.ca",
+    "pennywalthall@yahoo.com",         "alexander.rogalla@rub.de",
+    "eldar.manishevizch@gmail.com",    "carole.mbinky@yahoo.com",
+    "marcofilipefm@gmail.com",         "sandracfraga@gmail.com",
+    "oliver.reluga@gmail.com",         "m.plitz@myway.de",
+    "mirelvi.rojas@gmail.com",         "mari.nysaether@gmail.com",
+    "girisisodiya01@gmail.com",        "sydboss@gmail.com",
+    "rob333204@gmail.com",             "sophie.lincoln@hotmail.com",
+    "peps86@gmail.com",                "esperanza123@hotmail.com",
+    "lukmala@proton.me",               "petardonev5@gmail.com",
+    "endless.move.events@gmail.com",   "nixe83@gmail.com",
+    "natberg1001@gmail.com",           "carolwilczynski@hotmail.com",
+    "julia.a.k.dick@gmail.com",        "nathanlundgaard@gmail.com",
+    "pouran1996@gmail.com",            "silvio.seddio@gmail.com",
+    "sharon.bottana@gmail.com",        "amedmbow@gmail.com",
+    "raniero.schmidli@hotmail.com",    "dabrad@gmail.com",
+    "brlarumbe@gmail.com",             "840214166@qq.com",
+    "vivianeli@qq.com",                "melespada03@gmail.com",
+    "marinatango5678@gmail.com",       "sorin.chis06@gmail.com",
+    "anthony.gilbert96@hotmail.fr",    "berenice.caillot@outlook.fr",
+    "borzasijudit@gmail.com",          "radu.gavozdea@gmail.com",
+    "ruuber@gmail.com",
+]
+
+
+@admin_bp.route("/emails/auto-mark-leaked", methods=["POST"])
+def auto_mark_leaked():
+    """One-click: mark the 61 known leaked recipients as already pushed.
+
+    Sets activation_push_sent_at=NOW for every email in
+    LEAKED_ACTIVATION_PUSH_EMAILS that exists in the DB. Idempotent —
+    running twice is a no-op for already-flagged rows.
+    """
+    now = datetime.now(timezone.utc)
+    matched = (
+        Ambassador.query
+        .filter(func.lower(Ambassador.email).in_(LEAKED_ACTIVATION_PUSH_EMAILS))
+        .all()
+    )
+    flagged = 0
+    already = 0
+    for a in matched:
+        if a.activation_push_sent_at is None:
+            a.activation_push_sent_at = now
+            flagged += 1
+        else:
+            already += 1
+    db.session.commit()
+
+    not_found = len(LEAKED_ACTIVATION_PUSH_EMAILS) - len(matched)
+    flash(
+        f"Auto-marked {flagged} leaked recipients as already pushed. "
+        f"{already} were already flagged. {not_found} not found in DB. "
+        f"They will be skipped on the next mass send.",
+        "success",
+    )
+    logger.warning(
+        "ADMIN AUTO-MARK-LEAKED: matched=%d flagged=%d already=%d notfound=%d",
+        len(matched), flagged, already, not_found,
+    )
+    return redirect(url_for("admin.emails"))
+
+
 @admin_bp.route("/emails/mark-already-pushed", methods=["POST"])
 def mark_already_pushed():
     """One-shot helper: paste a newline-separated list of emails, this sets
@@ -1048,6 +1125,34 @@ def segment_send_template(segment_name):
     if cfg is None:
         flash(f"Unknown template: {template_key}", "error")
         return redirect(url_for("admin.index"))
+
+    # ── TEST MODE: if only_email is provided, restrict the send to that
+    # one ambassador. Mirrors the full route's logic exactly (lock,
+    # idempotency flag, source-aware copy) so end-to-end is verified.
+    only_email = (request.form.get("only_email", "") or "").strip().lower()
+    if only_email:
+        amb = Ambassador.query.filter(func.lower(Ambassador.email) == only_email).first()
+        if amb is None:
+            flash(f"Test mode: ambassador with email '{only_email}' not found.", "error")
+            return redirect(url_for("admin.emails"))
+        targets = [amb]
+        # In test mode we deliberately ignore the idempotency flag so the
+        # admin can re-trigger the same email on themselves repeatedly.
+        # Skip min_age_days too — it's a test, those rules aren't relevant.
+        flag = cfg["flag"]
+        label = cfg["label"]
+        fn = cfg["fn"]
+        try:
+            ok = fn(amb, current_app.config["APP_URL"])
+            flash(
+                f"{label} TEST · sent to {amb.email}: " +
+                ("✓ delivered to Resend" if ok else "✗ Resend rejected — check logs"),
+                "success" if ok else "error",
+            )
+        except Exception as e:
+            logger.exception("test send failed for %s", amb.email)
+            flash(f"{label} TEST · error: {e}", "error")
+        return redirect(url_for("admin.emails"))
 
     all_amb = Ambassador.query.all()
     segments = _compute_segments(all_amb)

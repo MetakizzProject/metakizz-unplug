@@ -148,18 +148,36 @@
         </div>
     </div>
 
-    {# ── MARK ALREADY PUSHED (escape hatch for leaks / pre-sends) ── #}
-    <details class="bg-gray-900/60 border border-yellow-500/30 rounded-xl mb-5 group">
-        <summary class="px-4 py-3 cursor-pointer font-mono-term text-[10px] tracking-[0.2em] uppercase text-yellow-300 hover:text-yellow-200 transition flex items-center justify-between">
-            <span>⚙ Mark emails as already pushed (skip on next send)</span>
-            <span class="text-gray-500 group-open:hidden">+ open</span>
+    {# ── ESCAPE HATCH: Auto-mark the 61 leaked recipients (one click) ── #}
+    <div class="bg-yellow-900/15 border border-yellow-500/40 rounded-xl p-4 mb-5">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div class="flex-1 min-w-[220px]">
+                <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-yellow-300 mb-1">⚙ Auto-mark leaked recipients</p>
+                <p class="text-xs text-gray-400 leading-relaxed">
+                    61 ambassadors received the Activation Push email accidentally during a smoke test on May 3. Click below to mark them as <strong class="text-yellow-300">already pushed</strong> in this DB so the main mass send skips them. Idempotent — safe to click multiple times.
+                </p>
+            </div>
+            <form method="POST" action="{{ url_for('admin.auto_mark_leaked') }}"
+                  onsubmit="return confirm('Mark all 61 leaked recipients as already pushed?\n\nThey will be skipped on the next mass send. Idempotent — running twice is safe.');">
+                <button type="submit" class="font-mono-term text-[11px] tracking-wider uppercase text-yellow-300 hover:text-yellow-200 border border-yellow-500/50 px-4 py-2 rounded font-bold transition">
+                    Auto-mark 61
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {# ── ESCAPE HATCH 2: Generic "mark these emails" textarea (advanced) ── #}
+    <details class="bg-gray-900/60 border border-yellow-500/20 rounded-xl mb-5 group">
+        <summary class="px-4 py-3 cursor-pointer font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-400 hover:text-yellow-300 transition flex items-center justify-between">
+            <span>⚙ Mark a custom list of emails as already pushed</span>
+            <span class="text-gray-600 group-open:hidden">+ open</span>
             <span class="text-yellow-300 hidden group-open:inline">− close</span>
         </summary>
         <form method="POST" action="{{ url_for('admin.mark_already_pushed') }}" class="px-4 pb-4 pt-1">
             <p class="text-xs text-gray-400 mb-2">
-                Paste one email per line. Each will get <code class="text-yellow-300">activation_push_sent_at</code> set to NOW so the main "Review &amp; send" button auto-skips them. Use this before the mass send if some recipients already received a test/leak.
+                Paste one email per line. Each will get <code class="text-yellow-300">activation_push_sent_at</code> set to NOW so the main "Review &amp; send" button auto-skips them.
             </p>
-            <textarea name="emails" rows="6" placeholder="alvarohertinez@gmail.com&#10;maria@example.com&#10;..."
+            <textarea name="emails" rows="5" placeholder="email1@example.com&#10;email2@example.com&#10;..."
                       class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 font-mono-term mb-3"></textarea>
             <button type="submit" class="font-mono-term text-[10px] tracking-wider uppercase text-yellow-300 hover:text-yellow-200 border border-yellow-500/40 px-3 py-1.5 rounded">
                 Mark these as already pushed
@@ -253,15 +271,27 @@
                 <p>✓ Idempotent — clicking twice does nothing the second time</p>
             </div>
 
+            {# ── TEST MODE: dry-run on a single email before the real fire ── #}
+            <div class="bg-blue-900/20 border border-blue-500/40 rounded-lg p-3 mb-5">
+                <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-blue-300 mb-2">🧪 Test mode (optional)</p>
+                <p class="text-xs text-gray-400 mb-2 leading-relaxed">
+                    Want to verify the full send flow on yourself first? Type your email below and confirm — the <strong class="text-blue-300">exact same code path</strong> runs, but only that one address gets the email. Skips idempotency + min-age checks so you can re-test.
+                </p>
+                <input type="email" name="only_email" id="only-email-input" placeholder="alvarohertinez@gmail.com"
+                       class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-400 font-mono-term"
+                       autocomplete="off">
+                <p id="test-mode-hint" class="text-[10px] font-mono-term tracking-wider uppercase text-gray-600 mt-1.5"></p>
+            </div>
+
             <div class="flex justify-end gap-2">
                 <button type="button" onclick="closePushModal()"
                         class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-400 hover:text-white px-4 py-2 rounded">
                     Cancel
                 </button>
-                <button type="submit"
+                <button type="submit" id="confirm-send-btn"
                         class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-brand-400 hover:bg-brand-300 px-5 py-2 rounded font-bold transition"
                         style="box-shadow: 0 0 16px rgba(46,219,153,0.5);">
-                    ▶ Confirm &amp; send {{ push_eligible_count }}
+                    Confirm &amp; send {{ push_eligible_count }}
                 </button>
             </div>
         </form>
@@ -271,6 +301,31 @@
     function openPushModal() { document.getElementById('push-confirm-modal').classList.remove('hidden'); }
     function closePushModal() { document.getElementById('push-confirm-modal').classList.add('hidden'); }
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closePushModal(); });
+
+    // When the user types a test email, switch the confirm button + warn
+    (function() {
+        const input = document.getElementById('only-email-input');
+        const btn = document.getElementById('confirm-send-btn');
+        const hint = document.getElementById('test-mode-hint');
+        if (!input || !btn) return;
+        const originalLabel = btn.textContent;
+        input.addEventListener('input', () => {
+            const v = input.value.trim();
+            if (v && v.includes('@')) {
+                btn.textContent = '🧪 Send TEST to ' + v + ' only';
+                btn.style.background = 'rgb(96 165 250)';
+                btn.style.boxShadow = '0 0 16px rgba(96,165,250,0.5)';
+                hint.textContent = '▶ TEST MODE ACTIVE · only this email will receive the send';
+                hint.className = 'text-[10px] font-mono-term tracking-wider uppercase text-blue-300 mt-1.5';
+            } else {
+                btn.textContent = originalLabel;
+                btn.style.background = '';
+                btn.style.boxShadow = '0 0 16px rgba(46,219,153,0.5)';
+                hint.textContent = '';
+                hint.className = 'text-[10px] font-mono-term tracking-wider uppercase text-gray-600 mt-1.5';
+            }
+        });
+    })();
     </script>
 
     {# ── ACTIONS BAR ── #}
