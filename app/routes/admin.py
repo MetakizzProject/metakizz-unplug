@@ -711,6 +711,60 @@ def reach():
     )
 
 
+@admin_bp.route("/emails/mark-already-pushed", methods=["POST"])
+def mark_already_pushed():
+    """One-shot helper: paste a newline-separated list of emails, this sets
+    activation_push_sent_at on each so the main send skips them. Used to
+    avoid duplicate sends after a leak / pre-test send.
+    """
+    raw = (request.form.get("emails", "") or "").strip()
+    if not raw:
+        flash("No emails provided.", "error")
+        return redirect(url_for("admin.emails"))
+
+    emails = [
+        line.strip().lower()
+        for line in raw.replace(",", "\n").splitlines()
+        if line.strip() and "@" in line
+    ]
+    if not emails:
+        flash("Could not parse any valid emails from the paste.", "error")
+        return redirect(url_for("admin.emails"))
+
+    now = datetime.now(timezone.utc)
+    matched = (
+        Ambassador.query
+        .filter(func.lower(Ambassador.email).in_(emails))
+        .all()
+    )
+    matched_lower = {a.email.lower() for a in matched}
+    not_found = [e for e in emails if e not in matched_lower]
+
+    flagged = 0
+    already_flagged = 0
+    for a in matched:
+        if a.activation_push_sent_at is None:
+            a.activation_push_sent_at = now
+            flagged += 1
+        else:
+            already_flagged += 1
+    db.session.commit()
+
+    msg = (
+        f"Marked {flagged} ambassadors as already pushed (will be skipped). "
+        f"{already_flagged} were already flagged. "
+        f"{len(not_found)} email(s) not found in DB."
+    )
+    if not_found:
+        msg += f" Sample not-found: {', '.join(not_found[:5])}"
+    flash(msg, "success" if flagged or already_flagged else "info")
+    logger.warning(
+        "ADMIN MARK-ALREADY-PUSHED: requested=%d matched=%d flagged=%d already=%d notfound=%d",
+        len(emails), len(matched), flagged, already_flagged, len(not_found),
+    )
+    return redirect(url_for("admin.emails"))
+
+
 @admin_bp.route("/emails")
 def emails():
     """Email Control Center — central visibility for every email the

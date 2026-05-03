@@ -148,6 +148,25 @@
         </div>
     </div>
 
+    {# ── MARK ALREADY PUSHED (escape hatch for leaks / pre-sends) ── #}
+    <details class="bg-gray-900/60 border border-yellow-500/30 rounded-xl mb-5 group">
+        <summary class="px-4 py-3 cursor-pointer font-mono-term text-[10px] tracking-[0.2em] uppercase text-yellow-300 hover:text-yellow-200 transition flex items-center justify-between">
+            <span>⚙ Mark emails as already pushed (skip on next send)</span>
+            <span class="text-gray-500 group-open:hidden">+ open</span>
+            <span class="text-yellow-300 hidden group-open:inline">− close</span>
+        </summary>
+        <form method="POST" action="{{ url_for('admin.mark_already_pushed') }}" class="px-4 pb-4 pt-1">
+            <p class="text-xs text-gray-400 mb-2">
+                Paste one email per line. Each will get <code class="text-yellow-300">activation_push_sent_at</code> set to NOW so the main "Review &amp; send" button auto-skips them. Use this before the mass send if some recipients already received a test/leak.
+            </p>
+            <textarea name="emails" rows="6" placeholder="alvarohertinez@gmail.com&#10;maria@example.com&#10;..."
+                      class="w-full bg-black/60 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 font-mono-term mb-3"></textarea>
+            <button type="submit" class="font-mono-term text-[10px] tracking-wider uppercase text-yellow-300 hover:text-yellow-200 border border-yellow-500/40 px-3 py-1.5 rounded">
+                Mark these as already pushed
+            </button>
+        </form>
+    </details>
+
     {# ── ACTIVATION PUSH (manual, dynamic per-recipient) ── #}
     <div class="bg-gray-900/80 border-2 border-brand-400/40 rounded-xl p-5 mb-7" style="box-shadow: 0 0 24px rgba(46,219,153,0.10);">
         <div class="flex items-start justify-between gap-4 flex-wrap mb-3">
@@ -177,10 +196,10 @@
     {# ── ACTIVATION PUSH CONFIRMATION MODAL ── #}
     <div id="push-confirm-modal" class="hidden fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm">
         <form method="POST"
-              action="{{ url_for('admin.segment_send_template', segment_name='activation_push') }}"
+              action="{{ url_for('admin.segment_send_template', segment_name='needs_activation') }}"
               class="bg-gray-900 border-2 border-brand-400/50 rounded-xl p-6 max-w-lg w-full"
               style="box-shadow: 0 0 40px rgba(46,219,153,0.3);">
-            <input type="hidden" name="segment" value="needs_activation">
+            <input type="hidden" name="template" value="activation_push">
 
             <div class="flex items-center justify-between mb-4">
                 <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ CONFIRM ACTIVATION PUSH</p>
