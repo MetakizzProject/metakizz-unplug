@@ -154,7 +154,7 @@
             <div class="flex-1 min-w-[220px]">
                 <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400 mb-1">▌ ACTIVATION PUSH · 0–4 UNPLUGS</p>
                 <p class="text-sm text-gray-300 leading-relaxed">
-                    Personalized "you're <strong class="text-brand-400">X away from your masterclass</strong>" email. Each recipient sees the exact number they're missing. Auto-skips ambassadors who already unlocked (5+) or opted out. Idempotent — won't re-send to anyone who already got it.
+                    Personalized "you're <strong class="text-brand-400">X away from your masterclass</strong>" email. Each recipient sees the exact number they're missing. Auto-skips: already unlocked (5+), opted out, already pushed once, and ambassadors registered in the last {{ push_min_age_days }} day{{ '' if push_min_age_days == 1 else 's' }} (too fresh to nudge).
                 </p>
             </div>
             <div class="text-right shrink-0">
@@ -225,6 +225,11 @@
                 <p>✓ Personalized per recipient (each sees their exact "X unplugs left")</p>
                 <p>✓ Source-aware copy (community vs public reward)</p>
                 <p>✓ Auto-skips opted-out + already-pushed ambassadors</p>
+                {% if push_skipped_too_new %}
+                <p class="text-yellow-300">⚠ Skipping <strong>{{ push_skipped_too_new }}</strong> ambassadors registered in the last {{ push_min_age_days }} day{{ '' if push_min_age_days == 1 else 's' }} (too fresh to nudge)</p>
+                {% else %}
+                <p>✓ Skips ambassadors registered in the last {{ push_min_age_days }} day{{ '' if push_min_age_days == 1 else 's' }} (today's signups won't get this)</p>
+                {% endif %}
                 <p>✓ Sends in background — page returns immediately</p>
                 <p>✓ Idempotent — clicking twice does nothing the second time</p>
             </div>

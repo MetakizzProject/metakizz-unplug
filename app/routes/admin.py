@@ -720,15 +720,37 @@ def emails():
     lifecycle = _compute_email_lifecycle()
     summary = _compute_email_health_summary()
 
-    # Compute the eligible audience for the activation_push button
-    # (segment = needs_activation, minus those already pushed once)
+    # Compute the eligible audience for the activation_push button.
+    # Mirrors the filter chain inside segment_send_template so the modal
+    # count matches the actual send size:
+    #   - not unsubscribed
+    #   - not already pushed (idempotency flag)
+    #   - referral_count < 5
+    #   - registered ≥ min_age_days ago (skip today's signups)
+    push_min_age = _SEGMENT_TEMPLATES["activation_push"].get("min_age_days", 0)
+    push_cutoff = datetime.now(timezone.utc) - timedelta(days=push_min_age) if push_min_age else None
     push_eligible = (
         Ambassador.query
         .filter(Ambassador.unsubscribed_at.is_(None))
         .filter(Ambassador.activation_push_sent_at.is_(None))
         .all()
     )
-    push_eligible = [a for a in push_eligible if a.referral_count < 5]
+
+    def _push_age_ok(a):
+        if push_cutoff is None:
+            return True
+        c = a.created_at
+        if c is None:
+            return False
+        if c.tzinfo is None:
+            c = c.replace(tzinfo=timezone.utc)
+        return c <= push_cutoff
+
+    skipped_too_new = sum(
+        1 for a in push_eligible
+        if a.referral_count < 5 and not _push_age_ok(a)
+    )
+    push_eligible = [a for a in push_eligible if a.referral_count < 5 and _push_age_ok(a)]
     push_eligible_count = len(push_eligible)
     push_eligible_community = sum(1 for a in push_eligible if a.source == "community")
     push_eligible_public = sum(1 for a in push_eligible if a.source == "public")
@@ -765,6 +787,8 @@ def emails():
         push_eligible_community=push_eligible_community,
         push_eligible_public=push_eligible_public,
         push_eligible_by_count=push_eligible_by_count,
+        push_skipped_too_new=skipped_too_new,
+        push_min_age_days=push_min_age,
         now_ts=datetime.now(timezone.utc),
         **_admin_layout_context(),
     )
@@ -921,7 +945,7 @@ _SEGMENT_TEMPLATES = {
         "default_segment": "needs_activation",
         "flag": "activation_push_sent_at",
         "label": "Activation push (0-4 unplugs)",
-        "min_age_days": 0,  # admin-triggered final push, no min age
+        "min_age_days": 1,  # don't email people who registered today — too soon
     },
     "midway_reminder": {
         "fn": send_midway_reminder_email,
