@@ -2626,6 +2626,103 @@ def leads_debug():
         for a in Ambassador.query.filter(Ambassador.id.in_(amb_ids)).all():
             amb_by_id[a.id] = a
 
+    # ── Per-email summary (max % watched per class) ─────────────────────
+    # Pull a wider window so the summary is meaningful even if the latest
+    # 200 raw events are dominated by one noisy user.
+    summary_window = (
+        LeadEvent.query.order_by(LeadEvent.created_at.desc()).limit(2000).all()
+    )
+
+    def _pct_from_event(e):
+        """Best-known progress % implied by this single event."""
+        if e.pct is not None:
+            return int(e.pct)
+        et = (e.event_type or "")
+        if et.endswith("_completed"):
+            return 100
+        if et.endswith("_resource_unlocked"):
+            return 95
+        if et.endswith("_progress_95"):
+            return 95
+        if et.endswith("_progress_75"):
+            return 75
+        if et.endswith("_progress_50"):
+            return 50
+        if et.endswith("_progress_25"):
+            return 25
+        return 0
+
+    summary_by_email = {}
+    for e in summary_window:
+        em = (e.email or "").lower()
+        if not em:
+            continue
+        s = summary_by_email.setdefault(em, {
+            "email": em,
+            "ambassador_id": e.ambassador_id,
+            "first_seen": e.created_at,
+            "last_seen": e.created_at,
+            "event_count": 0,
+            "class_max": {1: 0, 2: 0, 3: 0},
+        })
+        s["event_count"] += 1
+        if e.created_at and (s["first_seen"] is None or e.created_at < s["first_seen"]):
+            s["first_seen"] = e.created_at
+        if e.created_at and (s["last_seen"] is None or e.created_at > s["last_seen"]):
+            s["last_seen"] = e.created_at
+        cn = e.class_number
+        if cn in (1, 2, 3):
+            p = _pct_from_event(e)
+            if p > s["class_max"][cn]:
+                s["class_max"][cn] = p
+        # Backfill ambassador_id if a later event has it.
+        if s["ambassador_id"] is None and e.ambassador_id:
+            s["ambassador_id"] = e.ambassador_id
+
+    # Resolve ambassador names for the summary table too.
+    summary_amb_ids = {s["ambassador_id"] for s in summary_by_email.values() if s["ambassador_id"]}
+    if summary_amb_ids:
+        for a in Ambassador.query.filter(Ambassador.id.in_(summary_amb_ids)).all():
+            amb_by_id[a.id] = a
+
+    # Sort summary: most recent activity first.
+    summary_sorted = sorted(
+        summary_by_email.values(),
+        key=lambda s: s["last_seen"] or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )[:50]
+
+    def _pct_cell(p):
+        if p >= 95:
+            color = "#2EDB99"
+        elif p >= 50:
+            color = "#FFC857"
+        elif p > 0:
+            color = "#C9CFD4"
+        else:
+            color = "#6B7280"
+        label = f"{p}%" if p > 0 else "—"
+        return f'<span style="color:{color}; font-weight:bold;">{label}</span>'
+
+    summary_rows_html = []
+    for s in summary_sorted:
+        amb = amb_by_id.get(s["ambassador_id"])
+        amb_label = (
+            f'<a href="/admin/ambassador/{amb.id}" style="color:#2EDB99;">{amb.name}</a>'
+            if amb else '<span style="color:#9CA3AF;">ghost</span>'
+        )
+        summary_rows_html.append(f"""
+        <tr>
+          <td style="padding:6px 10px; color:#FFFFFF;">{s["email"]}</td>
+          <td style="padding:6px 10px;">{amb_label}</td>
+          <td style="padding:6px 10px; text-align:center;">{_pct_cell(s["class_max"][1])}</td>
+          <td style="padding:6px 10px; text-align:center;">{_pct_cell(s["class_max"][2])}</td>
+          <td style="padding:6px 10px; text-align:center;">{_pct_cell(s["class_max"][3])}</td>
+          <td style="padding:6px 10px; text-align:center; color:#C9CFD4;">{s["event_count"]}</td>
+          <td style="padding:6px 10px; color:#9CA3AF; font-size:11px;">{s["last_seen"].strftime('%m-%d %H:%M:%S') if s["last_seen"] else '—'}</td>
+        </tr>""")
+
+    # ── Raw event log ───────────────────────────────────────────────────
     rows_html = []
     for e in events:
         amb = amb_by_id.get(e.ambassador_id)
@@ -2688,6 +2785,21 @@ def leads_debug():
   <button type="submit">Filter</button>
   <a href="/admin/leads-debug" style="color:#9CA3AF; margin-left:10px; font-size:11px;">clear</a>
 </form>
+
+<h2 style="color:#2EDB99; font-size:14px; letter-spacing:1.5px; text-transform:uppercase; margin:20px 0 8px 0;">▌ PER-EMAIL SUMMARY · MAX % WATCHED</h2>
+<table>
+ <thead><tr>
+  <th>Email</th><th>Ambassador</th>
+  <th style="text-align:center;">Class 1</th>
+  <th style="text-align:center;">Class 2</th>
+  <th style="text-align:center;">Class 3</th>
+  <th style="text-align:center;">Events</th>
+  <th>Last seen (UTC)</th>
+ </tr></thead>
+ <tbody>{''.join(summary_rows_html) if summary_rows_html else '<tr><td colspan="7" style="padding:20px; text-align:center; color:#9CA3AF;">No leads yet</td></tr>'}</tbody>
+</table>
+
+<h2 style="color:#2EDB99; font-size:14px; letter-spacing:1.5px; text-transform:uppercase; margin:24px 0 8px 0;">▌ RAW EVENT LOG · LAST 200</h2>
 <table>
  <thead><tr>
   <th>Time (UTC)</th><th>Event</th><th>Email</th><th>Ambassador</th><th>Progress</th><th>Attribution</th>
