@@ -10,7 +10,8 @@ External webhook endpoints:
 import json
 import logging
 from datetime import datetime, timezone
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, make_response
+from sqlalchemy import func
 from app.services.signup import create_signup
 from app.services.turnstile import (
     verify_token as verify_turnstile,
@@ -19,7 +20,7 @@ from app.services.turnstile import (
     record_rejection as record_turnstile_rejection,
     STATUS_VALID, STATUS_INVALID, STATUS_MISSING,
 )
-from app.models import db, EmailEvent
+from app.models import db, EmailEvent, Ambassador, LeadEvent
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,25 @@ def _extract_client_ip(payload):
         "client_ip", "clientIp", "user_ip", "userIp", "ip",
     )
     return ip[:64] if ip else ""
+
+
+def _extract_attribution(payload):
+    """Pull UTM/click-id fields from a GHL signup payload.
+
+    Empty/missing fields are returned as None. GHL must be configured to
+    forward these as custom data fields in the outbound webhook (Lovable
+    captures them client-side from the URL into a hidden form field, then
+    GHL passes them through).
+    """
+    keys = (
+        "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+        "fbclid", "gclid", "ttclid",
+    )
+    out = {}
+    for k in keys:
+        v = _pluck(payload, k, k.replace("_", ""))
+        out[k] = v or None
+    return out
 
 
 def _extract_phone(payload):
@@ -222,6 +242,11 @@ def ghl_signup():
         except Exception:
             logger.exception("phone parsing failed for %r", raw_phone)
 
+    # Attribution (UTMs + click ids) — GHL forwards them as custom data when
+    # the outbound webhook workflow is configured. Failures here never block
+    # signup; the field stays NULL until backfilled by /api/lead-event.
+    attribution = _extract_attribution(payload)
+
     try:
         ambassador, was_new = create_signup(
             name, email, ref_code,
@@ -230,6 +255,7 @@ def ghl_signup():
             turnstile_codes=ts_result["codes"],
             phone_number=phone_e164,
             country_code=country_iso,
+            attribution=attribution,
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -335,3 +361,162 @@ def resend_webhook():
 
     return jsonify({"ok": True, "stored": event_type}), 200
 
+
+# ════════════════════════════════════════════════════════════════════
+# LOVABLE LEAD-EVENT WEBHOOK — class views, video progress, downloads
+# ════════════════════════════════════════════════════════════════════
+#
+# Receives behavioural events posted by the Lovable class pages
+# (src/lib/webhooks.ts → fireClassEvent). Cross-origin: Lovable browsers
+# call this from a different domain, so we add permissive CORS headers
+# and answer OPTIONS preflight.
+#
+# Payload shape (Lovable):
+#   {
+#     "email": "user@example.com",
+#     "event": "class1_viewed" | "class1_progress_25" | "class1_completed" | ...
+#     "timestamp": "2026-05-04T...Z",
+#     "page_url": "https://.../class1",
+#     "class_number": 1,
+#     "percent": 25,                  # progress events
+#     "watched_seconds": 180,         # progress events
+#     "duration_seconds": 720,        # progress events
+#     "utm_source": "...", ...        # attribution
+#     "ref": "ABC123"                 # referrer code
+#   }
+#
+# We accept anonymous POSTs (no auth) because:
+#   - Lovable runs in the user's browser, no shared secret possible
+#   - Worst-case spam is mitigated by event-type validation + per-row
+#     storage limits; we never act on these events except to store them
+#
+# Future hardening: tighten Access-Control-Allow-Origin to the Lovable
+# domain(s) once known and stable.
+
+# Whitelisted event_types so a malicious caller can't fill the table with
+# arbitrary garbage. New event names must be added here.
+_ALLOWED_LEAD_EVENTS = {
+    # Class video events
+    "class1_viewed", "class2_viewed", "class3_viewed",
+    "class1_progress_25", "class1_progress_50", "class1_progress_75", "class1_progress_95",
+    "class2_progress_25", "class2_progress_50", "class2_progress_75", "class2_progress_95",
+    "class3_progress_25", "class3_progress_50", "class3_progress_75", "class3_progress_95",
+    "class1_completed", "class2_completed", "class3_completed",
+    "class1_resource_unlocked", "class2_resource_unlocked", "class3_resource_unlocked",
+    "class1_resource_downloaded", "class2_resource_downloaded", "class3_resource_downloaded",
+    # Add-to-calendar events
+    "class_calendar_open", "class_calendar_added",
+    # Future: webinar / purchase events
+    "webinar_link_clicked", "webinar_joined", "webinar_left",
+    "purchase_started", "purchase_completed",
+}
+
+
+def _add_cors_headers(response):
+    """Permissive CORS for Lovable browser callers. Tighten to specific
+    origins once domains are stable."""
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Max-Age"] = "86400"
+    return response
+
+
+@webhook_bp.route("/api/lead-event", methods=["POST", "OPTIONS"])
+def lead_event():
+    """Persist a Lovable class-page event as a LeadEvent row.
+
+    Looks up the Ambassador by email (case-insensitive). If found, links
+    the event to that ambassador AND backfills any UTM fields that are
+    still NULL on the ambassador (first-touch attribution).
+    """
+    if request.method == "OPTIONS":
+        return _add_cors_headers(make_response("", 204))
+
+    payload = request.get_json(silent=True) or {}
+
+    email = (payload.get("email") or "").strip().lower()
+    event_type = (payload.get("event") or "").strip()
+
+    if not email or not event_type:
+        return _add_cors_headers(jsonify({"error": "email and event are required"})), 400
+
+    if event_type not in _ALLOWED_LEAD_EVENTS:
+        logger.warning("lead-event rejected unknown event=%r email=%r", event_type, email)
+        return _add_cors_headers(jsonify({"error": "unknown_event_type", "event": event_type})), 400
+
+    amb = Ambassador.query.filter(func.lower(Ambassador.email) == email).first()
+
+    # Coerce numeric fields defensively (Lovable sends them as numbers, but
+    # in case any future caller sends strings we don't want to 500).
+    def _to_int(val):
+        try:
+            return int(val) if val is not None else None
+        except (ValueError, TypeError):
+            return None
+
+    pct = _to_int(payload.get("percent"))
+    current_time_sec = _to_int(payload.get("watched_seconds"))
+    duration_sec = _to_int(payload.get("duration_seconds"))
+    class_number = _to_int(payload.get("class_number"))
+
+    # Truncate URLs / strings to fit column widths.
+    def _trim(val, n):
+        if val is None:
+            return None
+        s = str(val)
+        return s[:n] if s else None
+
+    evt = LeadEvent(
+        ambassador_id=amb.id if amb else None,
+        email=email[:200],
+        event_type=event_type[:60],
+        pct=pct,
+        current_time_sec=current_time_sec,
+        duration_sec=duration_sec,
+        class_number=class_number,
+        page_url=_trim(payload.get("page_url"), 500),
+        utm_source=_trim(payload.get("utm_source"), 100),
+        utm_medium=_trim(payload.get("utm_medium"), 100),
+        utm_campaign=_trim(payload.get("utm_campaign"), 100),
+        utm_content=_trim(payload.get("utm_content"), 200),
+        utm_term=_trim(payload.get("utm_term"), 100),
+        ref=_trim(payload.get("ref") or payload.get("referral_code"), 50),
+        fbclid=_trim(payload.get("fbclid"), 200),
+        gclid=_trim(payload.get("gclid"), 200),
+        ttclid=_trim(payload.get("ttclid"), 200),
+        extra=json.dumps(payload)[:5000] if payload else None,
+    )
+
+    try:
+        db.session.add(evt)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.exception("failed to persist lead event email=%s event=%s", email, event_type)
+        return _add_cors_headers(jsonify({"error": "persist_failed"})), 500
+
+    # First-touch attribution backfill: if the ambassador exists but has no
+    # UTMs stored yet, copy the ones from this event. Only fills NULL fields,
+    # never overwrites existing values.
+    if amb is not None:
+        changed = False
+        for fld in ("utm_source", "utm_medium", "utm_campaign", "utm_content",
+                    "utm_term", "fbclid", "gclid", "ttclid"):
+            current = getattr(amb, fld, None)
+            incoming = getattr(evt, fld, None)
+            if not current and incoming:
+                setattr(amb, fld, incoming)
+                changed = True
+        if changed:
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                logger.exception("failed to backfill attribution on ambassador %d", amb.id)
+
+    return _add_cors_headers(jsonify({
+        "ok": True,
+        "stored": event_type,
+        "linked_ambassador": amb is not None,
+    }))

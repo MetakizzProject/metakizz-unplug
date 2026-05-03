@@ -84,6 +84,24 @@ def _ensure_unsubscribe_columns(db):
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN country_code VARCHAR(4)"))
             logger.info("added column ambassadors.country_code")
 
+        # Attribution / UTM columns (added 2026-05-04 for the Leads tracker).
+        # Populated either by the GHL signup webhook (when GHL custom-data
+        # forwards the UTMs) OR backfilled by /api/lead-event the first time
+        # the lead's email shows up with non-empty UTM params.
+        for col_name, col_type in [
+            ("utm_source",   "VARCHAR(100)"),
+            ("utm_medium",   "VARCHAR(100)"),
+            ("utm_campaign", "VARCHAR(100)"),
+            ("utm_content",  "VARCHAR(200)"),
+            ("utm_term",     "VARCHAR(100)"),
+            ("fbclid",       "VARCHAR(200)"),
+            ("gclid",        "VARCHAR(200)"),
+            ("ttclid",       "VARCHAR(200)"),
+        ]:
+            if col_name not in cols:
+                conn.execute(text(f"ALTER TABLE ambassadors ADD COLUMN {col_name} {col_type}"))
+                logger.info("added column ambassadors.%s", col_name)
+
         # Same fraud columns on referrals (the more actionable signal — duplicates here
         # mean the same person is registering many "friends" via their own link).
         ref_cols = {c["name"] for c in inspector.get_columns("referrals")}

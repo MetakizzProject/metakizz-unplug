@@ -85,6 +85,18 @@ class Ambassador(db.Model):
     phone_number = db.Column(db.String(30), nullable=True, index=True)
     country_code = db.Column(db.String(4), nullable=True, index=True)
 
+    # Attribution snapshot at first touch — populated either by GHL signup webhook
+    # (when GHL forwards the UTMs as custom data) or backfilled by /api/lead-event
+    # the first time the ambassador's email shows up with non-empty UTMs.
+    utm_source = db.Column(db.String(100), nullable=True, index=True)
+    utm_medium = db.Column(db.String(100), nullable=True)
+    utm_campaign = db.Column(db.String(100), nullable=True, index=True)
+    utm_content = db.Column(db.String(200), nullable=True)
+    utm_term = db.Column(db.String(100), nullable=True)
+    fbclid = db.Column(db.String(200), nullable=True)
+    gclid = db.Column(db.String(200), nullable=True)
+    ttclid = db.Column(db.String(200), nullable=True)
+
     referrals = db.relationship("Referral", backref="ambassador", lazy=True)
     notifications = db.relationship("MilestoneNotification", backref="ambassador", lazy=True)
 
@@ -210,6 +222,82 @@ class TurnstileRejection(db.Model):
     ip = db.Column(db.String(64), nullable=True, index=True)
     user_agent = db.Column(db.String(500), nullable=True)
     source = db.Column(db.String(20), nullable=False)  # 'webhook' | 'join'
+
+
+class LeadEvent(db.Model):
+    """One row per behavioral event from a lead — class viewed, video progress,
+    resource downloaded, etc. Posted to /api/lead-event from the Lovable class
+    pages (and later from Zoom + Circle webhooks).
+
+    Email is the join key: we look up Ambassador by lowercase email and link
+    `ambassador_id`. Events from emails not in our DB are still recorded with
+    ambassador_id=NULL — these are "ghost leads" who got the link but never
+    registered through the GHL signup form.
+
+    The original payload is preserved in `extra` (truncated JSON) so we can
+    backfill new fields later without reshipping the schema.
+    """
+    __tablename__ = "lead_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ambassador_id = db.Column(db.Integer, db.ForeignKey("ambassadors.id"), nullable=True, index=True)
+    email = db.Column(db.String(200), nullable=True, index=True)
+
+    # Event taxonomy from Lovable's fireClassEvent:
+    #   class1_viewed | class1_progress_25/50/75/95 | class1_completed
+    #   class1_resource_unlocked | class1_resource_downloaded
+    #   class_calendar_open | class_calendar_added
+    # Future: webinar_link_clicked, webinar_joined, webinar_left, purchase_completed
+    event_type = db.Column(db.String(60), nullable=False, index=True)
+
+    # For progress events (Lovable sends `percent`, `watched_seconds`, `duration_seconds`).
+    pct = db.Column(db.Integer, nullable=True)
+    current_time_sec = db.Column(db.Integer, nullable=True)
+    duration_sec = db.Column(db.Integer, nullable=True)
+
+    # Class number (1, 2, 3) for class-* events. NULL for other event types.
+    class_number = db.Column(db.Integer, nullable=True, index=True)
+
+    # Page that triggered the event (e.g. https://inevitable.metakizzproject.com/class1)
+    page_url = db.Column(db.String(500), nullable=True)
+
+    # Attribution at time of event (snapshot from URL params + localStorage).
+    # Useful when an ambassador returns via a different campaign than the one
+    # they originally signed up with.
+    utm_source = db.Column(db.String(100), nullable=True, index=True)
+    utm_medium = db.Column(db.String(100), nullable=True)
+    utm_campaign = db.Column(db.String(100), nullable=True, index=True)
+    utm_content = db.Column(db.String(200), nullable=True)
+    utm_term = db.Column(db.String(100), nullable=True)
+    ref = db.Column(db.String(50), nullable=True, index=True)
+    fbclid = db.Column(db.String(200), nullable=True)
+    gclid = db.Column(db.String(200), nullable=True)
+    ttclid = db.Column(db.String(200), nullable=True)
+
+    # Raw JSON payload for debugging / future fields. Truncated to 5KB.
+    extra = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+
+class LeadNote(db.Model):
+    """Manual admin notes + contact log per lead. Lets the admin record outreach
+    ("sent WhatsApp on May 5", "called and got voicemail") and free-form notes
+    that complement the automatic temperature score.
+
+    type taxonomy:
+      'note'             — free-form text
+      'whatsapp_sent'    — admin marked: I messaged them on WhatsApp
+      'email_sent'       — admin marked: I sent them a personal email
+      'call'             — phone outreach
+    """
+    __tablename__ = "lead_notes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ambassador_id = db.Column(db.Integer, db.ForeignKey("ambassadors.id"), nullable=False, index=True)
+    type = db.Column(db.String(30), nullable=False, default="note")
+    content = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
 
 class PendingReferral(db.Model):

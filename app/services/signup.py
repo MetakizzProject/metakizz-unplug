@@ -71,6 +71,7 @@ def create_signup(
     signup_ip=None, signup_user_agent=None,
     turnstile_status=None, turnstile_codes=None,
     phone_number=None, country_code=None,
+    attribution=None,
 ):
     """
     Create (or return existing) Ambassador for a PLF signup, and credit the referrer.
@@ -120,6 +121,7 @@ def create_signup(
             logger.warning("signup with unknown ref_code=%s for email=%s", ref_code, email)
 
     # 3. Create the new Ambassador (the signup themselves).
+    attribution = attribution or {}
     new_ambassador = Ambassador(
         name=name,
         email=email,
@@ -132,6 +134,14 @@ def create_signup(
         turnstile_codes=turnstile_codes,
         phone_number=phone_number,
         country_code=country_code,
+        utm_source=attribution.get("utm_source"),
+        utm_medium=attribution.get("utm_medium"),
+        utm_campaign=attribution.get("utm_campaign"),
+        utm_content=attribution.get("utm_content"),
+        utm_term=attribution.get("utm_term"),
+        fbclid=attribution.get("fbclid"),
+        gclid=attribution.get("gclid"),
+        ttclid=attribution.get("ttclid"),
     )
     db.session.add(new_ambassador)
 
