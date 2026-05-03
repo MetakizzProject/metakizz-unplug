@@ -9,7 +9,7 @@ from flask import (
 )
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func
-from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery
+from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent
 from app.mailer import (
     send_welcome_email,
     send_activation_nudge_email,
@@ -2585,6 +2585,120 @@ def pending_bulk_reject(referrer_id):
     flash(f"Bulk-rejected {n} pending referrals from referrer #{referrer_id}.", "success")
     logger.warning("ADMIN bulk reject: referrer_id=%d count=%d", referrer_id, n)
     return redirect(url_for("admin.pending_review"))
+
+
+@admin_bp.route("/leads-debug")
+def leads_debug():
+    """Quick live view of LeadEvent rows arriving from /api/lead-event.
+    Auto-refreshes every 5s. Filter by ?email=xxx if needed.
+
+    This is the minimum-viable visibility for the launch — the full leads
+    dashboard (filters, temperature, WhatsApp button, notes) ships post-7-may.
+    """
+    email_filter = (request.args.get("email") or "").strip().lower()
+    event_filter = (request.args.get("event") or "").strip()
+
+    q = LeadEvent.query
+    if email_filter:
+        q = q.filter(func.lower(LeadEvent.email) == email_filter)
+    if event_filter:
+        q = q.filter(LeadEvent.event_type == event_filter)
+    events = q.order_by(LeadEvent.created_at.desc()).limit(200).all()
+
+    total_events = LeadEvent.query.count()
+    distinct_emails = db.session.query(func.count(func.distinct(LeadEvent.email))).scalar() or 0
+    linked = LeadEvent.query.filter(LeadEvent.ambassador_id.isnot(None)).count()
+    ghost = total_events - linked
+
+    by_event = {}
+    rows = (
+        db.session.query(LeadEvent.event_type, func.count(LeadEvent.id))
+        .group_by(LeadEvent.event_type)
+        .all()
+    )
+    for et, c in rows:
+        by_event[et] = c
+
+    # Resolve ambassador names for the displayed events.
+    amb_ids = {e.ambassador_id for e in events if e.ambassador_id}
+    amb_by_id = {}
+    if amb_ids:
+        for a in Ambassador.query.filter(Ambassador.id.in_(amb_ids)).all():
+            amb_by_id[a.id] = a
+
+    rows_html = []
+    for e in events:
+        amb = amb_by_id.get(e.ambassador_id)
+        amb_label = (
+            f'<a href="/admin/ambassador/{amb.id}" style="color:#2EDB99;">{amb.name}</a>'
+            if amb else '<span style="color:#9CA3AF;">— ghost —</span>'
+        )
+        attribution_bits = []
+        for label, val in (("src", e.utm_source), ("camp", e.utm_campaign), ("ref", e.ref)):
+            if val:
+                attribution_bits.append(f"{label}={val}")
+        attribution = " · ".join(attribution_bits) or "—"
+        progress = (
+            f"{e.pct}% ({e.current_time_sec}s/{e.duration_sec}s)"
+            if e.pct is not None else "—"
+        )
+        rows_html.append(f"""
+        <tr>
+          <td style="padding:6px 10px; color:#9CA3AF; font-size:11px;">{e.created_at.strftime('%m-%d %H:%M:%S')}</td>
+          <td style="padding:6px 10px; color:#FFC857;">{e.event_type}</td>
+          <td style="padding:6px 10px; color:#FFFFFF;">{e.email or '—'}</td>
+          <td style="padding:6px 10px;">{amb_label}</td>
+          <td style="padding:6px 10px; color:#C9CFD4;">{progress}</td>
+          <td style="padding:6px 10px; color:#9CA3AF; font-size:11px;">{attribution}</td>
+        </tr>""")
+
+    by_event_html = " · ".join(
+        f'<span style="color:#FFC857;">{c}</span> {et}' for et, c in sorted(by_event.items())
+    ) or "<span style='color:#9CA3AF;'>(none yet)</span>"
+
+    html = f"""<!doctype html>
+<html><head>
+<meta charset="utf-8"/>
+<meta http-equiv="refresh" content="5">
+<title>Leads Debug · MetaKizz</title>
+<style>
+ body {{ background:#000; color:#fff; font-family:'Share Tech Mono','Courier New',monospace; padding:20px; }}
+ h1 {{ color:#2EDB99; font-size:18px; letter-spacing:2px; text-transform:uppercase; margin:0 0 8px 0; }}
+ .stats {{ font-size:13px; color:#C9CFD4; margin-bottom:16px; }}
+ .stats strong {{ color:#2EDB99; }}
+ .filter {{ margin-bottom:14px; font-size:12px; }}
+ .filter input {{ background:#0a0f0a; border:1px solid rgba(46,219,153,0.3); color:#fff; padding:6px 10px; font-family:inherit; }}
+ .filter button {{ background:#2EDB99; color:#000; border:0; padding:6px 14px; cursor:pointer; font-weight:bold; margin-left:6px; }}
+ table {{ width:100%; border-collapse:collapse; font-size:12px; }}
+ th {{ text-align:left; padding:8px 10px; color:#2EDB99; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; border-bottom:1px solid rgba(46,219,153,0.3); }}
+ tr {{ border-bottom:1px solid rgba(255,255,255,0.05); }}
+ .meta {{ font-size:10px; color:#6B7280; margin-top:14px; }}
+</style>
+</head><body>
+<h1>▌ LEAD EVENTS · LIVE</h1>
+<div class="stats">
+  Total: <strong>{total_events}</strong> events ·
+  Linked: <strong>{linked}</strong> · Ghost: <strong>{ghost}</strong> ·
+  Distinct emails: <strong>{distinct_emails}</strong><br>
+  By event: {by_event_html}
+</div>
+<form class="filter" method="get">
+  <input type="email" name="email" placeholder="filter by email" value="{email_filter}">
+  <input type="text" name="event" placeholder="filter by event_type" value="{event_filter}">
+  <button type="submit">Filter</button>
+  <a href="/admin/leads-debug" style="color:#9CA3AF; margin-left:10px; font-size:11px;">clear</a>
+</form>
+<table>
+ <thead><tr>
+  <th>Time (UTC)</th><th>Event</th><th>Email</th><th>Ambassador</th><th>Progress</th><th>Attribution</th>
+ </tr></thead>
+ <tbody>{''.join(rows_html) if rows_html else '<tr><td colspan="6" style="padding:20px; text-align:center; color:#9CA3AF;">No events yet — submit the email gate on /class1 to test</td></tr>'}</tbody>
+</table>
+<div class="meta">
+  Showing last 200 events · auto-refresh every 5s · server time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
+</div>
+</body></html>"""
+    return html
 
 
 @admin_bp.route("/logout")
