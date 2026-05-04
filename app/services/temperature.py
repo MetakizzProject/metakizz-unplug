@@ -95,11 +95,17 @@ def compute_temperature(
     ambassador,
     lead_events: Optional[List[Any]] = None,
     email_events: Optional[List[Any]] = None,
+    referral_count: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Score a single ambassador using all available signals.
 
     Pass pre-fetched lead_events and email_events for that ambassador to
     avoid N+1 queries (recommended when scoring many leads at once).
+
+    `referral_count` lets the caller pre-resolve the count via a single
+    SQL aggregation (see admin._get_referral_counts) so this function
+    never touches the lazy `Ambassador.referral_count` property. With
+    ~2500 leads on the insights page that prevents 2500 extra queries.
 
     Returns a dict:
       {
@@ -136,7 +142,13 @@ def compute_temperature(
         signals.append(f"{visits} dashboard visit{'s' if visits != 1 else ''}")
 
     # ── Referrals brought (real signups attributed) ──
-    refs = ambassador.referral_count or 0
+    # Prefer the explicit `referral_count` arg when caller pre-resolved
+    # it (bulk scoring); fall back to the lazy property only for the
+    # single-row use case where the N+1 doesn't matter.
+    if referral_count is not None:
+        refs = referral_count
+    else:
+        refs = ambassador.referral_count or 0
     if refs:
         pts = refs * TEMP_WEIGHTS["referral_brought"]
         score += pts
