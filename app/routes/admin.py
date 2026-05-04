@@ -8,7 +8,7 @@ from flask import (
     flash, session, current_app, Response,
 )
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent
 from app.mailer import (
     send_welcome_email,
@@ -2610,7 +2610,7 @@ def sync_ghl_cleanup():
     """
     from app.services import ghl as ghl_service
     try:
-        stats = ghl_service.cleanup_ghost_leads_without_tag("mkot3_registrado")
+        stats = ghl_service.cleanup_ghost_leads_without_relevant_tag()
         flash(
             f"Cleanup done: scanned {stats['scanned']} ghost leads, "
             f"kept {stats['kept_with_tag']} (had launch tag), "
@@ -2712,29 +2712,34 @@ def sync_ghl():
 
     button_html = ""
     if is_configured and not state["running"]:
-        # Count current ghost leads to inform the cleanup decision.
+        # Count ghosts split by relevance: contacts that carry ANY of the
+        # tracked launch/masterclass tags vs. those that carry none.
+        from app.services.ghl import RELEVANT_LEAD_TAGS as _RELEVANT_TAGS
         ghost_total = Ambassador.query.filter(Ambassador.source == "ghl_import").count()
-        ghost_with_launch_tag = Ambassador.query.filter(
+        from sqlalchemy import or_
+        relevant_clauses = [Ambassador.ghl_tags.like(f"%{t}%") for t in _RELEVANT_TAGS]
+        ghost_relevant = Ambassador.query.filter(
             Ambassador.source == "ghl_import",
-            Ambassador.ghl_tags.like("%mkot3_registrado%"),
+            or_(*relevant_clauses),
         ).count()
-        ghost_without_launch_tag = ghost_total - ghost_with_launch_tag
+        ghost_irrelevant = ghost_total - ghost_relevant
+        relevant_tags_html = ", ".join(f'<code style="color:#FFC857;">{t}</code>' for t in sorted(_RELEVANT_TAGS))
 
         button_html = f'''
         <form method="post" style="margin-top:20px;">
           <button type="submit" style="background:#2EDB99; color:#000; border:0; padding:14px 28px; font-family:'Orbitron',sans-serif; font-weight:900; letter-spacing:2px; text-transform:uppercase; cursor:pointer; box-shadow:0 0 16px rgba(46,219,153,0.45); font-size:13px;">▶ Run full sync now</button>
-          <p style="color:#6B7280; font-size:11px; margin-top:8px;">Pulls every contact from GHL (~1-2 min for 2k contacts). Only creates ghost leads for contacts tagged <code style="color:#FFC857;">mkot3_registrado</code>. Idempotent.</p>
+          <p style="color:#6B7280; font-size:11px; margin-top:8px; line-height:1.6;">Pulls every contact from GHL (~1-2 min). Creates ghost leads only for contacts carrying any of: {relevant_tags_html}. Idempotent.</p>
         </form>
 
         <div style="margin-top:32px; padding:18px; background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.4); border-radius:6px;">
           <p style="color:#FCA5A5; font-size:12px; letter-spacing:2px; text-transform:uppercase; margin:0 0 10px 0;">▌ Cleanup</p>
           <p style="color:#C9CFD4; font-size:13px; line-height:1.5; margin:0 0 14px 0;">
             Ghost leads from GHL: <strong style="color:#fff;">{ghost_total}</strong> total ·
-            <strong style="color:#2EDB99;">{ghost_with_launch_tag}</strong> with <code>mkot3_registrado</code> tag ·
-            <strong style="color:#FCA5A5;">{ghost_without_launch_tag}</strong> without (these shouldn't be in the launch DB).
+            <strong style="color:#2EDB99;">{ghost_relevant}</strong> with at least one relevant tag ·
+            <strong style="color:#FCA5A5;">{ghost_irrelevant}</strong> with NONE (these shouldn't be in the launch DB).
           </p>
-          <form method="post" action="/admin/sync-ghl/cleanup" onsubmit="return confirm('Delete {ghost_without_launch_tag} ghost leads that don\\'t have the mkot3_registrado tag? This will not affect real signups (source=public/community).');">
-            <button type="submit" style="background:#DC2626; color:#fff; border:0; padding:10px 20px; font-family:'Share Tech Mono',monospace; font-weight:bold; letter-spacing:1.5px; text-transform:uppercase; cursor:pointer; font-size:11px;">Delete {ghost_without_launch_tag} non-launch ghost leads</button>
+          <form method="post" action="/admin/sync-ghl/cleanup" onsubmit="return confirm('Delete {ghost_irrelevant} ghost leads that don\\'t carry any relevant tag? This will not affect real signups (source=public/community).');">
+            <button type="submit" style="background:#DC2626; color:#fff; border:0; padding:10px 20px; font-family:'Share Tech Mono',monospace; font-weight:bold; letter-spacing:1.5px; text-transform:uppercase; cursor:pointer; font-size:11px;">Delete {ghost_irrelevant} non-relevant ghost leads</button>
           </form>
         </div>
         '''
@@ -2761,6 +2766,150 @@ def sync_ghl():
   <a href="/admin/leads-debug">▌ Lead events</a> · <a href="/admin/">▌ Back to admin</a>
 </p>
 </body></html>'''
+
+
+# ════════════════════════════════════════════════════════════════════
+# LEADS DASHBOARD — filtered + temperature-scored view of all leads
+# ════════════════════════════════════════════════════════════════════
+
+@admin_bp.route("/leads")
+def leads():
+    """Filterable list of leads with temperature scoring + class progress.
+
+    Filters via query params:
+      q          — substring search on name/email/phone
+      source     — public | community | ghl_import | (any)
+      tag        — must contain this tag in ghl_tags
+      temp       — cold | cool | warm | hot | burning | customer
+      has_phone  — 1 to require phone
+      class_min  — 25 | 50 | 75 | 95 (min % watched of any class)
+      page       — pagination, 1-indexed
+    """
+    from app.services.temperature import (
+        compute_temperature, fetch_signals_bulk, build_whatsapp_message
+    )
+    from app.services.ghl import RELEVANT_LEAD_TAGS
+    from urllib.parse import quote
+
+    q          = (request.args.get("q") or "").strip().lower()
+    source     = (request.args.get("source") or "").strip()
+    tag_filter = (request.args.get("tag") or "").strip()
+    temp_bucket= (request.args.get("temp") or "").strip().lower()
+    has_phone  = request.args.get("has_phone") == "1"
+    class_min  = request.args.get("class_min", type=int)
+    page       = max(1, request.args.get("page", default=1, type=int))
+    per_page   = 50
+
+    # ── Base query: all leads except community by default? ──
+    # User wants to see EVERYONE relevant (launch + past + community
+    # status as info). So include all sources; let them filter.
+    base = Ambassador.query
+
+    if q:
+        like = f"%{q}%"
+        base = base.filter(or_(
+            func.lower(Ambassador.email).like(like),
+            func.lower(Ambassador.name).like(like),
+            Ambassador.phone_number.like(like),
+        ))
+    if source:
+        base = base.filter(Ambassador.source == source)
+    if tag_filter:
+        base = base.filter(Ambassador.ghl_tags.like(f"%{tag_filter}%"))
+    if has_phone:
+        base = base.filter(Ambassador.phone_number.isnot(None))
+
+    # Order by most recent activity (last_dashboard_visit or created_at).
+    base = base.order_by(
+        Ambassador.last_dashboard_visit_at.desc().nullslast(),
+        Ambassador.created_at.desc().nullslast(),
+    )
+
+    # Count BEFORE temperature filter (so totals reflect data, not derived
+    # filters that would force a full scan).
+    total_count = base.count()
+
+    # Pull current page of ambassadors. If a temperature filter is set,
+    # we over-fetch and re-page after scoring (acceptable for ~2k rows).
+    if temp_bucket or class_min:
+        # Bring everyone into memory for scoring + filter + paginate.
+        all_rows = base.limit(5000).all()
+        ids = [a.id for a in all_rows]
+        lead_evts_by_id, email_evts_by_id = fetch_signals_bulk(ids)
+
+        scored = []
+        for a in all_rows:
+            t = compute_temperature(
+                a,
+                lead_events=lead_evts_by_id.get(a.id, []),
+                email_events=email_evts_by_id.get(a.id, []),
+            )
+            scored.append((a, t))
+
+        if temp_bucket:
+            bucket_map = {
+                "cold": "🧊 COLD", "cool": "❄ COOL", "warm": "🌡 WARM",
+                "hot": "🚀 HOT", "burning": "🔥 BURNING", "customer": "💎 CUSTOMER",
+            }
+            target = bucket_map.get(temp_bucket)
+            if target:
+                scored = [(a, t) for a, t in scored if t["bucket"] == target]
+        if class_min:
+            scored = [(a, t) for a, t in scored if max(t["max_pct"].values()) >= class_min]
+
+        total_count = len(scored)
+        page_rows = scored[(page - 1) * per_page : page * per_page]
+        rows_with_temp = page_rows
+    else:
+        page_amb = base.offset((page - 1) * per_page).limit(per_page).all()
+        ids = [a.id for a in page_amb]
+        lead_evts_by_id, email_evts_by_id = fetch_signals_bulk(ids) if ids else ({}, {})
+        rows_with_temp = [
+            (a, compute_temperature(
+                a,
+                lead_events=lead_evts_by_id.get(a.id, []),
+                email_events=email_evts_by_id.get(a.id, []),
+            ))
+            for a in page_amb
+        ]
+
+    # ── Top-of-page stats ──
+    stats_overall = {
+        "total":       Ambassador.query.count(),
+        "with_phone":  Ambassador.query.filter(Ambassador.phone_number.isnot(None)).count(),
+        "ghl_imported":Ambassador.query.filter(Ambassador.source == "ghl_import").count(),
+        "community":   Ambassador.query.filter(Ambassador.source == "community").count(),
+        "public":      Ambassador.query.filter(Ambassador.source == "public").count(),
+    }
+
+    pages = max(1, (total_count + per_page - 1) // per_page)
+
+    # Attach pre-computed WhatsApp message URL per row (template-friendly).
+    for amb, t in rows_with_temp:
+        if amb.phone_number:
+            msg = build_whatsapp_message(amb, t)
+            t["wa_msg_url"] = quote(msg, safe="")
+        else:
+            t["wa_msg_url"] = None
+
+    # Country flag helper
+    from app.services.phone import lookup_country
+
+    return render_template(
+        "admin_leads.html",
+        rows=rows_with_temp,
+        total_count=total_count,
+        stats=stats_overall,
+        page=page,
+        pages=pages,
+        per_page=per_page,
+        # Filter values to repopulate the UI
+        f_q=q, f_source=source, f_tag=tag_filter,
+        f_temp=temp_bucket, f_has_phone=has_phone, f_class_min=class_min,
+        relevant_tags=sorted(RELEVANT_LEAD_TAGS),
+        lookup_country=lookup_country,
+        active_section="leads",
+    )
 
 
 @admin_bp.route("/leads-debug")

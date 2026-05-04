@@ -30,6 +30,10 @@
                 <span class="nav-label">Live Monitor</span>
                 {% if countdown_short %}<span class="nav-badge nav-badge-amber">{{ countdown_short }}</span>{% endif %}
             </a>
+            <a href="{{ url_for('admin.leads') if 'leads' in admin_routes else '#' }}" class="admin-nav-link {{ 'active' if active == 'leads' }}">
+                <span class="nav-icon">🎯</span>
+                <span class="nav-label">Leads</span>
+            </a>
             <a href="{{ url_for('admin.emails') if 'emails' in admin_routes else '#' }}" class="admin-nav-link {{ 'active' if active == 'emails' }}">
                 <span class="nav-icon">📧</span>
                 <span class="nav-label">Emails</span>

@@ -153,9 +153,20 @@ def extract_custom_fields(contact: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+# Tags that mark a contact as "relevant for the launch dashboard" — they're
+# kept as ghost leads when synced. Includes: current launch registrants,
+# past-masterclass attendees (warm leads who already know us), and the
+# webinar attendees from the previous campaign. Edit this to broaden/narrow.
+RELEVANT_LEAD_TAGS = {
+    "mkot3_registrado",
+    "masterclass march17th",
+    "webinnar 17 marzo",
+}
+
+
 def sync_all_contacts(
     create_missing: bool = True,
-    only_with_tag: Optional[str] = "mkot3_registrado",
+    only_with_any_tag: Optional[set] = None,
     max_pages: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Pull every GHL contact and upsert into our Ambassador table.
@@ -166,10 +177,10 @@ def sync_all_contacts(
       - No match + create_missing=True + (only_with_tag is None OR contact
         has that tag) → insert ghost Ambassador with source='ghl_import'.
 
-    `only_with_tag` defaults to "mkot3_registrado" so we don't pollute the
-    DB with non-launch contacts (past masterclass attendees, community-only
-    members, etc.) that would risk receiving cron-driven launch emails.
-    Pass None to import every contact regardless of tags.
+    `only_with_any_tag` defaults to RELEVANT_LEAD_TAGS so we don't pollute
+    the DB with random old contacts. Includes launch registrants AND past
+    masterclass / webinar attendees (warm leads). Pass None to import
+    every contact regardless of tags.
 
     Returns a stats dict. Safe to re-run; idempotent.
 
@@ -180,6 +191,9 @@ def sync_all_contacts(
     from sqlalchemy import func
     from app.models import db, Ambassador
     from app.services.phone import parse as parse_phone
+
+    if only_with_any_tag is None:
+        only_with_any_tag = RELEVANT_LEAD_TAGS
 
     stats = {
         "contacts_seen": 0,
@@ -229,11 +243,12 @@ def sync_all_contacts(
                 if not create_missing:
                     stats["ghost_skipped_no_create"] += 1
                     continue
-                # Tag gate — when only_with_tag is set, skip contacts
-                # who don't carry that tag (avoids pulling in past
-                # masterclass attendees, community-only members, etc.
-                # that have no business being in the launch funnel).
-                if only_with_tag and only_with_tag not in (tags_list or []):
+                # Tag gate — keep contact only if they carry at least
+                # one of the relevant tags (launch registrant, past
+                # masterclass, past webinar). Filters out random old
+                # contacts that have no business being in this dashboard.
+                tag_set = set(tags_list or [])
+                if only_with_any_tag and not (tag_set & only_with_any_tag):
                     stats["ghost_skipped_no_tag"] += 1
                     continue
                 amb = Ambassador(
@@ -286,15 +301,20 @@ def sync_all_contacts(
     return stats
 
 
-def cleanup_ghost_leads_without_tag(required_tag: str = "mkot3_registrado") -> Dict[str, int]:
+def cleanup_ghost_leads_without_relevant_tag(
+    relevant_tags: Optional[set] = None,
+) -> Dict[str, int]:
     """Delete Ambassadors that were imported from GHL (source='ghl_import')
-    but don't carry the required launch tag in ghl_tags. Used to undo a
-    sync that ran without the tag filter.
+    but don't carry ANY of the relevant tags. Used to undo a sync that
+    ran without the tag filter.
 
     Safe to re-run: only acts on source='ghl_import' rows.
     Does NOT touch real signups (source='public' or 'community').
     """
     from app.models import db, Ambassador
+
+    if relevant_tags is None:
+        relevant_tags = RELEVANT_LEAD_TAGS
 
     stats = {"scanned": 0, "deleted": 0, "kept_with_tag": 0}
 
@@ -303,7 +323,7 @@ def cleanup_ghost_leads_without_tag(required_tag: str = "mkot3_registrado") -> D
         stats["scanned"] += 1
         tags_csv = (amb.ghl_tags or "")
         tags_set = {t.strip() for t in tags_csv.split(",") if t.strip()}
-        if required_tag in tags_set:
+        if tags_set & relevant_tags:
             stats["kept_with_tag"] += 1
         else:
             db.session.delete(amb)

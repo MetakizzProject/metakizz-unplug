@@ -1,0 +1,349 @@
+{% extends "admin_base.html" %}
+{% set page_title = "Leads" %}
+
+{% block admin_content %}
+<style>
+.leads-shell { padding: 20px 24px; }
+
+.leads-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 6px;
+}
+.leads-header h1 {
+    color: #fff; font-family: 'Orbitron', sans-serif; font-weight: 900;
+    font-size: 22px; letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 14px rgba(46,219,153,0.4); margin: 0;
+}
+.leads-header h1 .count {
+    color: #2EDB99; margin-left: 8px;
+}
+.leads-subtitle {
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase;
+    margin-bottom: 18px;
+}
+
+/* ── Stats strip ── */
+.stats-strip {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin-bottom: 18px;
+}
+.stat-card {
+    background: rgba(46,219,153,0.04); border: 1px solid rgba(46,219,153,0.18);
+    border-radius: 6px; padding: 12px 14px;
+}
+.stat-card .label {
+    color: #6B7280; font-family: 'Share Tech Mono', monospace;
+    font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+}
+.stat-card .value {
+    color: #2EDB99; font-family: 'Orbitron', sans-serif; font-weight: 900;
+    font-size: 22px; line-height: 1.1; margin-top: 2px;
+    text-shadow: 0 0 12px rgba(46,219,153,0.4);
+}
+
+/* ── Filters ── */
+.filters {
+    background: rgba(0,0,0,0.45); border: 1px solid rgba(46,219,153,0.18);
+    border-radius: 8px; padding: 14px 16px; margin-bottom: 14px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: end;
+}
+.filters .field { display: flex; flex-direction: column; gap: 4px; }
+.filters label {
+    color: #6B7280; font-family: 'Share Tech Mono', monospace;
+    font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+}
+.filters input[type=text], .filters select {
+    background: #050a08; color: #fff;
+    border: 1px solid rgba(46,219,153,0.3); border-radius: 4px;
+    padding: 6px 10px; font-family: 'Share Tech Mono', monospace; font-size: 12px;
+    min-width: 140px;
+}
+.filters input[type=text]:focus, .filters select:focus {
+    outline: none; border-color: #2EDB99;
+    box-shadow: 0 0 10px rgba(46,219,153,0.35);
+}
+.filters .checkbox {
+    display: flex; align-items: center; gap: 6px;
+    color: #C9CFD4; font-family: 'Share Tech Mono', monospace; font-size: 12px;
+    padding: 6px 0;
+}
+.filters button {
+    background: #2EDB99; color: #000; border: 0;
+    padding: 8px 18px; font-family: 'Orbitron', sans-serif; font-weight: 900;
+    font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+    cursor: pointer; border-radius: 4px;
+    box-shadow: 0 0 10px rgba(46,219,153,0.35);
+}
+.filters .clear {
+    color: #9CA3AF; text-decoration: none; font-size: 11px;
+    font-family: 'Share Tech Mono', monospace; letter-spacing: 0.15em;
+    text-transform: uppercase; margin-left: 6px;
+}
+
+/* ── Table ── */
+.leads-table {
+    width: 100%; border-collapse: collapse;
+    background: rgba(0,0,0,0.4); font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+}
+.leads-table thead th {
+    text-align: left; padding: 10px 12px;
+    color: #2EDB99; font-size: 9px; letter-spacing: 0.2em;
+    text-transform: uppercase; font-weight: normal;
+    border-bottom: 1px solid rgba(46,219,153,0.3);
+    background: rgba(46,219,153,0.05);
+}
+.leads-table tbody tr {
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background 120ms;
+}
+.leads-table tbody tr:hover { background: rgba(46,219,153,0.04); }
+.leads-table td { padding: 10px 12px; vertical-align: top; }
+
+.lead-name { color: #fff; font-weight: bold; line-height: 1.3; }
+.lead-name a { color: #fff; text-decoration: none; }
+.lead-name a:hover { color: #2EDB99; }
+.lead-email { color: #9CA3AF; font-size: 11px; }
+
+.badge {
+    display: inline-block; padding: 2px 8px; border-radius: 3px;
+    font-size: 9px; font-weight: bold; letter-spacing: 0.15em;
+    text-transform: uppercase; line-height: 1.5;
+}
+.badge-source-public { background: rgba(46,219,153,0.18); color: #2EDB99; border: 1px solid rgba(46,219,153,0.5); }
+.badge-source-community { background: rgba(167,139,250,0.18); color: #A78BFA; border: 1px solid rgba(167,139,250,0.5); }
+.badge-source-ghl_import { background: rgba(156,163,175,0.18); color: #C9CFD4; border: 1px solid rgba(156,163,175,0.4); }
+
+.tag-chip {
+    display: inline-block; padding: 1px 6px;
+    background: rgba(255,200,87,0.12); color: #FFC857;
+    border: 1px solid rgba(255,200,87,0.3);
+    font-size: 9px; letter-spacing: 0.1em; border-radius: 2px;
+    margin: 1px 1px 0 0;
+}
+
+.temp-badge {
+    display: inline-block; padding: 4px 10px; border-radius: 4px;
+    font-size: 10px; font-weight: bold; letter-spacing: 0.15em;
+    color: #fff; white-space: nowrap;
+}
+
+.class-progress {
+    display: inline-block; min-width: 32px;
+    text-align: center; padding: 2px 6px; margin-right: 2px;
+    font-size: 10px; border-radius: 3px;
+    font-weight: bold;
+}
+
+.actions-cell { white-space: nowrap; }
+.action-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 8px; margin-right: 4px; border-radius: 3px;
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    text-decoration: none; font-weight: bold; line-height: 1.3;
+    border: 1px solid transparent;
+}
+.action-wa { background: #25D366; color: #000; }
+.action-wa:hover { background: #1ea857; }
+.action-wa.disabled { background: #4B5563; color: #9CA3AF; pointer-events: none; }
+.action-detail { background: transparent; color: #2EDB99; border-color: rgba(46,219,153,0.4); }
+.action-detail:hover { background: rgba(46,219,153,0.15); }
+
+/* ── Pagination ── */
+.pager {
+    margin-top: 16px; display: flex; justify-content: center;
+    gap: 6px; font-family: 'Share Tech Mono', monospace; font-size: 12px;
+}
+.pager a, .pager span {
+    padding: 6px 12px; border: 1px solid rgba(46,219,153,0.3);
+    color: #C9CFD4; text-decoration: none; border-radius: 3px;
+}
+.pager a:hover { border-color: #2EDB99; color: #2EDB99; }
+.pager .current { background: #2EDB99; color: #000; border-color: #2EDB99; }
+.pager .ellipsis { border: 0; }
+</style>
+
+<div class="leads-shell">
+
+  <div class="leads-header">
+    <h1>▌ Leads <span class="count">{{ total_count }}</span></h1>
+    <div style="display:flex; gap:8px;">
+      <a href="{{ url_for('admin.sync_ghl') }}" style="color:#9CA3AF; font-family:'Share Tech Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.2em; text-decoration:none;">▌ Sync GHL</a>
+      <a href="{{ url_for('admin.leads_debug') }}" style="color:#9CA3AF; font-family:'Share Tech Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.2em; text-decoration:none;">▌ Lead events</a>
+    </div>
+  </div>
+  <p class="leads-subtitle">▌ filter · score · contact</p>
+
+  <!-- Stats strip -->
+  <div class="stats-strip">
+    <div class="stat-card"><div class="label">All leads</div><div class="value">{{ stats.total }}</div></div>
+    <div class="stat-card"><div class="label">From signup form</div><div class="value">{{ stats.public }}</div></div>
+    <div class="stat-card"><div class="label">Community</div><div class="value">{{ stats.community }}</div></div>
+    <div class="stat-card"><div class="label">From GHL only</div><div class="value">{{ stats.ghl_imported }}</div></div>
+    <div class="stat-card"><div class="label">With phone</div><div class="value">{{ stats.with_phone }}</div></div>
+  </div>
+
+  <!-- Filters -->
+  <form method="get" class="filters">
+    <div class="field">
+      <label>Search name / email / phone</label>
+      <input type="text" name="q" value="{{ f_q }}" placeholder="anything..." style="min-width:220px;">
+    </div>
+    <div class="field">
+      <label>Source</label>
+      <select name="source">
+        <option value="">any</option>
+        <option value="public" {% if f_source == 'public' %}selected{% endif %}>public (signup)</option>
+        <option value="community" {% if f_source == 'community' %}selected{% endif %}>community</option>
+        <option value="ghl_import" {% if f_source == 'ghl_import' %}selected{% endif %}>GHL only</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Has tag</label>
+      <select name="tag">
+        <option value="">any</option>
+        {% for t in relevant_tags %}
+          <option value="{{ t }}" {% if f_tag == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>Temperature</label>
+      <select name="temp">
+        <option value="">any</option>
+        <option value="cold"     {% if f_temp == 'cold'     %}selected{% endif %}>🧊 Cold</option>
+        <option value="cool"     {% if f_temp == 'cool'     %}selected{% endif %}>❄ Cool</option>
+        <option value="warm"     {% if f_temp == 'warm'     %}selected{% endif %}>🌡 Warm</option>
+        <option value="hot"      {% if f_temp == 'hot'      %}selected{% endif %}>🚀 Hot</option>
+        <option value="burning"  {% if f_temp == 'burning'  %}selected{% endif %}>🔥 Burning</option>
+        <option value="customer" {% if f_temp == 'customer' %}selected{% endif %}>💎 Customer</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Min class watched</label>
+      <select name="class_min">
+        <option value="">any</option>
+        <option value="25" {% if f_class_min == 25 %}selected{% endif %}>≥ 25%</option>
+        <option value="50" {% if f_class_min == 50 %}selected{% endif %}>≥ 50%</option>
+        <option value="75" {% if f_class_min == 75 %}selected{% endif %}>≥ 75%</option>
+        <option value="95" {% if f_class_min == 95 %}selected{% endif %}>≥ 95%</option>
+      </select>
+    </div>
+    <div class="checkbox">
+      <input type="checkbox" name="has_phone" value="1" {% if f_has_phone %}checked{% endif %} id="has_phone">
+      <label for="has_phone" style="margin:0; color:#C9CFD4;">Has phone</label>
+    </div>
+    <div>
+      <button type="submit">Apply</button>
+      <a href="{{ url_for('admin.leads') }}" class="clear">clear</a>
+    </div>
+  </form>
+
+  <!-- Table -->
+  <div style="overflow-x:auto; border:1px solid rgba(46,219,153,0.18); border-radius:6px;">
+    <table class="leads-table">
+      <thead>
+        <tr>
+          <th style="width:24%;">Lead</th>
+          <th style="width:9%;">Source</th>
+          <th style="width:12%;">Tags</th>
+          <th style="width:13%;">Temperature</th>
+          <th style="width:14%;">Class progress</th>
+          <th style="width:10%;">Country</th>
+          <th style="width:18%;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for amb, t in rows %}
+          {% set country_name, country_flag = lookup_country(amb.country_code) %}
+          <tr>
+            <td>
+              <div class="lead-name">
+                <a href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}">{{ amb.name or '—' }}</a>
+              </div>
+              <div class="lead-email">{{ amb.email }}</div>
+              {% if amb.phone_number %}
+                <div style="color:#6B7280; font-size:10px; margin-top:2px;">{{ amb.phone_number }}</div>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge badge-source-{{ amb.source or 'public' }}">{{ amb.source or 'public' }}</span>
+            </td>
+            <td>
+              {% if amb.ghl_tags %}
+                {% for tag in amb.ghl_tags.split(',') %}
+                  <span class="tag-chip">{{ tag.strip() }}</span>
+                {% endfor %}
+              {% else %}
+                <span style="color:#4B5563;">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="temp-badge" style="background: {{ t.color }};">
+                {{ t.bucket }} · {{ t.score }}
+              </span>
+              {% if t.signals %}
+                <div style="color:#6B7280; font-size:9px; margin-top:4px; line-height:1.4;">
+                  {{ t.signals|join(' · ') }}
+                </div>
+              {% endif %}
+            </td>
+            <td>
+              {% for cn in [1, 2, 3] %}
+                {% set pct = t.max_pct[cn] %}
+                {% if pct >= 95 %}
+                  <span class="class-progress" style="background:rgba(46,219,153,0.25); color:#2EDB99;">C{{ cn }} ✓</span>
+                {% elif pct >= 50 %}
+                  <span class="class-progress" style="background:rgba(255,200,87,0.18); color:#FFC857;">C{{ cn }} {{ pct }}%</span>
+                {% elif pct >= 25 %}
+                  <span class="class-progress" style="background:rgba(255,200,87,0.08); color:#C9CFD4;">C{{ cn }} {{ pct }}%</span>
+                {% else %}
+                  <span class="class-progress" style="background:rgba(0,0,0,0.3); color:#4B5563;">C{{ cn }} —</span>
+                {% endif %}
+              {% endfor %}
+            </td>
+            <td>
+              {% if country_flag %}
+                <span style="font-size:14px;">{{ country_flag }}</span> <span style="color:#9CA3AF; font-size:10px;">{{ country_name or '' }}</span>
+              {% else %}
+                <span style="color:#4B5563;">—</span>
+              {% endif %}
+            </td>
+            <td class="actions-cell">
+              {% if amb.phone_number and t.wa_msg_url %}
+                <a class="action-btn action-wa" href="https://wa.me/{{ amb.phone_number|replace('+','') }}?text={{ t.wa_msg_url }}" target="_blank" title="Open WhatsApp with contextual message">📱 WA</a>
+              {% else %}
+                <span class="action-btn action-wa disabled" title="No phone">📱 WA</span>
+              {% endif %}
+              {% if amb.ghl_contact_id %}
+                <a class="action-btn action-detail" href="https://app.gohighlevel.com/v2/location/CrneQsu72gpHGTOMzRGd/contacts/detail/{{ amb.ghl_contact_id }}" target="_blank" title="Open in GHL">↗ GHL</a>
+              {% endif %}
+              <a class="action-btn action-detail" href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}">→ Detail</a>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7" style="padding:30px; text-align:center; color:#9CA3AF;">No leads match the current filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  {% if pages > 1 %}
+    <div class="pager">
+      {% set qs = request.args.to_dict() %}
+      {% if page > 1 %}
+        {% set _ = qs.update({'page': page - 1}) %}
+        <a href="?{{ qs|urlencode }}">← prev</a>
+      {% endif %}
+      <span class="current">page {{ page }} / {{ pages }}</span>
+      {% if page < pages %}
+        {% set _ = qs.update({'page': page + 1}) %}
+        <a href="?{{ qs|urlencode }}">next →</a>
+      {% endif %}
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}
