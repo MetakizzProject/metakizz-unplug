@@ -2602,6 +2602,27 @@ _GHL_SYNC_STATE = {
 }
 
 
+@admin_bp.route("/sync-ghl/cleanup", methods=["POST"])
+def sync_ghl_cleanup():
+    """Delete ghost leads (source='ghl_import') that don't carry the
+    mkot3_registrado tag. Used to undo a sync that ran without the tag
+    filter (which would have pulled in past-masterclass attendees, etc.).
+    """
+    from app.services import ghl as ghl_service
+    try:
+        stats = ghl_service.cleanup_ghost_leads_without_tag("mkot3_registrado")
+        flash(
+            f"Cleanup done: scanned {stats['scanned']} ghost leads, "
+            f"kept {stats['kept_with_tag']} (had launch tag), "
+            f"deleted {stats['deleted']} (no launch tag).",
+            "success",
+        )
+    except Exception as e:
+        logger.exception("ghost cleanup failed")
+        flash(f"Cleanup failed: {e}", "error")
+    return redirect(url_for("admin.sync_ghl"))
+
+
 @admin_bp.route("/sync-ghl", methods=["GET", "POST"])
 def sync_ghl():
     """Page that shows GHL sync status + a button to trigger a fresh sync.
@@ -2691,11 +2712,31 @@ def sync_ghl():
 
     button_html = ""
     if is_configured and not state["running"]:
-        button_html = '''
+        # Count current ghost leads to inform the cleanup decision.
+        ghost_total = Ambassador.query.filter(Ambassador.source == "ghl_import").count()
+        ghost_with_launch_tag = Ambassador.query.filter(
+            Ambassador.source == "ghl_import",
+            Ambassador.ghl_tags.like("%mkot3_registrado%"),
+        ).count()
+        ghost_without_launch_tag = ghost_total - ghost_with_launch_tag
+
+        button_html = f'''
         <form method="post" style="margin-top:20px;">
           <button type="submit" style="background:#2EDB99; color:#000; border:0; padding:14px 28px; font-family:'Orbitron',sans-serif; font-weight:900; letter-spacing:2px; text-transform:uppercase; cursor:pointer; box-shadow:0 0 16px rgba(46,219,153,0.45); font-size:13px;">▶ Run full sync now</button>
-          <p style="color:#6B7280; font-size:11px; margin-top:8px;">Pulls every contact from GHL (~1-2 min for 2k contacts). Idempotent — safe to re-run.</p>
+          <p style="color:#6B7280; font-size:11px; margin-top:8px;">Pulls every contact from GHL (~1-2 min for 2k contacts). Only creates ghost leads for contacts tagged <code style="color:#FFC857;">mkot3_registrado</code>. Idempotent.</p>
         </form>
+
+        <div style="margin-top:32px; padding:18px; background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.4); border-radius:6px;">
+          <p style="color:#FCA5A5; font-size:12px; letter-spacing:2px; text-transform:uppercase; margin:0 0 10px 0;">▌ Cleanup</p>
+          <p style="color:#C9CFD4; font-size:13px; line-height:1.5; margin:0 0 14px 0;">
+            Ghost leads from GHL: <strong style="color:#fff;">{ghost_total}</strong> total ·
+            <strong style="color:#2EDB99;">{ghost_with_launch_tag}</strong> with <code>mkot3_registrado</code> tag ·
+            <strong style="color:#FCA5A5;">{ghost_without_launch_tag}</strong> without (these shouldn't be in the launch DB).
+          </p>
+          <form method="post" action="/admin/sync-ghl/cleanup" onsubmit="return confirm('Delete {ghost_without_launch_tag} ghost leads that don\\'t have the mkot3_registrado tag? This will not affect real signups (source=public/community).');">
+            <button type="submit" style="background:#DC2626; color:#fff; border:0; padding:10px 20px; font-family:'Share Tech Mono',monospace; font-weight:bold; letter-spacing:1.5px; text-transform:uppercase; cursor:pointer; font-size:11px;">Delete {ghost_without_launch_tag} non-launch ghost leads</button>
+          </form>
+        </div>
         '''
 
     return f'''<!doctype html>

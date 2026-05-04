@@ -153,14 +153,23 @@ def extract_custom_fields(contact: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def sync_all_contacts(create_missing: bool = True, max_pages: Optional[int] = None) -> Dict[str, Any]:
+def sync_all_contacts(
+    create_missing: bool = True,
+    only_with_tag: Optional[str] = "mkot3_registrado",
+    max_pages: Optional[int] = None,
+) -> Dict[str, Any]:
     """Pull every GHL contact and upsert into our Ambassador table.
 
     For each contact (matched by lowercase email):
-      - Existing Ambassador → backfill ghl_contact_id, ghl_tags, phone, UTMs
-        (only fills NULL/missing fields; preserves first-touch values).
-      - No match + create_missing=True → insert ghost Ambassador with
-        source='ghl_import'.
+      - Existing Ambassador → ALWAYS backfill ghl_contact_id, ghl_tags,
+        phone, UTMs (only fills NULL/missing fields; preserves first-touch).
+      - No match + create_missing=True + (only_with_tag is None OR contact
+        has that tag) → insert ghost Ambassador with source='ghl_import'.
+
+    `only_with_tag` defaults to "mkot3_registrado" so we don't pollute the
+    DB with non-launch contacts (past masterclass attendees, community-only
+    members, etc.) that would risk receiving cron-driven launch emails.
+    Pass None to import every contact regardless of tags.
 
     Returns a stats dict. Safe to re-run; idempotent.
 
@@ -178,6 +187,7 @@ def sync_all_contacts(create_missing: bool = True, max_pages: Optional[int] = No
         "ghost_created": 0,
         "ghost_skipped_no_email": 0,
         "ghost_skipped_no_create": 0,
+        "ghost_skipped_no_tag": 0,
         "errors": 0,
     }
 
@@ -218,6 +228,13 @@ def sync_all_contacts(create_missing: bool = True, max_pages: Optional[int] = No
             if amb is None:
                 if not create_missing:
                     stats["ghost_skipped_no_create"] += 1
+                    continue
+                # Tag gate — when only_with_tag is set, skip contacts
+                # who don't carry that tag (avoids pulling in past
+                # masterclass attendees, community-only members, etc.
+                # that have no business being in the launch funnel).
+                if only_with_tag and only_with_tag not in (tags_list or []):
+                    stats["ghost_skipped_no_tag"] += 1
                     continue
                 amb = Ambassador(
                     name=full_name[:200],
@@ -265,6 +282,39 @@ def sync_all_contacts(create_missing: bool = True, max_pages: Optional[int] = No
         db.session.rollback()
         logger.exception("final commit failed")
         stats["errors"] += 1
+
+    return stats
+
+
+def cleanup_ghost_leads_without_tag(required_tag: str = "mkot3_registrado") -> Dict[str, int]:
+    """Delete Ambassadors that were imported from GHL (source='ghl_import')
+    but don't carry the required launch tag in ghl_tags. Used to undo a
+    sync that ran without the tag filter.
+
+    Safe to re-run: only acts on source='ghl_import' rows.
+    Does NOT touch real signups (source='public' or 'community').
+    """
+    from app.models import db, Ambassador
+
+    stats = {"scanned": 0, "deleted": 0, "kept_with_tag": 0}
+
+    rows = Ambassador.query.filter(Ambassador.source == "ghl_import").all()
+    for amb in rows:
+        stats["scanned"] += 1
+        tags_csv = (amb.ghl_tags or "")
+        tags_set = {t.strip() for t in tags_csv.split(",") if t.strip()}
+        if required_tag in tags_set:
+            stats["kept_with_tag"] += 1
+        else:
+            db.session.delete(amb)
+            stats["deleted"] += 1
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.exception("cleanup commit failed")
+        raise
 
     return stats
 
