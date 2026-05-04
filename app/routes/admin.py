@@ -2998,6 +2998,12 @@ def sync_ghl():
             )
             return redirect(url_for("admin.sync_ghl"))
 
+        # Default: do NOT create new ghost leads. Only enrich existing
+        # Ambassador rows. The user can opt in to ghost creation via a
+        # checkbox in the form (rare; usually only useful right after
+        # importing a fresh Ambassador list).
+        create_missing_flag = (request.form.get("create_missing") == "1")
+
         flask_app = current_app._get_current_object()
 
         def _run():
@@ -3008,7 +3014,11 @@ def sync_ghl():
                 _GHL_SYNC_STATE["stats"] = None
                 _GHL_SYNC_STATE["error"] = None
                 try:
-                    stats = ghl_service.sync_all_contacts(create_missing=True)
+                    # User chose: only enrich existing leads, don't create
+                    # ghosts from GHL contacts that aren't already in our DB.
+                    # The form can override via the "create_missing" checkbox.
+                    create_missing = create_missing_flag
+                    stats = ghl_service.sync_all_contacts(create_missing=create_missing)
                     _GHL_SYNC_STATE["stats"] = stats
                 except Exception as e:
                     logger.exception("GHL sync background thread failed")
@@ -3078,10 +3088,38 @@ def sync_ghl():
         ghost_irrelevant = ghost_total - ghost_relevant
         relevant_tags_html = ", ".join(f'<code style="color:#FFC857;">{t}</code>' for t in sorted(_RELEVANT_TAGS))
 
+        # DB breakdown so user can verify nothing is lost
+        public_count = Ambassador.query.filter_by(source="public").count()
+        community_count = Ambassador.query.filter_by(source="community").count()
+        total_amb = Ambassador.query.count()
+
         button_html = f'''
+        <div style="margin-top:24px; padding:14px 18px; background:rgba(46,219,153,0.05); border:1px solid rgba(46,219,153,0.25); border-radius:6px;">
+          <p style="color:#2EDB99; font-size:11px; letter-spacing:2px; text-transform:uppercase; margin:0 0 10px 0;">▌ Current DB</p>
+          <table style="font-family:'Share Tech Mono',monospace; font-size:13px; color:#C9CFD4;">
+            <tr><td style="padding:3px 18px 3px 0;">Total Ambassadors</td><td style="color:#2EDB99; font-weight:bold;">{total_amb}</td></tr>
+            <tr><td style="padding:3px 18px 3px 0;">→ Source: public (signup)</td><td style="color:#fff;">{public_count}</td></tr>
+            <tr><td style="padding:3px 18px 3px 0;">→ Source: community</td><td style="color:#fff;">{community_count}</td></tr>
+            <tr><td style="padding:3px 18px 3px 0;">→ Source: ghl_import (ghosts)</td><td style="color:#FFC857;">{ghost_total}</td></tr>
+          </table>
+          <p style="color:#6B7280; font-size:10px; margin:10px 0 0 0; line-height:1.5;">
+            Sync NEVER deletes rows. matched_updated = leads that were enriched (UTMs, dance level, tags, phones).
+          </p>
+        </div>
+
         <form method="post" style="margin-top:20px;">
-          <button type="submit" style="background:#2EDB99; color:#000; border:0; padding:14px 28px; font-family:'Orbitron',sans-serif; font-weight:900; letter-spacing:2px; text-transform:uppercase; cursor:pointer; box-shadow:0 0 16px rgba(46,219,153,0.45); font-size:13px;">▶ Run full sync now</button>
-          <p style="color:#6B7280; font-size:11px; margin-top:8px; line-height:1.6;">Pulls every contact from GHL (~1-2 min). Creates ghost leads only for contacts carrying any of: {relevant_tags_html}. Idempotent.</p>
+          <button type="submit" style="background:#2EDB99; color:#000; border:0; padding:14px 28px; font-family:'Orbitron',sans-serif; font-weight:900; letter-spacing:2px; text-transform:uppercase; cursor:pointer; box-shadow:0 0 16px rgba(46,219,153,0.45); font-size:13px;">▶ Enrich existing leads only</button>
+          <p style="color:#6B7280; font-size:11px; margin-top:8px; line-height:1.6;">
+            Default: pulls every GHL contact and updates fields on
+            ambassadors that <strong>already exist</strong> in our DB.
+            <strong style="color:#2EDB99;">Won't create new ghost rows.</strong>
+            ~1-2 min, idempotent.
+          </p>
+
+          <label style="display:block; margin-top:14px; font-size:11px; color:#FCA5A5;">
+            <input type="checkbox" name="create_missing" value="1" style="margin-right:6px;">
+            Also create ghost rows for GHL contacts not in our DB (carrying any of: {relevant_tags_html})
+          </label>
         </form>
 
         <div style="margin-top:32px; padding:18px; background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.4); border-radius:6px;">
