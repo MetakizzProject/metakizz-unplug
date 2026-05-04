@@ -2778,31 +2778,36 @@ def leads():
 
     Filters via query params:
       q          — substring search on name/email/phone
-      source     — public | community | ghl_import | (any)
+      source     — public | community | ghl_import (DB source field)
+      origin     — instagram | facebook_ad | google | referral | direct | ... (UTM bucket)
       tag        — must contain this tag in ghl_tags
       temp       — cold | cool | warm | hot | burning | customer
       has_phone  — 1 to require phone
+      class_1    — 1 to require ≥25% watched of class 1 (same for class_2/class_3)
       class_min  — 25 | 50 | 75 | 95 (min % watched of any class)
       page       — pagination, 1-indexed
     """
     from app.services.temperature import (
-        compute_temperature, fetch_signals_bulk, build_whatsapp_message
+        compute_temperature, fetch_signals_bulk, build_whatsapp_message,
+        classify_source, SOURCE_BUCKETS, TEMP_BUCKETS, temp_label_to_key,
     )
     from app.services.ghl import RELEVANT_LEAD_TAGS
     from urllib.parse import quote
 
     q          = (request.args.get("q") or "").strip().lower()
     source     = (request.args.get("source") or "").strip()
+    origin     = (request.args.get("origin") or "").strip()
     tag_filter = (request.args.get("tag") or "").strip()
     temp_bucket= (request.args.get("temp") or "").strip().lower()
     has_phone  = request.args.get("has_phone") == "1"
+    class_1    = request.args.get("class_1") == "1"
+    class_2    = request.args.get("class_2") == "1"
+    class_3    = request.args.get("class_3") == "1"
     class_min  = request.args.get("class_min", type=int)
     page       = max(1, request.args.get("page", default=1, type=int))
     per_page   = 50
 
-    # ── Base query: all leads except community by default? ──
-    # User wants to see EVERYONE relevant (launch + past + community
-    # status as info). So include all sources; let them filter.
+    # ── DB-level filters first (cheap) ──
     base = Ambassador.query
 
     if q:
@@ -2819,61 +2824,69 @@ def leads():
     if has_phone:
         base = base.filter(Ambassador.phone_number.isnot(None))
 
-    # Order by most recent activity (last_dashboard_visit or created_at).
     base = base.order_by(
         Ambassador.last_dashboard_visit_at.desc().nullslast(),
         Ambassador.created_at.desc().nullslast(),
     )
 
-    # Count BEFORE temperature filter (so totals reflect data, not derived
-    # filters that would force a full scan).
-    total_count = base.count()
+    # ── Score everyone matching DB filters so we can compute distributions ──
+    # For ~2k leads with bulk-fetch this is fast (<500ms typically).
+    all_rows = base.limit(5000).all()
+    ids = [a.id for a in all_rows]
+    lead_evts_by_id, email_evts_by_id = fetch_signals_bulk(ids) if ids else ({}, {})
 
-    # Pull current page of ambassadors. If a temperature filter is set,
-    # we over-fetch and re-page after scoring (acceptable for ~2k rows).
-    if temp_bucket or class_min:
-        # Bring everyone into memory for scoring + filter + paginate.
-        all_rows = base.limit(5000).all()
-        ids = [a.id for a in all_rows]
-        lead_evts_by_id, email_evts_by_id = fetch_signals_bulk(ids)
+    scored_all = []
+    for a in all_rows:
+        t = compute_temperature(
+            a,
+            lead_events=lead_evts_by_id.get(a.id, []),
+            email_events=email_evts_by_id.get(a.id, []),
+        )
+        t["source_info"] = classify_source(a)
+        scored_all.append((a, t))
 
-        scored = []
-        for a in all_rows:
-            t = compute_temperature(
-                a,
-                lead_events=lead_evts_by_id.get(a.id, []),
-                email_events=email_evts_by_id.get(a.id, []),
-            )
-            scored.append((a, t))
+    # ── Distributions over the DB-filtered set (clickable in the UI) ──
+    temp_dist = {key: 0 for key, _, _ in TEMP_BUCKETS}
+    origin_dist = {key: 0 for key, _ in SOURCE_BUCKETS}
+    for _, t in scored_all:
+        key = temp_label_to_key(t["bucket"])
+        if key in temp_dist:
+            temp_dist[key] += 1
+        ok = t["source_info"]["key"]
+        if ok in origin_dist:
+            origin_dist[ok] += 1
+        else:
+            origin_dist["other"] += 1
 
-        if temp_bucket:
-            bucket_map = {
-                "cold": "🧊 COLD", "cool": "❄ COOL", "warm": "🌡 WARM",
-                "hot": "🚀 HOT", "burning": "🔥 BURNING", "customer": "💎 CUSTOMER",
-            }
-            target = bucket_map.get(temp_bucket)
-            if target:
-                scored = [(a, t) for a, t in scored if t["bucket"] == target]
-        if class_min:
-            scored = [(a, t) for a, t in scored if max(t["max_pct"].values()) >= class_min]
+    # ── Apply Python-level filters (origin / temp / per-class) ──
+    filtered = scored_all
+    if origin:
+        filtered = [(a, t) for a, t in filtered if t["source_info"]["key"] == origin]
+    if temp_bucket:
+        filtered = [(a, t) for a, t in filtered if temp_label_to_key(t["bucket"]) == temp_bucket]
+    if class_1:
+        filtered = [(a, t) for a, t in filtered if t["max_pct"].get(1, 0) >= 25]
+    if class_2:
+        filtered = [(a, t) for a, t in filtered if t["max_pct"].get(2, 0) >= 25]
+    if class_3:
+        filtered = [(a, t) for a, t in filtered if t["max_pct"].get(3, 0) >= 25]
+    if class_min:
+        filtered = [(a, t) for a, t in filtered if max(t["max_pct"].values()) >= class_min]
 
-        total_count = len(scored)
-        page_rows = scored[(page - 1) * per_page : page * per_page]
-        rows_with_temp = page_rows
-    else:
-        page_amb = base.offset((page - 1) * per_page).limit(per_page).all()
-        ids = [a.id for a in page_amb]
-        lead_evts_by_id, email_evts_by_id = fetch_signals_bulk(ids) if ids else ({}, {})
-        rows_with_temp = [
-            (a, compute_temperature(
-                a,
-                lead_events=lead_evts_by_id.get(a.id, []),
-                email_events=email_evts_by_id.get(a.id, []),
-            ))
-            for a in page_amb
-        ]
+    total_count = len(filtered)
+    rows_with_temp = filtered[(page - 1) * per_page : page * per_page]
 
-    # ── Top-of-page stats ──
+    pages = max(1, (total_count + per_page - 1) // per_page)
+
+    # Pre-compute WhatsApp message URLs (template-friendly)
+    for amb, t in rows_with_temp:
+        if amb.phone_number:
+            msg = build_whatsapp_message(amb, t)
+            t["wa_msg_url"] = quote(msg, safe="")
+        else:
+            t["wa_msg_url"] = None
+
+    # ── Top-of-page overall stats ──
     stats_overall = {
         "total":       Ambassador.query.count(),
         "with_phone":  Ambassador.query.filter(Ambassador.phone_number.isnot(None)).count(),
@@ -2882,32 +2895,46 @@ def leads():
         "public":      Ambassador.query.filter(Ambassador.source == "public").count(),
     }
 
-    pages = max(1, (total_count + per_page - 1) // per_page)
-
-    # Attach pre-computed WhatsApp message URL per row (template-friendly).
-    for amb, t in rows_with_temp:
-        if amb.phone_number:
-            msg = build_whatsapp_message(amb, t)
-            t["wa_msg_url"] = quote(msg, safe="")
-        else:
-            t["wa_msg_url"] = None
-
-    # Country flag helper
     from app.services.phone import lookup_country
+
+    # Build active-filter chips in Python so the template doesn't need to
+    # cope with Jinja's lack of dict comprehensions inside **kwargs.
+    def _without(key):
+        d = {k: v for k, v in request.args.items() if k != key and k != "page"}
+        return url_for("admin.leads", **d)
+
+    active_chips = []
+    if q:          active_chips.append({"label": f"search: {q}", "url": _without("q")})
+    if source:     active_chips.append({"label": f"source: {source}", "url": _without("source")})
+    if origin:     active_chips.append({"label": f"origin: {origin}", "url": _without("origin")})
+    if tag_filter: active_chips.append({"label": f"tag: {tag_filter}", "url": _without("tag")})
+    if temp_bucket:active_chips.append({"label": f"temp: {temp_bucket}", "url": _without("temp")})
+    if has_phone:  active_chips.append({"label": "has phone", "url": _without("has_phone")})
+    if class_1:    active_chips.append({"label": "watched C1", "url": _without("class_1")})
+    if class_2:    active_chips.append({"label": "watched C2", "url": _without("class_2")})
+    if class_3:    active_chips.append({"label": "watched C3", "url": _without("class_3")})
 
     return render_template(
         "admin_leads.html",
         rows=rows_with_temp,
         total_count=total_count,
         stats=stats_overall,
+        temp_dist=temp_dist,
+        origin_dist=origin_dist,
+        temp_buckets=TEMP_BUCKETS,
+        source_buckets=SOURCE_BUCKETS,
         page=page,
         pages=pages,
         per_page=per_page,
         # Filter values to repopulate the UI
-        f_q=q, f_source=source, f_tag=tag_filter,
-        f_temp=temp_bucket, f_has_phone=has_phone, f_class_min=class_min,
+        f_q=q, f_source=source, f_origin=origin, f_tag=tag_filter,
+        f_temp=temp_bucket, f_has_phone=has_phone,
+        f_class_1=class_1, f_class_2=class_2, f_class_3=class_3,
+        f_class_min=class_min,
         relevant_tags=sorted(RELEVANT_LEAD_TAGS),
         lookup_country=lookup_country,
+        active_chips=active_chips,
+        clear_all_url=url_for("admin.leads"),
         active_section="leads",
     )
 

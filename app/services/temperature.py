@@ -202,6 +202,91 @@ def fetch_signals_bulk(ambassador_ids):
     return by_id_lead, by_id_email
 
 
+def classify_source(ambassador) -> Dict[str, str]:
+    """Bucket the lead's origin into a coarse category for filtering.
+
+    Returns {key, label, emoji} where key is the filter value used in
+    URLs and label/emoji are for display.
+
+    Detection order matters — we check the most specific signals first.
+    """
+    src = (ambassador.utm_source or "").lower()
+    med = (ambassador.utm_medium or "").lower()
+    camp = (ambassador.utm_campaign or "").lower()
+    fbclid = bool(ambassador.fbclid)
+    gclid = bool(ambassador.gclid)
+    ttclid = bool(ambassador.ttclid)
+
+    is_paid = (
+        any(k in med for k in ("cpc", "paid", "ads", "ad ")) or
+        med in ("ad", "paid")
+    )
+
+    # Paid ad platforms first (most actionable category)
+    if "tiktok" in src or ttclid:
+        return {"key": "tiktok_ad" if is_paid else "tiktok",
+                "label": "TikTok" + (" Ad" if is_paid else ""),
+                "emoji": "🎵"}
+    if "google" in src or gclid:
+        return {"key": "google_ad" if is_paid or gclid else "google",
+                "label": "Google" + (" Ad" if (is_paid or gclid) else ""),
+                "emoji": "🔍"}
+    # Meta family — Instagram is a sub-platform of Meta
+    if any(k in src for k in ("instagram", "insta", "ig_")) or src == "ig":
+        return {"key": "instagram_ad" if is_paid else "instagram",
+                "label": "Instagram" + (" Ad" if is_paid else ""),
+                "emoji": "📸"}
+    if any(k in src for k in ("facebook", "fb_", "meta")) or src == "fb" or fbclid:
+        return {"key": "facebook_ad" if (is_paid or fbclid) else "facebook",
+                "label": "Facebook" + (" Ad" if (is_paid or fbclid) else ""),
+                "emoji": "📘"}
+    # Referrals: this lead arrived via someone else's referral link.
+    # We can't tell from utm alone; check ghl_tags / utm_campaign for hints.
+    if "referido" in camp or "referral" in src or "referral" in med:
+        return {"key": "referral", "label": "Referral", "emoji": "👥"}
+    # Email / newsletter
+    if "email" in src or "newsletter" in src or med == "email":
+        return {"key": "email", "label": "Email", "emoji": "📧"}
+    # Catch-all "other" if any UTM at all
+    if src or med or camp:
+        return {"key": "other", "label": (src or med or camp)[:18], "emoji": "🔗"}
+    # Truly nothing → direct
+    return {"key": "direct", "label": "Direct", "emoji": "🌐"}
+
+
+# Source-bucket order for stats display + filter dropdown.
+SOURCE_BUCKETS = [
+    ("instagram",     "📸 Instagram"),
+    ("instagram_ad",  "📸 Instagram Ad"),
+    ("facebook",      "📘 Facebook"),
+    ("facebook_ad",   "📘 Facebook Ad"),
+    ("google",        "🔍 Google"),
+    ("google_ad",     "🔍 Google Ad"),
+    ("tiktok",        "🎵 TikTok"),
+    ("tiktok_ad",     "🎵 TikTok Ad"),
+    ("referral",      "👥 Referral"),
+    ("email",         "📧 Email"),
+    ("other",         "🔗 Other"),
+    ("direct",        "🌐 Direct"),
+]
+
+
+# Temperature buckets for stats display + clickable filter cards.
+TEMP_BUCKETS = [
+    ("burning",  "🔥 Burning",  "#DC2626"),
+    ("hot",      "🚀 Hot",      "#F97316"),
+    ("warm",     "🌡 Warm",     "#FFC857"),
+    ("cool",     "❄ Cool",      "#60A5FA"),
+    ("cold",     "🧊 Cold",     "#6B7280"),
+    ("customer", "💎 Customer", "#A78BFA"),
+]
+
+
+def temp_label_to_key(label: str) -> str:
+    """Map "🔥 BURNING" -> "burning"."""
+    return label.split(" ")[-1].lower()
+
+
 def build_whatsapp_message(ambassador, temp_result, app_lang: str = "en") -> str:
     """Build a contextual WhatsApp message based on what the lead has done.
 

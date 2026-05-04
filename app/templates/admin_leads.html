@@ -1,54 +1,100 @@
 {% extends "admin_base.html" %}
 {% set page_title = "Leads" %}
 
+{% macro filter_link(key, value, label, current_value, color=None) %}
+  {%- set qs = request.args.to_dict() -%}
+  {%- if current_value == value -%}
+    {%- set _ = qs.pop(key, None) -%}
+    {%- set is_active = true -%}
+  {%- else -%}
+    {%- set _ = qs.update({key: value}) -%}
+    {%- set _ = qs.pop('page', None) -%}
+    {%- set is_active = false -%}
+  {%- endif -%}
+  <a href="?{{ qs|urlencode }}" class="filter-card {% if is_active %}filter-active{% endif %}" {% if color %}style="--accent: {{ color }};"{% endif %}>
+    {{ label|safe }}
+  </a>
+{% endmacro %}
+
 {% block admin_content %}
 <style>
-.leads-shell { padding: 20px 24px; }
+.leads-shell { padding: 18px 20px 40px; max-width: 1600px; }
 
+/* ── Header ── */
 .leads-header {
     display: flex; align-items: baseline; justify-content: space-between;
-    flex-wrap: wrap; gap: 12px; margin-bottom: 6px;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 4px;
 }
 .leads-header h1 {
     color: #fff; font-family: 'Orbitron', sans-serif; font-weight: 900;
     font-size: 22px; letter-spacing: 2px; text-transform: uppercase;
     text-shadow: 0 0 14px rgba(46,219,153,0.4); margin: 0;
 }
-.leads-header h1 .count {
-    color: #2EDB99; margin-left: 8px;
-}
-.leads-subtitle {
+.leads-header h1 .count { color: #2EDB99; margin-left: 8px; }
+.leads-header .links a {
     color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
-    font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase;
-    margin-bottom: 18px;
+    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+    text-decoration: none; margin-left: 14px;
 }
+.leads-header .links a:hover { color: #2EDB99; }
 
-/* ── Stats strip ── */
-.stats-strip {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 10px; margin-bottom: 18px;
-}
-.stat-card {
-    background: rgba(46,219,153,0.04); border: 1px solid rgba(46,219,153,0.18);
-    border-radius: 6px; padding: 12px 14px;
-}
-.stat-card .label {
+.leads-subtitle {
     color: #6B7280; font-family: 'Share Tech Mono', monospace;
-    font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
-}
-.stat-card .value {
-    color: #2EDB99; font-family: 'Orbitron', sans-serif; font-weight: 900;
-    font-size: 22px; line-height: 1.1; margin-top: 2px;
-    text-shadow: 0 0 12px rgba(46,219,153,0.4);
+    font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase;
+    margin-bottom: 22px;
 }
 
-/* ── Filters ── */
-.filters {
-    background: rgba(0,0,0,0.45); border: 1px solid rgba(46,219,153,0.18);
-    border-radius: 8px; padding: 14px 16px; margin-bottom: 14px;
-    display: flex; flex-wrap: wrap; gap: 10px; align-items: end;
+/* ── Section labels ── */
+.section-label {
+    font-family: 'Share Tech Mono', monospace; font-size: 9px;
+    color: #6B7280; letter-spacing: 0.3em; text-transform: uppercase;
+    margin: 22px 0 8px 0;
 }
-.filters .field { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── Stat cards ── */
+.cards-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+    gap: 8px;
+}
+.stat-card, .filter-card {
+    background: rgba(46,219,153,0.04); border: 1px solid rgba(46,219,153,0.18);
+    border-radius: 6px; padding: 10px 12px; text-decoration: none;
+    color: inherit; display: block; transition: all 140ms ease;
+    cursor: default;
+}
+.filter-card { cursor: pointer; --accent: #2EDB99; }
+.filter-card:hover {
+    border-color: var(--accent);
+    background: rgba(46,219,153,0.08);
+    box-shadow: 0 0 14px rgba(46,219,153,0.25);
+    transform: translateY(-1px);
+}
+.filter-card.filter-active {
+    background: var(--accent); border-color: var(--accent);
+    box-shadow: 0 0 18px rgba(46,219,153,0.6);
+}
+.filter-card.filter-active .label,
+.filter-card.filter-active .value { color: #000; }
+.filter-card .label, .stat-card .label {
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    line-height: 1.3;
+}
+.filter-card .value, .stat-card .value {
+    color: var(--accent, #2EDB99); font-family: 'Orbitron', sans-serif;
+    font-weight: 900; font-size: 22px; line-height: 1.1; margin-top: 2px;
+    text-shadow: 0 0 10px rgba(46,219,153,0.35);
+}
+
+/* ── Filter bar ── */
+.filters {
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(46,219,153,0.18);
+    border-radius: 8px; padding: 14px 16px; margin-top: 18px;
+}
+.filters .row {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: end;
+}
+.filters .field { display: flex; flex-direction: column; gap: 3px; }
 .filters label {
     color: #6B7280; font-family: 'Share Tech Mono', monospace;
     font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
@@ -63,25 +109,47 @@
     outline: none; border-color: #2EDB99;
     box-shadow: 0 0 10px rgba(46,219,153,0.35);
 }
-.filters .checkbox {
-    display: flex; align-items: center; gap: 6px;
-    color: #C9CFD4; font-family: 'Share Tech Mono', monospace; font-size: 12px;
-    padding: 6px 0;
+.checkbox-group {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
 }
-.filters button {
-    background: #2EDB99; color: #000; border: 0;
-    padding: 8px 18px; font-family: 'Orbitron', sans-serif; font-weight: 900;
-    font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
-    cursor: pointer; border-radius: 4px;
-    box-shadow: 0 0 10px rgba(46,219,153,0.35);
+.checkbox-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 4px; cursor: pointer;
+    background: rgba(0,0,0,0.5); border: 1px solid rgba(46,219,153,0.2);
+    color: #C9CFD4; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.1em; transition: all 140ms;
+    user-select: none;
 }
-.filters .clear {
-    color: #9CA3AF; text-decoration: none; font-size: 11px;
-    font-family: 'Share Tech Mono', monospace; letter-spacing: 0.15em;
-    text-transform: uppercase; margin-left: 6px;
+.checkbox-pill:hover { border-color: rgba(46,219,153,0.5); color: #fff; }
+.checkbox-pill input { display: none; }
+.checkbox-pill.checked {
+    background: rgba(46,219,153,0.18); border-color: #2EDB99; color: #2EDB99;
+    box-shadow: 0 0 10px rgba(46,219,153,0.3);
+}
+
+/* Active filter chips */
+.active-chips {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+}
+.chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 99px;
+    background: rgba(255,200,87,0.15); color: #FFC857;
+    border: 1px solid rgba(255,200,87,0.35);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.1em; text-decoration: none;
+}
+.chip:hover { background: rgba(255,200,87,0.25); }
+.chip .x { color: #FFC857; font-weight: bold; }
+.chip-clear-all {
+    color: #DC2626; border-color: rgba(220,38,38,0.4); background: rgba(220,38,38,0.1);
 }
 
 /* ── Table ── */
+.leads-table-wrap {
+    overflow-x: auto; margin-top: 14px;
+    border: 1px solid rgba(46,219,153,0.18); border-radius: 6px;
+}
 .leads-table {
     width: 100%; border-collapse: collapse;
     background: rgba(0,0,0,0.4); font-family: 'Share Tech Mono', monospace;
@@ -93,6 +161,7 @@
     text-transform: uppercase; font-weight: normal;
     border-bottom: 1px solid rgba(46,219,153,0.3);
     background: rgba(46,219,153,0.05);
+    position: sticky; top: 0; z-index: 1;
 }
 .leads-table tbody tr {
     border-bottom: 1px solid rgba(255,255,255,0.04);
@@ -105,15 +174,23 @@
 .lead-name a { color: #fff; text-decoration: none; }
 .lead-name a:hover { color: #2EDB99; }
 .lead-email { color: #9CA3AF; font-size: 11px; }
+.lead-phone { color: #6B7280; font-size: 10px; margin-top: 2px; }
 
 .badge {
     display: inline-block; padding: 2px 8px; border-radius: 3px;
     font-size: 9px; font-weight: bold; letter-spacing: 0.15em;
     text-transform: uppercase; line-height: 1.5;
 }
-.badge-source-public { background: rgba(46,219,153,0.18); color: #2EDB99; border: 1px solid rgba(46,219,153,0.5); }
+.badge-source-public    { background: rgba(46,219,153,0.18); color: #2EDB99; border: 1px solid rgba(46,219,153,0.5); }
 .badge-source-community { background: rgba(167,139,250,0.18); color: #A78BFA; border: 1px solid rgba(167,139,250,0.5); }
-.badge-source-ghl_import { background: rgba(156,163,175,0.18); color: #C9CFD4; border: 1px solid rgba(156,163,175,0.4); }
+.badge-source-ghl_import{ background: rgba(156,163,175,0.18); color: #C9CFD4; border: 1px solid rgba(156,163,175,0.4); }
+
+.origin-pill {
+    display: inline-block; padding: 3px 8px; border-radius: 3px;
+    font-size: 11px; line-height: 1.5;
+    background: rgba(255,255,255,0.04); color: #C9CFD4;
+    border: 1px solid rgba(255,255,255,0.1);
+}
 
 .tag-chip {
     display: inline-block; padding: 1px 6px;
@@ -161,22 +238,24 @@
 }
 .pager a:hover { border-color: #2EDB99; color: #2EDB99; }
 .pager .current { background: #2EDB99; color: #000; border-color: #2EDB99; }
-.pager .ellipsis { border: 0; }
 </style>
 
 <div class="leads-shell">
 
   <div class="leads-header">
     <h1>▌ Leads <span class="count">{{ total_count }}</span></h1>
-    <div style="display:flex; gap:8px;">
-      <a href="{{ url_for('admin.sync_ghl') }}" style="color:#9CA3AF; font-family:'Share Tech Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.2em; text-decoration:none;">▌ Sync GHL</a>
-      <a href="{{ url_for('admin.leads_debug') }}" style="color:#9CA3AF; font-family:'Share Tech Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.2em; text-decoration:none;">▌ Lead events</a>
+    <div class="links">
+      <a href="{{ url_for('admin.sync_ghl') }}">▌ Sync GHL</a>
+      <a href="{{ url_for('admin.leads_debug') }}">▌ Lead events</a>
     </div>
   </div>
   <p class="leads-subtitle">▌ filter · score · contact</p>
 
-  <!-- Stats strip -->
-  <div class="stats-strip">
+  <!-- ────────────────────────────────────────────────────────────
+       OVERALL STATS (informational, not clickable)
+       ──────────────────────────────────────────────────────────── -->
+  <div class="section-label">▌ Overview</div>
+  <div class="cards-row">
     <div class="stat-card"><div class="label">All leads</div><div class="value">{{ stats.total }}</div></div>
     <div class="stat-card"><div class="label">From signup form</div><div class="value">{{ stats.public }}</div></div>
     <div class="stat-card"><div class="label">Community</div><div class="value">{{ stats.community }}</div></div>
@@ -184,74 +263,108 @@
     <div class="stat-card"><div class="label">With phone</div><div class="value">{{ stats.with_phone }}</div></div>
   </div>
 
-  <!-- Filters -->
-  <form method="get" class="filters">
-    <div class="field">
-      <label>Search name / email / phone</label>
-      <input type="text" name="q" value="{{ f_q }}" placeholder="anything..." style="min-width:220px;">
+  <!-- ────────────────────────────────────────────────────────────
+       TEMPERATURE DISTRIBUTION (clickable filters)
+       ──────────────────────────────────────────────────────────── -->
+  <div class="section-label">▌ Temperature · click to filter</div>
+  <div class="cards-row">
+    {% for key, label, color in temp_buckets %}
+      {{ filter_link('temp', key, '<div class="label">' ~ label ~ '</div><div class="value">' ~ temp_dist[key] ~ '</div>', f_temp, color) }}
+    {% endfor %}
+  </div>
+
+  <!-- ────────────────────────────────────────────────────────────
+       ORIGIN DISTRIBUTION (clickable filters)
+       ──────────────────────────────────────────────────────────── -->
+  <div class="section-label">▌ Origin · click to filter</div>
+  <div class="cards-row">
+    {% for key, label in source_buckets %}
+      {% if origin_dist[key] > 0 or f_origin == key %}
+        {{ filter_link('origin', key, '<div class="label">' ~ label ~ '</div><div class="value">' ~ origin_dist[key] ~ '</div>', f_origin) }}
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <!-- ────────────────────────────────────────────────────────────
+       FINER FILTERS
+       ──────────────────────────────────────────────────────────── -->
+  <form method="get" id="filter-form" class="filters" style="margin-top:18px;">
+    <!-- preserve clickable-card filters as hidden inputs -->
+    {% if f_temp %}<input type="hidden" name="temp" value="{{ f_temp }}">{% endif %}
+    {% if f_origin %}<input type="hidden" name="origin" value="{{ f_origin }}">{% endif %}
+
+    <div class="row">
+      <div class="field">
+        <label>Search name / email / phone</label>
+        <input type="text" name="q" value="{{ f_q }}" placeholder="anything..." style="min-width:240px;">
+      </div>
+      <div class="field">
+        <label>Source</label>
+        <select name="source" onchange="this.form.submit()">
+          <option value="">any</option>
+          <option value="public" {% if f_source == 'public' %}selected{% endif %}>public (signup)</option>
+          <option value="community" {% if f_source == 'community' %}selected{% endif %}>community</option>
+          <option value="ghl_import" {% if f_source == 'ghl_import' %}selected{% endif %}>GHL only</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Has tag</label>
+        <select name="tag" onchange="this.form.submit()">
+          <option value="">any</option>
+          {% for t in relevant_tags %}
+            <option value="{{ t }}" {% if f_tag == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Watched class (≥25%)</label>
+        <div class="checkbox-group">
+          <label class="checkbox-pill {% if f_class_1 %}checked{% endif %}">
+            <input type="checkbox" name="class_1" value="1" {% if f_class_1 %}checked{% endif %} onchange="this.form.submit()">
+            Class 1
+          </label>
+          <label class="checkbox-pill {% if f_class_2 %}checked{% endif %}">
+            <input type="checkbox" name="class_2" value="1" {% if f_class_2 %}checked{% endif %} onchange="this.form.submit()">
+            Class 2
+          </label>
+          <label class="checkbox-pill {% if f_class_3 %}checked{% endif %}">
+            <input type="checkbox" name="class_3" value="1" {% if f_class_3 %}checked{% endif %} onchange="this.form.submit()">
+            Class 3
+          </label>
+          <label class="checkbox-pill {% if f_has_phone %}checked{% endif %}">
+            <input type="checkbox" name="has_phone" value="1" {% if f_has_phone %}checked{% endif %} onchange="this.form.submit()">
+            📱 Has phone
+          </label>
+        </div>
+      </div>
     </div>
-    <div class="field">
-      <label>Source</label>
-      <select name="source">
-        <option value="">any</option>
-        <option value="public" {% if f_source == 'public' %}selected{% endif %}>public (signup)</option>
-        <option value="community" {% if f_source == 'community' %}selected{% endif %}>community</option>
-        <option value="ghl_import" {% if f_source == 'ghl_import' %}selected{% endif %}>GHL only</option>
-      </select>
+
+    <!-- Active filter chips -->
+    {% if active_chips %}
+    <div class="active-chips">
+      {% for chip in active_chips %}
+        <a class="chip" href="{{ chip.url }}">{{ chip.label }} <span class="x">×</span></a>
+      {% endfor %}
+      <a class="chip chip-clear-all" href="{{ clear_all_url }}">clear all <span class="x">×</span></a>
     </div>
-    <div class="field">
-      <label>Has tag</label>
-      <select name="tag">
-        <option value="">any</option>
-        {% for t in relevant_tags %}
-          <option value="{{ t }}" {% if f_tag == t %}selected{% endif %}>{{ t }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="field">
-      <label>Temperature</label>
-      <select name="temp">
-        <option value="">any</option>
-        <option value="cold"     {% if f_temp == 'cold'     %}selected{% endif %}>🧊 Cold</option>
-        <option value="cool"     {% if f_temp == 'cool'     %}selected{% endif %}>❄ Cool</option>
-        <option value="warm"     {% if f_temp == 'warm'     %}selected{% endif %}>🌡 Warm</option>
-        <option value="hot"      {% if f_temp == 'hot'      %}selected{% endif %}>🚀 Hot</option>
-        <option value="burning"  {% if f_temp == 'burning'  %}selected{% endif %}>🔥 Burning</option>
-        <option value="customer" {% if f_temp == 'customer' %}selected{% endif %}>💎 Customer</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>Min class watched</label>
-      <select name="class_min">
-        <option value="">any</option>
-        <option value="25" {% if f_class_min == 25 %}selected{% endif %}>≥ 25%</option>
-        <option value="50" {% if f_class_min == 50 %}selected{% endif %}>≥ 50%</option>
-        <option value="75" {% if f_class_min == 75 %}selected{% endif %}>≥ 75%</option>
-        <option value="95" {% if f_class_min == 95 %}selected{% endif %}>≥ 95%</option>
-      </select>
-    </div>
-    <div class="checkbox">
-      <input type="checkbox" name="has_phone" value="1" {% if f_has_phone %}checked{% endif %} id="has_phone">
-      <label for="has_phone" style="margin:0; color:#C9CFD4;">Has phone</label>
-    </div>
-    <div>
-      <button type="submit">Apply</button>
-      <a href="{{ url_for('admin.leads') }}" class="clear">clear</a>
-    </div>
+    {% endif %}
   </form>
 
-  <!-- Table -->
-  <div style="overflow-x:auto; border:1px solid rgba(46,219,153,0.18); border-radius:6px;">
+  <!-- ────────────────────────────────────────────────────────────
+       TABLE
+       ──────────────────────────────────────────────────────────── -->
+  <div class="leads-table-wrap">
     <table class="leads-table">
       <thead>
         <tr>
-          <th style="width:24%;">Lead</th>
-          <th style="width:9%;">Source</th>
+          <th style="width:22%;">Lead</th>
+          <th style="width:8%;">Source</th>
+          <th style="width:10%;">Origin</th>
           <th style="width:12%;">Tags</th>
           <th style="width:13%;">Temperature</th>
-          <th style="width:14%;">Class progress</th>
-          <th style="width:10%;">Country</th>
-          <th style="width:18%;">Actions</th>
+          <th style="width:13%;">Classes</th>
+          <th style="width:8%;">Country</th>
+          <th style="width:14%;">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -264,11 +377,17 @@
               </div>
               <div class="lead-email">{{ amb.email }}</div>
               {% if amb.phone_number %}
-                <div style="color:#6B7280; font-size:10px; margin-top:2px;">{{ amb.phone_number }}</div>
+                <div class="lead-phone">{{ amb.phone_number }}</div>
               {% endif %}
             </td>
             <td>
               <span class="badge badge-source-{{ amb.source or 'public' }}">{{ amb.source or 'public' }}</span>
+            </td>
+            <td>
+              <span class="origin-pill">{{ t.source_info.emoji }} {{ t.source_info.label }}</span>
+              {% if amb.utm_campaign %}
+                <div style="color:#6B7280; font-size:10px; margin-top:3px;">{{ amb.utm_campaign }}</div>
+              {% endif %}
             </td>
             <td>
               {% if amb.ghl_tags %}
@@ -312,18 +431,18 @@
             </td>
             <td class="actions-cell">
               {% if amb.phone_number and t.wa_msg_url %}
-                <a class="action-btn action-wa" href="https://wa.me/{{ amb.phone_number|replace('+','') }}?text={{ t.wa_msg_url }}" target="_blank" title="Open WhatsApp with contextual message">📱 WA</a>
+                <a class="action-btn action-wa" href="https://wa.me/{{ amb.phone_number|replace('+','') }}?text={{ t.wa_msg_url }}" target="_blank" title="WhatsApp w/ contextual message">📱 WA</a>
               {% else %}
                 <span class="action-btn action-wa disabled" title="No phone">📱 WA</span>
               {% endif %}
               {% if amb.ghl_contact_id %}
                 <a class="action-btn action-detail" href="https://app.gohighlevel.com/v2/location/CrneQsu72gpHGTOMzRGd/contacts/detail/{{ amb.ghl_contact_id }}" target="_blank" title="Open in GHL">↗ GHL</a>
               {% endif %}
-              <a class="action-btn action-detail" href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}">→ Detail</a>
+              <a class="action-btn action-detail" href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}">→</a>
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="7" style="padding:30px; text-align:center; color:#9CA3AF;">No leads match the current filters.</td></tr>
+          <tr><td colspan="8" style="padding:30px; text-align:center; color:#9CA3AF;">No leads match the current filters.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -346,4 +465,20 @@
   {% endif %}
 
 </div>
+
+<script>
+// Submit search input on Enter (keep typing experience smooth)
+document.querySelector('input[name="q"]')?.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); this.form.submit(); }
+});
+// Also blur (= clicking elsewhere) submits if value changed
+(function() {
+    var input = document.querySelector('input[name="q"]');
+    if (!input) return;
+    var initial = input.value;
+    input.addEventListener('blur', function() {
+        if (input.value !== initial) input.form.submit();
+    });
+})();
+</script>
 {% endblock %}
