@@ -54,36 +54,83 @@ def _safe(fn, default, *args, **kwargs):
 # Marketing helpers — segments + chart data
 # ════════════════════════════════════════════════════════════════════
 
+# Funnel events used by the SQL-aggregation classification helpers.
+_FUNNEL_EVENT_KEYS = [
+    "purchase_completed",
+    "webinar_joined",
+    "class1_completed", "class2_completed", "class3_completed",
+    "class1_progress_95", "class2_progress_95", "class3_progress_95",
+    "class1_progress_75", "class2_progress_75", "class3_progress_75",
+    "class1_progress_50", "class2_progress_50", "class3_progress_50",
+    "class1_progress_25", "class2_progress_25", "class3_progress_25",
+    "class1_viewed", "class2_viewed", "class3_viewed",
+]
+
+
+def _email_to_bucket(evts: set) -> str:
+    """Approximate temperature bucket per lead from their event set.
+
+    Tuned for **launch day**: a single class_completed promotes the lead
+    to burning (used to require 2+ for burning). Temperature scoring in
+    compute_temperature() still uses the calibrated 160+ threshold for
+    burning — this only drives the headline distribution counters.
+    """
+    if "purchase_completed" in evts:
+        return "customer"
+    if "webinar_joined" in evts:
+        return "burning"
+    if any(f"class{n}_completed" in evts for n in (1, 2, 3)):
+        return "burning"
+    if any(f"class{n}_progress_{p}" in evts for n in (1, 2, 3) for p in (75, 95)):
+        return "hot"
+    if any(f"class{n}_progress_50" in evts for n in (1, 2, 3)):
+        return "warm"
+    if any(f"class{n}_progress_25" in evts or f"class{n}_viewed" in evts
+           for n in (1, 2, 3)):
+        return "cool"
+    return "cold"
+
+
+def _emails_in_temp_bucket(bucket: str) -> set:
+    """Return the set of (lowercased) emails that classify into the given
+    temperature bucket via SQL aggregation. Used by /admin/leads to
+    apply the temperature filter globally instead of just on the
+    current page slice.
+
+    Returns empty set on error (so a failing query becomes "no matches"
+    rather than 500-ing the whole page).
+    """
+    from app.models import LeadEvent
+    try:
+        rows = (
+            db.session.query(LeadEvent.email, LeadEvent.event_type)
+            .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
+            .distinct()
+            .all()
+        )
+    except Exception:
+        logger.exception("emails_in_temp_bucket query failed")
+        return set()
+
+    by_email = defaultdict(set)
+    for em, et in rows:
+        if em:
+            by_email[em.lower()].add(et)
+
+    return {em for em, evts in by_email.items() if _email_to_bucket(evts) == bucket}
+
+
 def _quick_temp_dist_sql():
     """Approximate temperature distribution via SQL aggregation.
 
-    Buckets each ambassador by the strongest behavioural event they have:
-      purchase_completed              → customer
-      webinar_joined                  → burning
-      classN_completed (any N)        → hot   (or burning if multiple classes)
-      classN_progress_50/75/95        → warm
-      classN_viewed/progress_25       → cool
-      no class events                 → cold
-
-    Returns dict {bucket_key: count}. Used by /admin/leads to power the
-    clickable distribution cards without scoring every lead in Python.
+    Uses the launch-day-friendly _email_to_bucket() classification (any
+    class_completed → burning). Returns dict {bucket_key: count}.
     """
     from app.models import LeadEvent, Ambassador
 
-    # Pull distinct (email, event_type) pairs for class/webinar/purchase events
-    EVENTS = [
-        "purchase_completed",
-        "webinar_joined",
-        "class1_completed", "class2_completed", "class3_completed",
-        "class1_progress_95", "class2_progress_95", "class3_progress_95",
-        "class1_progress_75", "class2_progress_75", "class3_progress_75",
-        "class1_progress_50", "class2_progress_50", "class3_progress_50",
-        "class1_progress_25", "class2_progress_25", "class3_progress_25",
-        "class1_viewed", "class2_viewed", "class3_viewed",
-    ]
     rows = (
         db.session.query(LeadEvent.email, LeadEvent.event_type)
-        .filter(LeadEvent.event_type.in_(EVENTS))
+        .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
         .distinct()
         .all()
     )
@@ -92,26 +139,15 @@ def _quick_temp_dist_sql():
         if em:
             by_email[em.lower()].add(et)
 
-    # Total reachable ambassadors (for cold count).
     total_reachable = (
         Ambassador.query.filter(Ambassador.unsubscribed_at.is_(None)).count()
     )
 
     counts = {"customer": 0, "burning": 0, "hot": 0, "warm": 0, "cool": 0, "cold": 0}
     for em, evts in by_email.items():
-        if "purchase_completed" in evts:
-            counts["customer"] += 1
-        elif "webinar_joined" in evts:
-            counts["burning"] += 1
-        elif any(f"class{n}_completed" in evts for n in (1, 2, 3)):
-            # Multiple full classes → burning, single class → hot
-            n_completed = sum(1 for n in (1, 2, 3) if f"class{n}_completed" in evts)
-            counts["burning" if n_completed >= 2 else "hot"] += 1
-        elif any(f"class{n}_progress_{p}" in evts for n in (1, 2, 3) for p in (50, 75, 95)):
-            counts["warm"] += 1
-        elif any(f"class{n}_progress_25" in evts or f"class{n}_viewed" in evts
-                 for n in (1, 2, 3)):
-            counts["cool"] += 1
+        bucket = _email_to_bucket(evts)
+        if bucket in counts:
+            counts[bucket] += 1
 
     cold = max(0, total_reachable - sum(counts.values()))
     counts["cold"] = cold
@@ -738,7 +774,12 @@ def _admin_layout_context():
     render placeholders gracefully when a section hasn't shipped yet).
     """
     ctx = {
-        "admin_routes": ["overview", "live", "emails", "security", "reach"],
+        # Routes whose nav-link is enabled in the sidebar. Missing keys
+        # render as href="#" (admin_base.html fallback).
+        "admin_routes": [
+            "overview", "live", "emails", "security", "reach",
+            "leads", "leads_insights",
+        ],
         "pending_review_count": PendingReferral.query.filter_by(status="pending").count(),
     }
     # Campaign close countdown — short label like "T-7D" or "6H".
@@ -3384,22 +3425,8 @@ def leads_insights():
         if em:
             by_email[em.lower()].add(et)
 
-    def _email_to_bucket(evts):
-        if "purchase_completed" in evts:
-            return "customer"
-        if "webinar_joined" in evts:
-            return "burning"
-        n_completed = sum(1 for n in (1, 2, 3) if f"class{n}_completed" in evts)
-        if n_completed >= 2:
-            return "burning"
-        if n_completed == 1:
-            return "hot"
-        if any(f"class{n}_progress_{p}" in evts for n in (1, 2, 3) for p in (50, 75, 95)):
-            return "warm"
-        if any(f"class{n}_progress_25" in evts or f"class{n}_viewed" in evts
-               for n in (1, 2, 3)):
-            return "cool"
-        return "cold"
+    # Use the module-level launch-day classifier for consistency with
+    # /admin/leads + /admin/plf-status. (Local closure removed.)
 
     # Step 2: pull Ambassador → utm columns map (single query)
     amb_origin_rows = _safe(
@@ -3711,6 +3738,18 @@ def leads():
     if has_phone:
         base = base.filter(Ambassador.phone_number.isnot(None))
 
+    # ── Global temperature filter via SQL (resolves before pagination) ──
+    # Without this, the temp filter only narrowed the current page slice
+    # and missed leads on other pages. Now we resolve the full set of
+    # matching emails once and pass it to the base query.
+    if temp_bucket:
+        target_emails = _emails_in_temp_bucket(temp_bucket)
+        if target_emails:
+            base = base.filter(func.lower(Ambassador.email).in_(target_emails))
+        else:
+            # No matches → force empty result (avoids returning unfiltered)
+            base = base.filter(Ambassador.id == -1)
+
     # PERF: per-class filters via SQL EXISTS subquery on lead_events,
     # not Python after loading everyone. ≥25% means the lead has any
     # of the relevant progress events for that class.
@@ -3804,15 +3843,55 @@ def leads():
         t["source_info"] = classify_source(a)
         rows_with_temp.append((a, t))
 
-    # If a temperature-bucket filter is active, narrow the page (best-effort).
-    # This loses precision (only filters the current page slice), but it's
-    # the price we pay for not scoring all 2,500 every request. For exact
-    # global temp filtering, the Insights page is the right tool.
-    if temp_bucket:
-        rows_with_temp = [
-            (a, t) for a, t in rows_with_temp
-            if temp_label_to_key(t["bucket"]) == temp_bucket
-        ]
+    # Temperature-bucket filter is already applied at the DB-filter
+    # stage (see _emails_in_temp_bucket() upstream). The page slice is
+    # already correctly narrowed.
+
+    # ── PLF counters at the top: distinct emails per class & webinar ──
+    # Single SQL aggregation; matches the numbers shown on /admin/plf-status.
+    from app.models import LeadEvent
+    plf_counter_keys = [
+        # Started = viewed gate OR any progress
+        "class1_viewed", "class1_progress_25", "class1_progress_50", "class1_progress_75",
+        "class1_progress_95", "class1_completed",
+        "class2_viewed", "class2_progress_25", "class2_progress_50", "class2_progress_75",
+        "class2_progress_95", "class2_completed",
+        "class3_viewed", "class3_progress_25", "class3_progress_50", "class3_progress_75",
+        "class3_progress_95", "class3_completed",
+        "webinar_joined",
+    ]
+    plf_rows = _safe(
+        lambda: db.session.query(LeadEvent.event_type, func.count(func.distinct(LeadEvent.email)))
+            .filter(LeadEvent.event_type.in_(plf_counter_keys))
+            .group_by(LeadEvent.event_type)
+            .all(),
+        [],
+    )
+    _ev_counts = {k: 0 for k in plf_counter_keys}
+    for et, n in plf_rows:
+        _ev_counts[et] = n
+
+    def _started_class(n):
+        return _safe(
+            lambda: db.session.query(func.count(func.distinct(LeadEvent.email)))
+                .filter(LeadEvent.event_type.in_([
+                    f"class{n}_viewed",
+                    f"class{n}_progress_25", f"class{n}_progress_50",
+                    f"class{n}_progress_75", f"class{n}_progress_95",
+                    f"class{n}_completed",
+                ])).scalar() or 0,
+            0,
+        )
+
+    plf_counters = {
+        "class1_started": _started_class(1),
+        "class1_completed": _ev_counts["class1_completed"],
+        "class2_started": _started_class(2),
+        "class2_completed": _ev_counts["class2_completed"],
+        "class3_started": _started_class(3),
+        "class3_completed": _ev_counts["class3_completed"],
+        "webinar_joined": _ev_counts["webinar_joined"],
+    }
 
     # ── Distributions: lightweight SQL approximations (not from scoring) ──
     # These power the clickable cards at the top. They count distinct
@@ -3877,6 +3956,7 @@ def leads():
         f_class_min=class_min,
         relevant_tags=sorted(RELEVANT_LEAD_TAGS),
         lookup_country=lookup_country,
+        plf_counters=plf_counters,
         active_chips=active_chips,
         clear_all_url=url_for("admin.leads"),
         active_section="leads",

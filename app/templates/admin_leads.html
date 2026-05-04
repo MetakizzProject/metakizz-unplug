@@ -264,6 +264,42 @@
   </div>
 
   <!-- ────────────────────────────────────────────────────────────
+       PLF FUNNEL COUNTERS — class & webinar (live SQL counts)
+       Each card is clickable and pre-applies the corresponding filter.
+       ──────────────────────────────────────────────────────────── -->
+  <div class="section-label">▌ PLF · who reached each stage</div>
+  <div class="cards-row" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+    <a href="?class_1=1" class="filter-card" style="--accent: #2EDB99;">
+      <div class="label">📺 Class 1 started</div>
+      <div class="value">{{ plf_counters.class1_started }}</div>
+      <div style="color:#9CA3AF; font-size:10px; margin-top:4px; letter-spacing:0.1em;">
+        ✓ <span style="color:#2EDB99; font-weight:bold;">{{ plf_counters.class1_completed }}</span> completed
+      </div>
+    </a>
+    <a href="?class_2=1" class="filter-card" style="--accent: #FFC857;">
+      <div class="label">📺 Class 2 started</div>
+      <div class="value" style="color:#FFC857;">{{ plf_counters.class2_started }}</div>
+      <div style="color:#9CA3AF; font-size:10px; margin-top:4px; letter-spacing:0.1em;">
+        ✓ <span style="color:#FFC857; font-weight:bold;">{{ plf_counters.class2_completed }}</span> completed
+      </div>
+    </a>
+    <a href="?class_3=1" class="filter-card" style="--accent: #F97316;">
+      <div class="label">📺 Class 3 started</div>
+      <div class="value" style="color:#F97316;">{{ plf_counters.class3_started }}</div>
+      <div style="color:#9CA3AF; font-size:10px; margin-top:4px; letter-spacing:0.1em;">
+        ✓ <span style="color:#F97316; font-weight:bold;">{{ plf_counters.class3_completed }}</span> completed
+      </div>
+    </a>
+    <div class="stat-card" style="--accent: #DC2626;">
+      <div class="label">🎤 Joined live webinar</div>
+      <div class="value" style="color:#DC2626; text-shadow: 0 0 12px rgba(220,38,38,0.5);">{{ plf_counters.webinar_joined }}</div>
+      <div style="color:#9CA3AF; font-size:10px; margin-top:4px; letter-spacing:0.1em;">
+        live attendance
+      </div>
+    </div>
+  </div>
+
+  <!-- ────────────────────────────────────────────────────────────
        TEMPERATURE DISTRIBUTION (clickable filters)
        ──────────────────────────────────────────────────────────── -->
   <div class="section-label">▌ Temperature · click to filter</div>
