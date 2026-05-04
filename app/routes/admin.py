@@ -2934,6 +2934,179 @@ def sync_ghl():
 # LEADS DASHBOARD — filtered + temperature-scored view of all leads
 # ════════════════════════════════════════════════════════════════════
 
+@admin_bp.route("/plf-status")
+def plf_status():
+    """Lightweight PLF tracking diagnostic — single-query aggregates.
+
+    Built specifically for "is class viewing being recorded?" question
+    during the launch. NO scoring, NO N+1 risk, NO memory pressure.
+    Just SQL COUNT(DISTINCT email) per event type. Renders in <100ms
+    even with millions of events.
+    """
+    from app.models import LeadEvent
+
+    # Single SQL aggregate over distinct emails for the PLF funnel events.
+    funnel_event_types = [
+        "class1_viewed", "class1_progress_25", "class1_progress_50",
+        "class1_progress_75", "class1_progress_95", "class1_completed",
+        "class2_viewed", "class2_progress_25", "class2_progress_50",
+        "class2_progress_75", "class2_progress_95", "class2_completed",
+        "class3_viewed", "class3_progress_25", "class3_progress_50",
+        "class3_progress_75", "class3_progress_95", "class3_completed",
+        "webinar_link_clicked", "webinar_joined",
+        "purchase_completed",
+    ]
+    rows = (
+        db.session.query(LeadEvent.event_type, func.count(func.distinct(LeadEvent.email)))
+        .filter(LeadEvent.event_type.in_(funnel_event_types))
+        .group_by(LeadEvent.event_type)
+        .all()
+    )
+    counts = {et: 0 for et in funnel_event_types}
+    for et, n in rows:
+        counts[et] = n
+
+    # Total events of any type, plus events in the last hour (live signal)
+    total_events = db.session.query(func.count(LeadEvent.id)).scalar() or 0
+    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    last_hour_count = (
+        db.session.query(func.count(LeadEvent.id))
+        .filter(LeadEvent.created_at >= one_hour_ago)
+        .scalar() or 0
+    )
+    five_min_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
+    last_5min_count = (
+        db.session.query(func.count(LeadEvent.id))
+        .filter(LeadEvent.created_at >= five_min_ago)
+        .scalar() or 0
+    )
+
+    # Latest 10 events to show "live feed" — minimal columns only
+    latest_rows = (
+        db.session.query(
+            LeadEvent.created_at, LeadEvent.email,
+            LeadEvent.event_type, LeadEvent.pct,
+        )
+        .order_by(LeadEvent.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    def _bar(n, max_n):
+        if max_n == 0:
+            return ""
+        pct = int(round(100 * n / max_n))
+        bar_len = int(round(pct / 2))  # 50 chars max
+        return f"{'█' * bar_len}{'░' * (50 - bar_len)} {pct}%"
+
+    # Build funnel rows for class 1, 2, 3, webinar, purchase
+    class1_max = max(counts["class1_viewed"], 1)
+    class2_max = max(counts["class2_viewed"], 1)
+    class3_max = max(counts["class3_viewed"], 1)
+
+    rows_html = []
+    def _add_row(label, n, max_for_bar, color="#2EDB99"):
+        bar = _bar(n, max_for_bar) if max_for_bar > 0 else ""
+        rows_html.append(f"""
+        <tr>
+          <td style="padding:10px 14px;color:#fff;font-family:'Share Tech Mono',monospace;">{label}</td>
+          <td style="padding:10px 14px;color:{color};font-family:'Orbitron',sans-serif;font-weight:900;font-size:18px;text-align:right;text-shadow:0 0 10px rgba(46,219,153,0.4);">{n}</td>
+          <td style="padding:10px 14px;color:#6B7280;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:0.5px;">{bar}</td>
+        </tr>""")
+
+    _add_row("▌ Class 1 — Viewed (gate)",   counts["class1_viewed"],   class1_max)
+    _add_row("→ 25% watched",                counts["class1_progress_25"], class1_max)
+    _add_row("→ 50% watched",                counts["class1_progress_50"], class1_max, "#FFC857")
+    _add_row("→ 75% watched",                counts["class1_progress_75"], class1_max, "#FFC857")
+    _add_row("→ 95% watched",                counts["class1_progress_95"], class1_max, "#F97316")
+    _add_row("→ Completed",                  counts["class1_completed"], class1_max, "#DC2626")
+    rows_html.append('<tr><td colspan="3" style="padding:8px 0;"></td></tr>')
+    _add_row("▌ Class 2 — Viewed",           counts["class2_viewed"],   class2_max)
+    _add_row("→ 50% watched",                counts["class2_progress_50"], class2_max, "#FFC857")
+    _add_row("→ 95% watched",                counts["class2_progress_95"], class2_max, "#F97316")
+    _add_row("→ Completed",                  counts["class2_completed"], class2_max, "#DC2626")
+    rows_html.append('<tr><td colspan="3" style="padding:8px 0;"></td></tr>')
+    _add_row("▌ Class 3 — Viewed",           counts["class3_viewed"],   class3_max)
+    _add_row("→ 50% watched",                counts["class3_progress_50"], class3_max, "#FFC857")
+    _add_row("→ Completed",                  counts["class3_completed"], class3_max, "#DC2626")
+    rows_html.append('<tr><td colspan="3" style="padding:8px 0;"></td></tr>')
+    _add_row("▌ Webinar — Link clicked",     counts["webinar_link_clicked"], max(counts["class1_viewed"], 1))
+    _add_row("▌ Webinar — Joined",           counts["webinar_joined"], max(counts["class1_viewed"], 1), "#A78BFA")
+    _add_row("▌ Purchase — Completed",       counts["purchase_completed"], max(counts["class1_viewed"], 1), "#A78BFA")
+
+    latest_html = []
+    for ts, em, et, pct in latest_rows:
+        ts_str = ts.strftime("%H:%M:%S") if ts else "—"
+        pct_str = f" · {pct}%" if pct is not None else ""
+        latest_html.append(f"""
+        <tr>
+          <td style="padding:6px 12px;color:#9CA3AF;font-size:11px;">{ts_str}</td>
+          <td style="padding:6px 12px;color:#FFC857;font-size:11px;">{et}{pct_str}</td>
+          <td style="padding:6px 12px;color:#fff;font-size:11px;">{em or '—'}</td>
+        </tr>""")
+
+    pulse_class = "live" if last_5min_count > 0 else "idle"
+    pulse_color = "#2EDB99" if last_5min_count > 0 else "#6B7280"
+
+    html = f"""<!doctype html>
+<html><head>
+<meta charset="utf-8"/>
+<meta http-equiv="refresh" content="10">
+<title>PLF Status · MetaKizz</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+ body {{ background:#000;color:#fff;font-family:'Share Tech Mono',monospace;padding:24px;max-width:1100px;margin:0 auto; }}
+ h1 {{ color:#2EDB99;font-family:'Orbitron',sans-serif;font-weight:900;font-size:24px;letter-spacing:2px;text-transform:uppercase;margin:0 0 6px 0;text-shadow:0 0 14px rgba(46,219,153,0.4); }}
+ .sub {{ color:#9CA3AF;font-size:11px;letter-spacing:0.25em;text-transform:uppercase;margin-bottom:24px; }}
+ .pulse {{ display:inline-block;padding:4px 12px;background:rgba(46,219,153,0.15);border:1px solid {pulse_color};border-radius:4px;color:{pulse_color};font-size:11px;letter-spacing:0.2em;text-transform:uppercase; }}
+ .kpis {{ display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:32px; }}
+ .kpi {{ background:rgba(46,219,153,0.05);border:1px solid rgba(46,219,153,0.25);border-radius:8px;padding:14px 16px; }}
+ .kpi .lbl {{ color:#9CA3AF;font-size:10px;letter-spacing:0.2em;text-transform:uppercase; }}
+ .kpi .num {{ font-family:'Orbitron',sans-serif;font-weight:900;font-size:28px;color:#2EDB99;text-shadow:0 0 12px rgba(46,219,153,0.4);margin-top:2px; }}
+ table {{ width:100%;border-collapse:collapse; }}
+ .funnel-table th {{ text-align:left;padding:10px 14px;color:#2EDB99;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;border-bottom:1px solid rgba(46,219,153,0.3); }}
+ .funnel-table tbody tr {{ border-bottom:1px solid rgba(255,255,255,0.04); }}
+ .latest-table th {{ text-align:left;padding:8px 12px;color:#2EDB99;font-size:9px;letter-spacing:0.2em;text-transform:uppercase;border-bottom:1px solid rgba(46,219,153,0.3); }}
+ a {{ color:#2EDB99; }}
+ .section-label {{ font-family:'Share Tech Mono',monospace;font-size:9px;color:#6B7280;letter-spacing:0.3em;text-transform:uppercase;margin:28px 0 8px 0; }}
+</style>
+</head><body>
+<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px;">
+  <div>
+    <h1>▌ PLF Status</h1>
+    <p class="sub">▌ live tracking · auto-refresh 10s</p>
+  </div>
+  <span class="pulse">● {pulse_class.upper()} · {last_5min_count} events / 5m</span>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Total events</div><div class="num">{total_events}</div></div>
+  <div class="kpi"><div class="lbl">Last hour</div><div class="num">{last_hour_count}</div></div>
+  <div class="kpi"><div class="lbl">Last 5 min</div><div class="num">{last_5min_count}</div></div>
+</div>
+
+<div class="section-label">▌ Funnel · distinct emails per event</div>
+<table class="funnel-table">
+  <thead><tr><th>Step</th><th style="text-align:right;">Count</th><th>vs class viewed</th></tr></thead>
+  <tbody>{''.join(rows_html)}</tbody>
+</table>
+
+<div class="section-label">▌ Latest 10 events</div>
+<table class="latest-table">
+  <thead><tr><th>Time UTC</th><th>Event</th><th>Email</th></tr></thead>
+  <tbody>{''.join(latest_html) if latest_html else '<tr><td colspan="3" style="padding:14px;color:#9CA3AF;">No events yet</td></tr>'}</tbody>
+</table>
+
+<p style="margin-top:32px;font-size:11px;color:#4B5563;">
+  <a href="/admin/leads-debug">▌ Lead events log</a> ·
+  <a href="/admin/leads">▌ Leads</a> ·
+  <a href="/admin/leads/insights">▌ Insights (heavy)</a> ·
+  <a href="/admin/">▌ Overview</a>
+</p>
+</body></html>"""
+    return html
+
+
 @admin_bp.route("/leads/insights")
 def leads_insights():
     """Marketer dashboard: funnel, source × temperature matrix, time-series,
@@ -3066,14 +3239,21 @@ def leads_insights():
     )[:10]
 
     # ── Activity time-series (last 48h, hourly) ──
+    # PERF: select ONLY the created_at column. Materializing full
+    # LeadEvent ORM objects (including the 5KB JSON `extra` field) for
+    # 5k+ rows was hammering memory + serialization. We just need to
+    # bucket timestamps into hours.
     from app.models import LeadEvent
     cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
-    recent_events = LeadEvent.query.filter(LeadEvent.created_at >= cutoff).all()
+    timestamp_rows = (
+        db.session.query(LeadEvent.created_at)
+        .filter(LeadEvent.created_at >= cutoff)
+        .all()
+    )
     activity_by_hour = defaultdict(int)
-    for e in recent_events:
-        if e.created_at:
-            # Bucket to hour boundary
-            hour_key = e.created_at.replace(minute=0, second=0, microsecond=0)
+    for (ts,) in timestamp_rows:
+        if ts:
+            hour_key = ts.replace(minute=0, second=0, microsecond=0)
             activity_by_hour[hour_key] += 1
     # Build a sorted series of (hour_iso, count) for the chart, filling gaps
     series = []

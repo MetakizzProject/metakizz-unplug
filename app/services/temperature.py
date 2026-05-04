@@ -213,16 +213,26 @@ def fetch_signals_bulk(ambassador_ids):
     """Pre-fetch LeadEvents and EmailEvents for a list of ambassador IDs in
     two queries, then return:
         (lead_events_by_id, email_events_by_id)
+
+    PERF: explicitly defer the heavy `extra` TEXT columns (raw JSON
+    payloads up to ~5KB per row). With 30k+ events in prod that field
+    alone could pile up to 150MB+ of data we never read, blowing past
+    Render's worker memory and dragging the page into a 500. The
+    defer() option tells SQLAlchemy to leave the column out of the
+    SELECT — it'll be lazy-loaded only if accessed.
     """
+    from sqlalchemy.orm import defer
     from app.models import LeadEvent, EmailEvent
 
     lead_evts = (
         LeadEvent.query
+        .options(defer(LeadEvent.extra))
         .filter(LeadEvent.ambassador_id.in_(ambassador_ids))
         .all()
     )
     email_evts = (
         EmailEvent.query
+        .options(defer(EmailEvent.extra))
         .filter(EmailEvent.ambassador_id.in_(ambassador_ids))
         .all()
     )
