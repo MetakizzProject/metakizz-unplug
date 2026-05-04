@@ -9,6 +9,7 @@ from flask import (
 )
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func, or_
+from sqlalchemy.orm import joinedload
 from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent
 from app.mailer import (
     send_welcome_email,
@@ -668,7 +669,8 @@ def security():
         }
 
     # High-risk ambassadors — sorted by suspicion score, top 30
-    all_amb = Ambassador.query.all()
+    # PERF: eager-load referrals so _compute_suspicion doesn't N+1.
+    all_amb = Ambassador.query.options(joinedload(Ambassador.referrals)).all()
     risk_rows = []
     for a in all_amb:
         risk = _compute_suspicion(a)
@@ -866,6 +868,7 @@ def emails():
     push_cutoff = datetime.now(timezone.utc) - timedelta(days=push_min_age) if push_min_age else None
     push_eligible = (
         Ambassador.query
+        .options(joinedload(Ambassador.referrals))  # PERF: avoid N+1 on referral_count
         .filter(Ambassador.unsubscribed_at.is_(None))
         .filter(Ambassador.activation_push_sent_at.is_(None))
         .all()
@@ -1015,10 +1018,17 @@ def index():
     channel = request.args.get("channel", "all")
     q = request.args.get("q", "").strip().lower()
 
+    # PERF: eager-load referrals so accessing `a.referrals` and
+    # `a.referral_count` later doesn't fire N+1 queries (one extra
+    # SQL per ambassador). With ~2500 ambassadors this turned a
+    # 100ms page into a 150s timeout in production. Single JOIN now.
+    base_query = Ambassador.query.options(joinedload(Ambassador.referrals))
+    all_amb_for_stats = base_query.all()
+
     if channel == "all":
-        ambassadors = Ambassador.query.all()
+        ambassadors = all_amb_for_stats  # reuse — don't re-query
     else:
-        ambassadors = Ambassador.query.filter_by(source=channel).all()
+        ambassadors = [a for a in all_amb_for_stats if a.source == channel]
 
     if q:
         ambassadors = [
@@ -1028,12 +1038,11 @@ def index():
 
     sorted_ambassadors = sorted(ambassadors, key=lambda a: a.referral_count, reverse=True)
 
-    # Top-line stats (computed across the FULL dataset, not the filtered view)
-    all_amb_for_stats = Ambassador.query.all()
+    # Top-line stats (cheap aggregate counts via SQL)
     total_referrals = Referral.query.count()
-    community_count = Ambassador.query.filter_by(source="community").count()
-    public_count = Ambassador.query.filter_by(source="public").count()
-    unsubscribed = Ambassador.query.filter(Ambassador.unsubscribed_at.isnot(None)).count()
+    community_count = sum(1 for a in all_amb_for_stats if a.source == "community")
+    public_count = sum(1 for a in all_amb_for_stats if a.source == "public")
+    unsubscribed = sum(1 for a in all_amb_for_stats if a.unsubscribed_at is not None)
     prizes_earned = MilestoneNotification.query.count()
     prizes_pending = MilestoneNotification.query.filter_by(delivered=False).count()
 
@@ -1048,9 +1057,11 @@ def index():
     # Engagement: how many ambassadors have opened their dashboard at least once
     visited = sum(1 for a in all_amb_for_stats if a.last_dashboard_visit_at is not None)
 
-    # Fraud risk per ambassador (only for the rows we'll actually render)
-    risk_by_id = {a.id: _compute_suspicion(a) for a in sorted_ambassadors}
-    high_risk_total = sum(1 for a in all_amb_for_stats if _compute_suspicion(a)["level"] == "high")
+    # PERF: compute suspicion ONCE per ambassador across all rows, then
+    # filter into per-row dict. Previously this ran twice per row → 2x N+1.
+    suspicion_by_id = {a.id: _compute_suspicion(a) for a in all_amb_for_stats}
+    risk_by_id = {a.id: suspicion_by_id[a.id] for a in sorted_ambassadors}
+    high_risk_total = sum(1 for s in suspicion_by_id.values() if s["level"] == "high")
 
     # How many velocity-throttled signups are sitting in the review queue
     pending_review_count = PendingReferral.query.filter_by(status="pending").count()
@@ -1513,7 +1524,8 @@ def _build_winners():
     Excludes ambassadors flagged under_review_at — they're hidden from
     the public leaderboard, so they shouldn't claim ranking prizes.
     """
-    all_amb = Ambassador.query.all()
+    # PERF: eager-load referrals so referral_count doesn't N+1
+    all_amb = Ambassador.query.options(joinedload(Ambassador.referrals)).all()
 
     # Pull existing delivery records once so we can decorate each winner
     deliveries = PrizeDelivery.query.all()
@@ -2879,7 +2891,9 @@ def leads_insights():
     )
 
     # ── Pull all leads (relevant ones) and score them ──
-    all_amb = Ambassador.query.all()
+    # PERF: eager-load referrals so compute_temperature's
+    # ambassador.referral_count doesn't trigger an SQL query per lead.
+    all_amb = Ambassador.query.options(joinedload(Ambassador.referrals)).all()
     ids = [a.id for a in all_amb]
     lead_evts_by_id, email_evts_by_id = fetch_signals_bulk(ids) if ids else ({}, {})
 
@@ -3105,7 +3119,10 @@ def leads():
     per_page   = 50
 
     # ── DB-level filters first (cheap) ──
-    base = Ambassador.query
+    # PERF: eager-load referrals — compute_temperature reads
+    # ambassador.referral_count which is a property hitting the DB
+    # without this. With ~2500 leads this turned the page into a timeout.
+    base = Ambassador.query.options(joinedload(Ambassador.referrals))
 
     if q:
         like = f"%{q}%"
