@@ -1,0 +1,513 @@
+{% extends "admin_base.html" %}
+{% set page_title = "Insights" %}
+
+{% block admin_content %}
+<style>
+.insights-shell { padding: 24px 28px 60px; max-width: 1500px; }
+
+/* ── Header ── */
+.insights-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 6px;
+}
+.insights-header h1 {
+    color: #fff; font-family: 'Orbitron', sans-serif; font-weight: 900;
+    font-size: 24px; letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 14px rgba(46,219,153,0.4); margin: 0;
+}
+.insights-header .links a {
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+    text-decoration: none; margin-left: 14px;
+}
+.insights-header .links a:hover { color: #2EDB99; }
+
+.insights-subtitle {
+    color: #6B7280; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase;
+    margin-bottom: 36px;
+}
+
+/* ── Section ── */
+.section {
+    margin-bottom: 44px;
+}
+.section-title {
+    font-family: 'Orbitron', sans-serif; font-weight: 800;
+    color: #fff; font-size: 16px; letter-spacing: 1.5px;
+    text-transform: uppercase; margin: 0 0 4px 0;
+    display: flex; align-items: baseline; gap: 12px;
+}
+.section-title .accent { color: #2EDB99; }
+.section-sub {
+    color: #6B7280; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    margin: 0 0 18px 0;
+}
+
+/* ── KPI tiles ── */
+.kpis {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px; margin-bottom: 36px;
+}
+.kpi {
+    background: linear-gradient(180deg, rgba(46,219,153,0.05), rgba(0,0,0,0.5));
+    border: 1px solid rgba(46,219,153,0.25);
+    border-radius: 8px; padding: 18px 20px;
+    box-shadow: 0 0 14px rgba(46,219,153,0.06);
+}
+.kpi.kpi-hot { border-color: rgba(220,38,38,0.45); box-shadow: 0 0 18px rgba(220,38,38,0.15); }
+.kpi.kpi-customer { border-color: rgba(167,139,250,0.5); box-shadow: 0 0 18px rgba(167,139,250,0.18); }
+
+.kpi .label {
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.kpi .big {
+    font-family: 'Orbitron', sans-serif; font-weight: 900;
+    font-size: 38px; line-height: 1; color: #fff;
+    text-shadow: 0 0 14px rgba(46,219,153,0.45);
+}
+.kpi.kpi-hot .big { color: #F97316; text-shadow: 0 0 14px rgba(249,115,22,0.55); }
+.kpi.kpi-customer .big { color: #A78BFA; text-shadow: 0 0 14px rgba(167,139,250,0.55); }
+.kpi .sub {
+    color: #C9CFD4; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; margin-top: 6px; letter-spacing: 0.1em;
+}
+
+/* ── Action Queue cards ── */
+.action-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 14px;
+}
+.action-card {
+    background: rgba(0,0,0,0.55); border: 1px solid rgba(220,38,38,0.35);
+    border-radius: 8px; padding: 16px;
+    box-shadow: 0 0 16px rgba(220,38,38,0.08);
+    display: flex; flex-direction: column; gap: 10px;
+    transition: all 160ms ease;
+}
+.action-card:hover {
+    border-color: #DC2626;
+    box-shadow: 0 0 28px rgba(220,38,38,0.25);
+    transform: translateY(-2px);
+}
+.action-card .top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+}
+.action-card .name {
+    font-family: 'Orbitron', sans-serif; font-weight: 700;
+    color: #fff; font-size: 14px; line-height: 1.3;
+}
+.action-card .name a { color: #fff; text-decoration: none; }
+.action-card .name a:hover { color: #2EDB99; }
+.action-card .email {
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace; font-size: 11px;
+}
+.action-card .signals {
+    color: #6B7280; font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 0.05em; line-height: 1.5;
+}
+.action-card .actions { display: flex; gap: 6px; margin-top: 4px; }
+.action-card .actions a {
+    flex: 1; text-align: center; padding: 8px;
+    text-decoration: none; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase;
+    border-radius: 4px; font-weight: bold;
+}
+.action-card .btn-wa { background: #25D366; color: #000; }
+.action-card .btn-wa:hover { background: #1ea857; }
+.action-card .btn-detail { background: rgba(46,219,153,0.15); color: #2EDB99; border: 1px solid rgba(46,219,153,0.4); }
+.action-card .btn-detail:hover { background: rgba(46,219,153,0.3); }
+
+.empty-action {
+    text-align: center; padding: 40px;
+    background: rgba(0,0,0,0.4); border: 1px dashed rgba(46,219,153,0.3);
+    border-radius: 8px;
+}
+.empty-action .icon { font-size: 36px; margin-bottom: 10px; }
+.empty-action .text {
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
+    font-size: 13px; letter-spacing: 0.1em;
+}
+
+/* ── Funnel ── */
+.funnel { display: flex; flex-direction: column; gap: 6px; }
+.funnel-row {
+    display: grid; grid-template-columns: 200px 1fr 110px;
+    gap: 12px; align-items: center;
+}
+.funnel-row .label {
+    color: #fff; font-family: 'Share Tech Mono', monospace;
+    font-size: 13px; letter-spacing: 0.05em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.funnel-bar-wrap {
+    height: 32px; background: rgba(0,0,0,0.4); border-radius: 4px;
+    position: relative; overflow: hidden;
+}
+.funnel-bar {
+    height: 100%; transition: width 800ms cubic-bezier(.22,.61,.36,1);
+    box-shadow: inset 0 0 12px rgba(255,255,255,0.1);
+    display: flex; align-items: center; padding: 0 12px;
+    font-family: 'Orbitron', sans-serif; font-weight: 700;
+    color: #000; font-size: 13px;
+}
+.funnel-row .meta {
+    text-align: right; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; color: #9CA3AF;
+}
+.funnel-row .dropoff {
+    color: #DC2626; font-weight: bold;
+}
+.funnel-row .dropoff.zero { color: #6B7280; }
+
+/* ── Matrix heatmap ── */
+.matrix-wrap { overflow-x: auto; }
+.matrix-table {
+    border-collapse: separate; border-spacing: 4px;
+    font-family: 'Share Tech Mono', monospace; font-size: 12px;
+    width: 100%;
+}
+.matrix-table th {
+    color: #2EDB99; font-size: 10px; letter-spacing: 0.18em;
+    text-transform: uppercase; padding: 8px 10px; font-weight: normal;
+    text-align: center;
+}
+.matrix-table th.origin-header {
+    text-align: left; color: #fff; font-size: 12px; letter-spacing: 0.05em;
+    text-transform: none;
+}
+.matrix-table td {
+    padding: 12px 10px; text-align: center; border-radius: 4px;
+    background: rgba(0,0,0,0.4); color: #C9CFD4;
+    font-weight: bold; min-width: 70px;
+}
+.matrix-table td.origin-cell {
+    text-align: left; background: transparent;
+    color: #fff; padding: 12px 10px;
+    font-size: 13px; letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+.matrix-table .total-cell {
+    background: rgba(46,219,153,0.15); color: #2EDB99;
+    font-family: 'Orbitron', sans-serif; font-weight: 900;
+    font-size: 16px;
+}
+.matrix-table .hot-pct {
+    color: #FFC857; font-size: 10px; margin-left: 4px;
+}
+
+/* ── Two-column row ── */
+.two-col {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 28px;
+}
+@media (max-width: 1100px) {
+    .two-col { grid-template-columns: 1fr; }
+}
+
+/* ── Time-series chart container ── */
+.chart-container {
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(46,219,153,0.18);
+    border-radius: 8px; padding: 18px; height: 280px;
+}
+
+/* ── Top countries / referrers tables ── */
+.lite-table { width: 100%; border-collapse: collapse; font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+.lite-table th {
+    color: #2EDB99; font-size: 10px; letter-spacing: 0.18em;
+    text-transform: uppercase; padding: 8px; text-align: left;
+    border-bottom: 1px solid rgba(46,219,153,0.3); font-weight: normal;
+}
+.lite-table td {
+    padding: 10px 8px; color: #C9CFD4;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.lite-table tr:hover td { background: rgba(46,219,153,0.04); }
+.lite-table .num {
+    font-family: 'Orbitron', sans-serif; font-weight: 900; color: #fff;
+}
+.lite-table .pct { color: #2EDB99; font-size: 11px; margin-left: 4px; }
+
+/* Pulse animation for action card border (drawing attention) */
+@keyframes actionPulse {
+    0%, 100% { box-shadow: 0 0 16px rgba(220,38,38,0.08); }
+    50%      { box-shadow: 0 0 28px rgba(220,38,38,0.25); }
+}
+.action-card { animation: actionPulse 3.5s ease-in-out infinite; }
+</style>
+
+<div class="insights-shell">
+
+  <div class="insights-header">
+    <h1>▌ Insights</h1>
+    <div class="links">
+      <a href="{{ url_for('admin.leads') }}">▌ All leads</a>
+      <a href="{{ url_for('admin.sync_ghl') }}">▌ Sync GHL</a>
+    </div>
+  </div>
+  <p class="insights-subtitle">▌ what's happening · what to do next</p>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       KPI TILES
+       ════════════════════════════════════════════════════════════════ -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="label">Total leads</div>
+      <div class="big">{{ total_leads }}</div>
+      <div class="sub">tracked across all sources</div>
+    </div>
+    <div class="kpi kpi-hot">
+      <div class="label">Hot + Burning</div>
+      <div class="big">{{ n_hot_or_burning }}</div>
+      <div class="sub">{{ pct_hot_burning }}% of leads · ready to convert</div>
+    </div>
+    <div class="kpi kpi-customer">
+      <div class="label">Customers</div>
+      <div class="big">{{ n_customers }}</div>
+      <div class="sub">{{ pct_customers }}% conversion</div>
+    </div>
+    <div class="kpi">
+      <div class="label">In Action Queue</div>
+      <div class="big">{{ action_queue|length }}</div>
+      <div class="sub">hot leads not contacted in 48h</div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       ACTION QUEUE — what to do RIGHT NOW
+       ════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <h2 class="section-title">⚡ <span class="accent">Action Queue</span></h2>
+    <p class="section-sub">▌ hot leads with phone, not contacted in the last 48h · contact these first</p>
+
+    {% if action_queue %}
+      <div class="action-grid">
+        {% for amb, t in action_queue %}
+          <div class="action-card">
+            <div class="top">
+              <div>
+                <div class="name"><a href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}">{{ amb.name or amb.email.split('@')[0] }}</a></div>
+                <div class="email">{{ amb.email }}</div>
+              </div>
+              <span style="background: {{ t.color }}; color:#fff; padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: bold; letter-spacing: 0.15em; white-space: nowrap;">{{ t.bucket }} · {{ t.score }}</span>
+            </div>
+            {% if t.signals %}
+              <div class="signals">▌ {{ t.signals|join(' · ') }}</div>
+            {% endif %}
+            <div class="actions">
+              <a class="btn-wa" href="https://wa.me/{{ amb.phone_number|replace('+','') }}?text={{ t.wa_msg_url }}" target="_blank">📱 WhatsApp</a>
+              <a class="btn-detail" href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}">→ Detail</a>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-action">
+        <div class="icon">🎉</div>
+        <div class="text">All hot leads contacted in the last 48h. Nothing urgent right now.</div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       FUNNEL — where leads drop off
+       ════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <h2 class="section-title">📊 <span class="accent">Conversion Funnel</span></h2>
+    <p class="section-sub">▌ each step shows how many leads reached it · drop-off in red</p>
+
+    <div class="funnel">
+      {% for step in funnel_steps %}
+        <div class="funnel-row">
+          <div class="label">{{ step.label }}</div>
+          <div class="funnel-bar-wrap">
+            <div class="funnel-bar" style="width: {{ step.pct_of_total }}%; background: {{ step.color }};">
+              {% if step.pct_of_total > 8 %}{{ step.count }} ({{ step.pct_of_total }}%){% endif %}
+            </div>
+          </div>
+          <div class="meta">
+            {% if step.pct_of_total <= 8 %}{{ step.count }} ({{ step.pct_of_total }}%) · {% endif %}
+            {% if step.dropoff_pct > 0 %}
+              <span class="dropoff">−{{ step.dropoff_pct }}%</span>
+            {% else %}
+              <span class="dropoff zero">—</span>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       SOURCE × TEMPERATURE MATRIX
+       ════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <h2 class="section-title">🔥 <span class="accent">Source × Temperature</span></h2>
+    <p class="section-sub">▌ which channels bring the hottest leads · invest accordingly</p>
+
+    <div class="matrix-wrap">
+      <table class="matrix-table">
+        <thead>
+          <tr>
+            <th class="origin-header">Origin</th>
+            {% for tk in temp_keys %}
+              {% set meta = temp_buckets[tk] %}
+              <th style="color: {{ meta.color }};">{{ meta.label }}</th>
+            {% endfor %}
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in matrix_rows %}
+            <tr>
+              <td class="origin-cell">{{ row.origin_label }}</td>
+              {% for tk in temp_keys %}
+                {% set count = row.by_temp[tk] %}
+                {% set meta = temp_buckets[tk] %}
+                {% if count > 0 %}
+                  <td style="background: {{ meta.tint }}; color: {{ meta.color }};">{{ count }}</td>
+                {% else %}
+                  <td style="color: #4B5563;">—</td>
+                {% endif %}
+              {% endfor %}
+              <td class="total-cell">
+                {{ row.total }}
+                <span class="hot-pct">· {{ row.hot_pct }}% hot</span>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="8" style="text-align:center; padding:20px; color:#6B7280;">No source data yet — UTMs will populate after the first sync.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       ACTIVITY TIMELINE (last 48h)
+       ════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <h2 class="section-title">📈 <span class="accent">Activity · last 48h</span></h2>
+    <p class="section-sub">▌ events per hour · spot peaks after each email send</p>
+
+    <div class="chart-container">
+      <canvas id="activityChart"></canvas>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       TOP COUNTRIES + TOP REFERRERS (two-column)
+       ════════════════════════════════════════════════════════════════ -->
+  <div class="two-col">
+    <div class="section">
+      <h2 class="section-title">🌍 <span class="accent">Top countries</span></h2>
+      <p class="section-sub">▌ where your leads live</p>
+      <table class="lite-table">
+        <thead>
+          <tr><th>Country</th><th>Leads</th><th>Hot</th><th>Watched C1</th></tr>
+        </thead>
+        <tbody>
+          {% for c in top_countries %}
+            <tr>
+              <td>{{ c.flag }} <strong style="color:#fff;">{{ c.name }}</strong></td>
+              <td><span class="num">{{ c.total }}</span></td>
+              <td><span class="num">{{ c.hot }}</span><span class="pct">{{ c.hot_pct }}%</span></td>
+              <td><span class="num">{{ c.class1 }}</span><span class="pct">{{ c.class1_pct }}%</span></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" style="text-align:center; padding:16px; color:#6B7280;">No country data yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">👥 <span class="accent">Top referrers</span></h2>
+      <p class="section-sub">▌ who's bringing the most leads</p>
+      <table class="lite-table">
+        <thead>
+          <tr><th>Ambassador</th><th>Refs</th><th>Temp</th></tr>
+        </thead>
+        <tbody>
+          {% for amb, t in top_referrers %}
+            <tr>
+              <td>
+                <a href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}" style="color:#fff; text-decoration:none;">{{ amb.name or amb.email.split('@')[0] }}</a>
+                <div style="color:#6B7280; font-size:10px; margin-top:2px;">{{ amb.email }}</div>
+              </td>
+              <td><span class="num">{{ amb.referral_count }}</span></td>
+              <td><span style="background: {{ t.color }}; color:#fff; padding: 2px 8px; border-radius: 3px; font-size: 9px; letter-spacing: 0.1em;">{{ t.bucket }}</span></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" style="text-align:center; padding:16px; color:#6B7280;">Nobody's referred anyone yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const ctx = document.getElementById('activityChart');
+if (ctx) {
+    const labels = {{ activity_series|map(attribute='label')|list|tojson }};
+    const data = {{ activity_series|map(attribute='count')|list|tojson }};
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Lead events',
+                data: data,
+                borderColor: '#2EDB99',
+                backgroundColor: 'rgba(46, 219, 153, 0.15)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 2,
+                pointHoverRadius: 6,
+                pointBackgroundColor: '#2EDB99',
+                pointBorderColor: '#000',
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#0a0f0a',
+                    borderColor: '#2EDB99',
+                    borderWidth: 1,
+                    titleColor: '#2EDB99',
+                    bodyColor: '#fff',
+                    titleFont: { family: 'Share Tech Mono', size: 11 },
+                    bodyFont: { family: 'Share Tech Mono', size: 12 },
+                    padding: 10,
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: '#9CA3AF', font: { family: 'Share Tech Mono', size: 10 },
+                        maxRotation: 0, autoSkip: true, maxTicksLimit: 12,
+                    },
+                    grid: { color: 'rgba(46,219,153,0.06)' }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: '#9CA3AF', font: { family: 'Share Tech Mono', size: 10 } },
+                    grid: { color: 'rgba(46,219,153,0.08)' }
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

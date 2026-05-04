@@ -2772,6 +2772,210 @@ def sync_ghl():
 # LEADS DASHBOARD — filtered + temperature-scored view of all leads
 # ════════════════════════════════════════════════════════════════════
 
+@admin_bp.route("/leads/insights")
+def leads_insights():
+    """Marketer dashboard: funnel, source × temperature matrix, time-series,
+    top countries, top referrers, action queue.
+
+    Designed to answer "what's happening + what should I do next" at a glance.
+    All charts compute live from the current LeadEvent + Ambassador state.
+    """
+    from app.services.temperature import (
+        compute_temperature, fetch_signals_bulk,
+        classify_source, SOURCE_BUCKETS, TEMP_BUCKETS, temp_label_to_key,
+    )
+
+    # ── Pull all leads (relevant ones) and score them ──
+    all_amb = Ambassador.query.all()
+    ids = [a.id for a in all_amb]
+    lead_evts_by_id, email_evts_by_id = fetch_signals_bulk(ids) if ids else ({}, {})
+
+    scored = []
+    for a in all_amb:
+        t = compute_temperature(
+            a,
+            lead_events=lead_evts_by_id.get(a.id, []),
+            email_events=email_evts_by_id.get(a.id, []),
+        )
+        t["source_info"] = classify_source(a)
+        scored.append((a, t))
+
+    # ── KPI tiles ──
+    total_leads = len(scored)
+    n_hot_or_burning = sum(1 for _, t in scored if temp_label_to_key(t["bucket"]) in ("hot", "burning"))
+    n_customers = sum(1 for _, t in scored if temp_label_to_key(t["bucket"]) == "customer")
+    pct_hot_burning = round(100 * n_hot_or_burning / total_leads, 1) if total_leads else 0
+    pct_customers = round(100 * n_customers / total_leads, 1) if total_leads else 0
+
+    # ── Funnel ──
+    n_class1 = sum(1 for _, t in scored if t["max_pct"].get(1, 0) >= 25)
+    n_class1_done = sum(1 for _, t in scored if t["max_pct"].get(1, 0) >= 95)
+    n_class2 = sum(1 for _, t in scored if t["max_pct"].get(2, 0) >= 25)
+    n_class2_done = sum(1 for _, t in scored if t["max_pct"].get(2, 0) >= 95)
+    n_class3 = sum(1 for _, t in scored if t["max_pct"].get(3, 0) >= 25)
+    n_class3_done = sum(1 for _, t in scored if t["max_pct"].get(3, 0) >= 95)
+    n_webinar = sum(
+        1 for a, _ in scored
+        if any(e.event_type == "webinar_joined" for e in lead_evts_by_id.get(a.id, []))
+    )
+    n_purchased = sum(
+        1 for a, _ in scored
+        if any(e.event_type == "purchase_completed" for e in lead_evts_by_id.get(a.id, []))
+    )
+
+    funnel_steps = [
+        {"label": "Registered",        "count": total_leads, "color": "#2EDB99"},
+        {"label": "Started Class 1",   "count": n_class1,    "color": "#2EDB99"},
+        {"label": "Finished Class 1",  "count": n_class1_done,"color": "#FFC857"},
+        {"label": "Started Class 2",   "count": n_class2,    "color": "#FFC857"},
+        {"label": "Finished Class 2",  "count": n_class2_done,"color": "#F97316"},
+        {"label": "Started Class 3",   "count": n_class3,    "color": "#F97316"},
+        {"label": "Finished Class 3",  "count": n_class3_done,"color": "#DC2626"},
+        {"label": "Joined Webinar",    "count": n_webinar,   "color": "#DC2626"},
+        {"label": "Purchased",         "count": n_purchased, "color": "#A78BFA"},
+    ]
+    # Compute drop-off % between consecutive steps + width % for visual bar
+    for i, step in enumerate(funnel_steps):
+        step["pct_of_total"] = round(100 * step["count"] / total_leads, 1) if total_leads else 0
+        if i == 0:
+            step["dropoff_pct"] = 0
+        else:
+            prev = funnel_steps[i - 1]["count"]
+            step["dropoff_pct"] = round(100 * (prev - step["count"]) / prev, 1) if prev else 0
+
+    # ── Temperature × Origin matrix ──
+    temp_keys = ["burning", "hot", "warm", "cool", "cold", "customer"]
+    origin_keys = [k for k, _ in SOURCE_BUCKETS]
+    matrix = {ok: {tk: 0 for tk in temp_keys} for ok in origin_keys}
+    for _, t in scored:
+        ok = t["source_info"]["key"]
+        tk = temp_label_to_key(t["bucket"])
+        if ok in matrix and tk in matrix[ok]:
+            matrix[ok][tk] += 1
+    # Only keep origins with at least 1 lead, sorted by total desc
+    matrix_rows = []
+    for ok, label in SOURCE_BUCKETS:
+        total = sum(matrix[ok].values())
+        if total > 0:
+            matrix_rows.append({
+                "origin_key": ok,
+                "origin_label": label,
+                "total": total,
+                "by_temp": matrix[ok],
+                "hot_pct": round(100 * (matrix[ok]["hot"] + matrix[ok]["burning"]) / total, 1) if total else 0,
+            })
+    matrix_rows.sort(key=lambda r: -r["total"])
+
+    # ── Top countries ──
+    country_stats = defaultdict(lambda: {"total": 0, "hot": 0, "class1": 0})
+    for a, t in scored:
+        if not a.country_code:
+            continue
+        country_stats[a.country_code]["total"] += 1
+        if temp_label_to_key(t["bucket"]) in ("hot", "burning"):
+            country_stats[a.country_code]["hot"] += 1
+        if t["max_pct"].get(1, 0) >= 25:
+            country_stats[a.country_code]["class1"] += 1
+
+    from app.services.phone import lookup_country
+    top_countries = []
+    for cc, stats in sorted(country_stats.items(), key=lambda kv: -kv[1]["total"])[:10]:
+        name, flag = lookup_country(cc)
+        top_countries.append({
+            "code": cc,
+            "name": name or cc,
+            "flag": flag,
+            "total": stats["total"],
+            "hot": stats["hot"],
+            "hot_pct": round(100 * stats["hot"] / stats["total"], 1) if stats["total"] else 0,
+            "class1": stats["class1"],
+            "class1_pct": round(100 * stats["class1"] / stats["total"], 1) if stats["total"] else 0,
+        })
+
+    # ── Top referrers ──
+    top_referrers = sorted(
+        [(a, t) for a, t in scored if a.referral_count and a.referral_count > 0],
+        key=lambda at: -at[0].referral_count,
+    )[:10]
+
+    # ── Activity time-series (last 48h, hourly) ──
+    from app.models import LeadEvent
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+    recent_events = LeadEvent.query.filter(LeadEvent.created_at >= cutoff).all()
+    activity_by_hour = defaultdict(int)
+    for e in recent_events:
+        if e.created_at:
+            # Bucket to hour boundary
+            hour_key = e.created_at.replace(minute=0, second=0, microsecond=0)
+            activity_by_hour[hour_key] += 1
+    # Build a sorted series of (hour_iso, count) for the chart, filling gaps
+    series = []
+    now_h = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    for h in range(48, 0, -1):
+        ts = now_h - timedelta(hours=h - 1)
+        series.append({"label": ts.strftime("%H:00"), "count": activity_by_hour.get(ts, 0)})
+
+    # ── Action Queue: top hot/burning leads with phone, not contacted recently ──
+    from app.models import LeadNote
+    contacted_ids = {
+        n.ambassador_id for n in
+        LeadNote.query.filter(
+            LeadNote.type.in_(["whatsapp_sent", "email_sent"]),
+            LeadNote.created_at >= datetime.now(timezone.utc) - timedelta(hours=48),
+        ).all()
+    }
+    action_queue = []
+    for a, t in sorted(scored, key=lambda at: -at[1]["score"]):
+        if a.id in contacted_ids:
+            continue
+        if temp_label_to_key(t["bucket"]) not in ("hot", "burning", "warm"):
+            continue
+        if not a.phone_number:
+            continue
+        action_queue.append((a, t))
+        if len(action_queue) >= 20:
+            break
+    # Pre-compute WA links for action queue
+    from urllib.parse import quote
+    from app.services.temperature import build_whatsapp_message
+    for a, t in action_queue:
+        msg = build_whatsapp_message(a, t)
+        t["wa_msg_url"] = quote(msg, safe="")
+
+    # Precompute rgba(r,g,b,0.15) strings per temperature bucket — Jinja
+    # can't do hex→rgb conversion inline. Used for matrix cell backgrounds.
+    def _hex_to_rgb_tint(hex_color, alpha=0.15):
+        hex_color = hex_color.lstrip("#")
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return f"rgba({r}, {g}, {b}, {alpha})"
+
+    temp_bucket_meta = {}
+    for k, l, c in TEMP_BUCKETS:
+        temp_bucket_meta[k] = {
+            "label": l, "color": c, "tint": _hex_to_rgb_tint(c, 0.15),
+        }
+
+    return render_template(
+        "admin_leads_insights.html",
+        total_leads=total_leads,
+        n_hot_or_burning=n_hot_or_burning,
+        n_customers=n_customers,
+        pct_hot_burning=pct_hot_burning,
+        pct_customers=pct_customers,
+        funnel_steps=funnel_steps,
+        matrix_rows=matrix_rows,
+        temp_keys=temp_keys,
+        temp_buckets=temp_bucket_meta,
+        top_countries=top_countries,
+        top_referrers=top_referrers,
+        activity_series=series,
+        action_queue=action_queue,
+        active_section="insights",
+    )
+
+
 @admin_bp.route("/leads")
 def leads():
     """Filterable list of leads with temperature scoring + class progress.

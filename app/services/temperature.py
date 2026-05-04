@@ -12,20 +12,42 @@ from typing import Dict, List, Optional, Any
 
 
 TEMP_WEIGHTS = {
-    "email_opened":          5,    # per open, capped
-    "email_opened_cap":      30,
-    "email_clicked":         10,   # per click, capped
-    "email_clicked_cap":     40,
-    "dashboard_visit":       3,    # per visit, capped
-    "dashboard_visit_cap":   30,
-    "referral_brought":      15,   # per real signup attributed
-    "class_25":              7,
-    "class_50":              12,
-    "class_75":              18,
-    "class_95_or_complete":  25,
-    "past_masterclass":      15,   # masterclass march17th tag
-    "webinar_attended":      40,   # future: webinar_joined event
-    "purchase_completed":    100,
+    # Passive signals — capped low. Opening an email is barely intent.
+    "email_opened":          3,
+    "email_opened_cap":      15,
+    "email_clicked":         8,    # click = active interest
+    "email_clicked_cap":     32,
+    "dashboard_visit":       4,    # came back to check status
+    "dashboard_visit_cap":   24,
+    # Active brand-building — they brought us a new person.
+    "referral_brought":      25,
+    # Class viewing — the strongest behavioural intent during the launch.
+    # Each class fully watched = 45 pts. All 3 fully = 135 pts.
+    "class_25":              10,
+    "class_50":              18,
+    "class_75":              30,
+    "class_95_or_complete":  45,
+    # Past content — they already invested attention with us once.
+    "past_masterclass":      20,
+    # Live webinar — highest non-purchase intent. Showing up live for an
+    # hour requires real commitment; this should dominate the score.
+    "webinar_attended":      80,
+    # Purchase — auto-bucket → Customer regardless of score.
+    "purchase_completed":    150,
+}
+
+
+# Bucket thresholds. Tuned so:
+#   - Just opening emails → Cold/Cool (passive)
+#   - Watching half of one class → Warm (curious)
+#   - Watching multiple classes → Hot (engaged)
+#   - Webinar attendance OR all 3 classes → Burning (high intent)
+TEMP_THRESHOLDS = {
+    "cold":    (0, 14),
+    "cool":    (15, 39),
+    "warm":    (40, 79),
+    "hot":     (80, 159),
+    "burning": (160, 10_000),
 }
 
 
@@ -152,16 +174,16 @@ def compute_temperature(
         score += TEMP_WEIGHTS["past_masterclass"]
         signals.append("attended past masterclass")
 
-    # ── Bucket ──
+    # ── Bucket ── (thresholds in TEMP_THRESHOLDS)
     if any(e.event_type == "purchase_completed" for e in lead_events):
         bucket, color = "💎 CUSTOMER", "#A78BFA"
-    elif score >= 100:
+    elif score >= TEMP_THRESHOLDS["burning"][0]:
         bucket, color = "🔥 BURNING", "#DC2626"
-    elif score >= 60:
+    elif score >= TEMP_THRESHOLDS["hot"][0]:
         bucket, color = "🚀 HOT", "#F97316"
-    elif score >= 30:
+    elif score >= TEMP_THRESHOLDS["warm"][0]:
         bucket, color = "🌡 WARM", "#FFC857"
-    elif score >= 10:
+    elif score >= TEMP_THRESHOLDS["cool"][0]:
         bucket, color = "❄ COOL", "#60A5FA"
     else:
         bucket, color = "🧊 COLD", "#6B7280"
