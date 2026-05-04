@@ -278,6 +278,27 @@ def sync_all_contacts(
                 v = cf.get(k)
                 if not getattr(amb, k, None) and v and isinstance(v, str):
                     setattr(amb, k, v[:200])
+
+            # Form-question answers — always overwrite (GHL is authoritative;
+            # if the user re-submits the form with a different answer, we
+            # want the new one). Length-cap to fit columns.
+            for k, max_len in (
+                ("dance_level", 200),
+                ("dance_goal", 500),
+                ("training_interest", 200),
+                ("is_community_member", 60),
+            ):
+                v = cf.get(k)
+                if v is None:
+                    continue
+                # Multi-options fields come back as lists — pick the
+                # joined string for display.
+                if isinstance(v, list):
+                    v = ", ".join(str(x) for x in v if x)
+                if isinstance(v, str) and v.strip():
+                    new_val = v.strip()[:max_len]
+                    if getattr(amb, k, None) != new_val:
+                        setattr(amb, k, new_val)
         except Exception:
             stats["errors"] += 1
             logger.exception("GHL sync row failed for email=%s", email)

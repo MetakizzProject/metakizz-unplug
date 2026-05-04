@@ -95,6 +95,16 @@ def _ensure_unsubscribe_columns(db):
         if "ghl_tags" not in cols:
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN ghl_tags TEXT"))
             logger.info("added column ambassadors.ghl_tags")
+        # Form-question answers mirrored from GHL custom fields.
+        for col_name, col_type in [
+            ("dance_level",         "VARCHAR(200)"),
+            ("dance_goal",          "VARCHAR(500)"),
+            ("training_interest",   "VARCHAR(200)"),
+            ("is_community_member", "VARCHAR(60)"),
+        ]:
+            if col_name not in cols:
+                conn.execute(text(f"ALTER TABLE ambassadors ADD COLUMN {col_name} {col_type}"))
+                logger.info("added column ambassadors.%s", col_name)
 
         # Attribution / UTM columns (added 2026-05-04 for the Leads tracker).
         # Populated either by the GHL signup webhook (when GHL custom-data

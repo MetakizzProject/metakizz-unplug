@@ -103,6 +103,15 @@ class Ambassador(db.Model):
     ghl_contact_id = db.Column(db.String(40), nullable=True, index=True)
     ghl_tags = db.Column(db.Text, nullable=True)
 
+    # Form-question answers from the Lovable signup form, mirrored
+    # from GHL custom fields. Stored as raw strings (the form answers
+    # are short multi-choice values, e.g. "I'm just getting started
+    # with UrbanKiz"). Used for segmentation in /admin/leads.
+    dance_level = db.Column(db.String(200), nullable=True, index=True)
+    dance_goal = db.Column(db.String(500), nullable=True)
+    training_interest = db.Column(db.String(200), nullable=True)
+    is_community_member = db.Column(db.String(60), nullable=True)
+
     # Attribution snapshot at first touch — populated either by GHL signup webhook
     # (when GHL forwards the UTMs as custom data) or backfilled by /api/lead-event
     # the first time the ambassador's email shows up with non-empty UTMs.

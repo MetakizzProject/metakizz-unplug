@@ -300,6 +300,31 @@
   </div>
 
   <!-- ────────────────────────────────────────────────────────────
+       DANCE LEVEL DISTRIBUTION (clickable filters from form answers)
+       ──────────────────────────────────────────────────────────── -->
+  {% if dance_dist %}
+  <div class="section-label">▌ Dance level · click to filter</div>
+  <div class="cards-row">
+    {% for d in dance_dist %}
+      {% set qs = request.args.to_dict() %}
+      {% if f_dance == d.filter_key %}
+        {% set _ = qs.pop('dance', None) %}
+        {% set _ = qs.pop('page', None) %}
+        {% set is_active = true %}
+      {% else %}
+        {% set _ = qs.update({'dance': d.filter_key}) %}
+        {% set _ = qs.pop('page', None) %}
+        {% set is_active = false %}
+      {% endif %}
+      <a href="?{{ qs|urlencode }}" class="filter-card {% if is_active %}filter-active{% endif %}" style="--accent: #A78BFA;">
+        <div class="label">{{ d.label }}</div>
+        <div class="value" style="color: #A78BFA;">{{ d.count }}</div>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ────────────────────────────────────────────────────────────
        TEMPERATURE DISTRIBUTION (clickable filters)
        ──────────────────────────────────────────────────────────── -->
   <div class="section-label">▌ Temperature · click to filter</div>
@@ -426,11 +451,14 @@
               {% endif %}
             </td>
             <td>
+              {% if amb.dance_level %}
+                <span class="tag-chip" style="background:rgba(167,139,250,0.15); color:#A78BFA; border-color:rgba(167,139,250,0.4); display:block; margin-bottom:3px;">{{ short_dance(amb.dance_level) }}</span>
+              {% endif %}
               {% if amb.ghl_tags %}
                 {% for tag in amb.ghl_tags.split(',') %}
                   <span class="tag-chip">{{ tag.strip() }}</span>
                 {% endfor %}
-              {% else %}
+              {% elif not amb.dance_level %}
                 <span style="color:#4B5563;">—</span>
               {% endif %}
             </td>

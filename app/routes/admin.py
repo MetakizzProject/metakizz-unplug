@@ -3714,6 +3714,7 @@ def leads():
     origin     = (request.args.get("origin") or "").strip()
     tag_filter = (request.args.get("tag") or "").strip()
     temp_bucket= (request.args.get("temp") or "").strip().lower()
+    dance      = (request.args.get("dance") or "").strip()  # dance_level filter
     has_phone  = request.args.get("has_phone") == "1"
     class_1    = request.args.get("class_1") == "1"
     class_2    = request.args.get("class_2") == "1"
@@ -3738,6 +3739,11 @@ def leads():
         base = base.filter(Ambassador.ghl_tags.like(f"%{tag_filter}%"))
     if has_phone:
         base = base.filter(Ambassador.phone_number.isnot(None))
+    # Dance level filter — match on the substring that uniquely
+    # identifies each level (full strings are long, e.g. "I've been
+    # dancing 1-2 years and want to improve faster")
+    if dance:
+        base = base.filter(Ambassador.dance_level.like(f"%{dance}%"))
 
     # ── Global temperature filter via SQL (resolves before pagination) ──
     # Without this, the temp filter only narrowed the current page slice
@@ -3894,6 +3900,45 @@ def leads():
         "webinar_joined": _ev_counts["webinar_joined"],
     }
 
+    # ── Dance-level distribution counters (clickable filter cards) ──
+    # Single SQL aggregation. Map each long form-answer string to a
+    # short label for display.
+    dance_level_short = {
+        "I teach": "👨‍🏫 Instructor",
+        "I'm just getting started": "🌱 Beginner",
+        "1-2 years": "🎯 1-2 years",
+        "3+ years": "🥋 3+ years",
+    }
+    def _short_dance(s):
+        if not s:
+            return "—"
+        for needle, short in dance_level_short.items():
+            if needle in s:
+                return short
+        return s[:40]
+
+    dance_dist_rows = _safe(
+        lambda: db.session.query(Ambassador.dance_level, func.count(Ambassador.id))
+            .filter(Ambassador.dance_level.isnot(None))
+            .group_by(Ambassador.dance_level)
+            .all(),
+        [],
+    )
+    dance_dist = []
+    for raw, n in sorted(dance_dist_rows, key=lambda x: -x[1]):
+        # Use a substring fragment as the filter key (passed to ?dance=)
+        filter_key = ""
+        for needle in dance_level_short:
+            if needle in (raw or ""):
+                filter_key = needle
+                break
+        dance_dist.append({
+            "label": _short_dance(raw),
+            "count": n,
+            "filter_key": filter_key or raw,
+            "raw": raw,
+        })
+
     # ── Distributions: lightweight SQL approximations (not from scoring) ──
     # These power the clickable cards at the top. They count distinct
     # ambassadors that match each bucket via raw event types — close
@@ -3937,6 +3982,7 @@ def leads():
     if class_1:    active_chips.append({"label": "watched C1", "url": _without("class_1")})
     if class_2:    active_chips.append({"label": "watched C2", "url": _without("class_2")})
     if class_3:    active_chips.append({"label": "watched C3", "url": _without("class_3")})
+    if dance:      active_chips.append({"label": f"dance: {dance}", "url": _without("dance")})
 
     return render_template(
         "admin_leads.html",
@@ -3958,6 +4004,9 @@ def leads():
         relevant_tags=sorted(RELEVANT_LEAD_TAGS),
         lookup_country=lookup_country,
         plf_counters=plf_counters,
+        dance_dist=dance_dist,
+        f_dance=dance,
+        short_dance=_short_dance,
         active_chips=active_chips,
         clear_all_url=url_for("admin.leads"),
         active_section="leads",
