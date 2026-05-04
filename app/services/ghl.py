@@ -322,6 +322,42 @@ def sync_all_contacts(
     return stats
 
 
+def cleanup_ghost_leads_without_required_tag(required_tag: str) -> Dict[str, int]:
+    """Delete ghost Ambassadors (source='ghl_import') that DON'T carry
+    the specified tag. Used to remove leads from previous launches
+    while keeping current-launch leads.
+
+    E.g. required_tag='mkot3_registrado' will delete ghosts that only
+    have 'masterclass march17th' or 'webinnar 17 marzo' (past launches)
+    but no current-launch tag.
+
+    Safe — only acts on source='ghl_import'. Real signups untouched.
+    """
+    from app.models import db, Ambassador
+
+    stats = {"scanned": 0, "deleted": 0, "kept_with_tag": 0}
+
+    rows = Ambassador.query.filter(Ambassador.source == "ghl_import").all()
+    for amb in rows:
+        stats["scanned"] += 1
+        tags_csv = (amb.ghl_tags or "")
+        tags_set = {t.strip() for t in tags_csv.split(",") if t.strip()}
+        if required_tag in tags_set:
+            stats["kept_with_tag"] += 1
+        else:
+            db.session.delete(amb)
+            stats["deleted"] += 1
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.exception("cleanup commit failed")
+        raise
+
+    return stats
+
+
 def cleanup_ghost_leads_without_relevant_tag(
     relevant_tags: Optional[set] = None,
 ) -> Dict[str, int]:

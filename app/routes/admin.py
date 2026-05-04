@@ -2955,6 +2955,28 @@ _GHL_SYNC_STATE = {
 }
 
 
+@admin_bp.route("/sync-ghl/cleanup-old-launch", methods=["POST"])
+def sync_ghl_cleanup_old_launch():
+    """Delete ghost leads (source='ghl_import') that don't carry the
+    current-launch tag mkot3_registrado. Removes leftover ghosts from
+    previous campaigns (masterclass march17th, webinnar 17 marzo)
+    while keeping all current-launch leads.
+    """
+    from app.services import ghl as ghl_service
+    try:
+        stats = ghl_service.cleanup_ghost_leads_without_required_tag("mkot3_registrado")
+        flash(
+            f"Old-launch cleanup done: scanned {stats['scanned']} ghost leads, "
+            f"kept {stats['kept_with_tag']} (current launch), "
+            f"deleted {stats['deleted']} (previous campaigns only).",
+            "success",
+        )
+    except Exception as e:
+        logger.exception("old-launch ghost cleanup failed")
+        flash(f"Cleanup failed: {e}", "error")
+    return redirect(url_for("admin.sync_ghl"))
+
+
 @admin_bp.route("/sync-ghl/cleanup", methods=["POST"])
 def sync_ghl_cleanup():
     """Delete ghost leads (source='ghl_import') that don't carry the
@@ -3093,6 +3115,13 @@ def sync_ghl():
         community_count = Ambassador.query.filter_by(source="community").count()
         total_amb = Ambassador.query.count()
 
+        # Ghost breakdown by tag — current launch vs past campaigns only
+        ghost_current_launch = Ambassador.query.filter(
+            Ambassador.source == "ghl_import",
+            Ambassador.ghl_tags.like("%mkot3_registrado%"),
+        ).count()
+        ghost_past_only = ghost_total - ghost_current_launch  # in launch DB but not current launch
+
         button_html = f'''
         <div style="margin-top:24px; padding:14px 18px; background:rgba(46,219,153,0.05); border:1px solid rgba(46,219,153,0.25); border-radius:6px;">
           <p style="color:#2EDB99; font-size:11px; letter-spacing:2px; text-transform:uppercase; margin:0 0 10px 0;">▌ Current DB</p>
@@ -3100,7 +3129,9 @@ def sync_ghl():
             <tr><td style="padding:3px 18px 3px 0;">Total Ambassadors</td><td style="color:#2EDB99; font-weight:bold;">{total_amb}</td></tr>
             <tr><td style="padding:3px 18px 3px 0;">→ Source: public (signup)</td><td style="color:#fff;">{public_count}</td></tr>
             <tr><td style="padding:3px 18px 3px 0;">→ Source: community</td><td style="color:#fff;">{community_count}</td></tr>
-            <tr><td style="padding:3px 18px 3px 0;">→ Source: ghl_import (ghosts)</td><td style="color:#FFC857;">{ghost_total}</td></tr>
+            <tr><td style="padding:3px 18px 3px 0;">→ Source: ghl_import (ghosts) total</td><td style="color:#FFC857;">{ghost_total}</td></tr>
+            <tr><td style="padding:3px 18px 3px 18px; color:#9CA3AF;">  └ with mkot3_registrado (current launch)</td><td style="color:#2EDB99;">{ghost_current_launch}</td></tr>
+            <tr><td style="padding:3px 18px 3px 18px; color:#9CA3AF;">  └ ONLY past campaigns (no current tag)</td><td style="color:#FCA5A5;">{ghost_past_only}</td></tr>
           </table>
           <p style="color:#6B7280; font-size:10px; margin:10px 0 0 0; line-height:1.5;">
             Sync NEVER deletes rows. matched_updated = leads that were enriched (UTMs, dance level, tags, phones).
@@ -3123,15 +3154,35 @@ def sync_ghl():
         </form>
 
         <div style="margin-top:32px; padding:18px; background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.4); border-radius:6px;">
-          <p style="color:#FCA5A5; font-size:12px; letter-spacing:2px; text-transform:uppercase; margin:0 0 10px 0;">▌ Cleanup</p>
+          <p style="color:#FCA5A5; font-size:12px; letter-spacing:2px; text-transform:uppercase; margin:0 0 10px 0;">▌ Cleanup ghosts</p>
           <p style="color:#C9CFD4; font-size:13px; line-height:1.5; margin:0 0 14px 0;">
-            Ghost leads from GHL: <strong style="color:#fff;">{ghost_total}</strong> total ·
-            <strong style="color:#2EDB99;">{ghost_relevant}</strong> with at least one relevant tag ·
-            <strong style="color:#FCA5A5;">{ghost_irrelevant}</strong> with NONE (these shouldn't be in the launch DB).
+            Ghost leads breakdown — only ghosts (source=ghl_import) are affected. Real signups never touched.
           </p>
-          <form method="post" action="/admin/sync-ghl/cleanup" onsubmit="return confirm('Delete {ghost_irrelevant} ghost leads that don\\'t carry any relevant tag? This will not affect real signups (source=public/community).');">
-            <button type="submit" style="background:#DC2626; color:#fff; border:0; padding:10px 20px; font-family:'Share Tech Mono',monospace; font-weight:bold; letter-spacing:1.5px; text-transform:uppercase; cursor:pointer; font-size:11px;">Delete {ghost_irrelevant} non-relevant ghost leads</button>
-          </form>
+
+          <!-- Primary cleanup: keep only current launch ghosts -->
+          <div style="margin-bottom:16px; padding:14px; background:rgba(220,38,38,0.12); border-radius:4px;">
+            <p style="color:#fff; font-size:13px; margin:0 0 4px 0;">
+              <strong style="color:#FCA5A5;">{ghost_past_only}</strong> ghost{'s' if ghost_past_only != 1 else ''} from PREVIOUS campaigns (no <code style="color:#FFC857;">mkot3_registrado</code> tag)
+            </p>
+            <p style="color:#9CA3AF; font-size:11px; margin:0 0 12px 0;">
+              These are masterclass/webinar attendees from past launches who didn't sign up to this one. Click to remove.
+              <strong style="color:#2EDB99;">Current-launch ghosts ({ghost_current_launch}) are kept.</strong>
+            </p>
+            <form method="post" action="/admin/sync-ghl/cleanup-old-launch" onsubmit="return confirm('Delete {ghost_past_only} ghost leads that DON\\'t have mkot3_registrado tag? Current-launch ghosts ({ghost_current_launch}) and real signups stay intact.');">
+              <button type="submit" {'disabled' if ghost_past_only == 0 else ''} style="background:#DC2626; color:#fff; border:0; padding:10px 20px; font-family:'Share Tech Mono',monospace; font-weight:bold; letter-spacing:1.5px; text-transform:uppercase; cursor:pointer; font-size:11px; border-radius:3px; {'opacity:0.4; cursor:not-allowed;' if ghost_past_only == 0 else ''}">Delete {ghost_past_only} past-campaign ghost{'s' if ghost_past_only != 1 else ''}</button>
+            </form>
+          </div>
+
+          <!-- Secondary: remove ghosts with NO relevant tag at all (rare) -->
+          <details style="margin-top:8px;">
+            <summary style="color:#9CA3AF; font-size:11px; cursor:pointer; letter-spacing:0.1em; text-transform:uppercase;">Other cleanup options</summary>
+            <p style="color:#9CA3AF; font-size:11px; margin:10px 0; line-height:1.5;">
+              <strong style="color:#FCA5A5;">{ghost_irrelevant}</strong> ghost{'s' if ghost_irrelevant != 1 else ''} carry no relevant tag at all (would be unusual; current sync filters these out).
+            </p>
+            <form method="post" action="/admin/sync-ghl/cleanup" onsubmit="return confirm('Delete {ghost_irrelevant} ghost leads with NO relevant tag?');">
+              <button type="submit" {'disabled' if ghost_irrelevant == 0 else ''} style="background:#7F1D1D; color:#fff; border:0; padding:8px 16px; font-family:'Share Tech Mono',monospace; font-weight:bold; letter-spacing:1px; text-transform:uppercase; cursor:pointer; font-size:10px; border-radius:3px; {'opacity:0.4; cursor:not-allowed;' if ghost_irrelevant == 0 else ''}">Delete {ghost_irrelevant} no-tag ghosts</button>
+            </form>
+          </details>
         </div>
         '''
 
