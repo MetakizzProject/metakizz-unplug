@@ -3683,6 +3683,7 @@ def leads_insights():
         activity_series=series,
         action_queue=action_queue,
         active_section="insights",
+        **_admin_layout_context(),
     )
 
 
@@ -3960,6 +3961,7 @@ def leads():
         active_chips=active_chips,
         clear_all_url=url_for("admin.leads"),
         active_section="leads",
+        **_admin_layout_context(),
     )
 
 
