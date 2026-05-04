@@ -1,0 +1,176 @@
+{% extends "emails/_shell.html" %}
+
+{% set class_label = 'Class 0' ~ class_number %}
+{% set is_class_1 = class_number == 1 %}
+{% set is_class_2 = class_number == 2 %}
+{% set is_class_3 = class_number == 3 %}
+
+{% block title %}{{ class_label }} just dropped, {{ first_name }}{% endblock %}
+{% block preheader %}Your link to {{ class_label }} is inside · Hacking the Urbankizz Code{% endblock %}
+{% block header_left %}METAKIZZ // {{ class_label.upper().replace(' ', '.') }}.READY{% endblock %}
+{% block header_right %}STATUS: <span style="color:#2EDB99;">LIVE</span>{% endblock %}
+
+{% block content %}
+
+<!-- 0. INCOMING TRANSMISSION — class is live -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050a08" style="background:#050a08;border:2px solid #2EDB99;border-radius:12px;box-shadow:0 0 32px rgba(46,219,153,0.35);">
+    <tr>
+      <td align="center" style="padding:28px 18px 24px 18px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:3.5px;text-transform:uppercase;margin:0 0 14px 0;">
+          ▌ Incoming transmission
+        </p>
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:38px;line-height:1.05;letter-spacing:1px;margin:0;text-shadow:0 0 22px rgba(46,219,153,0.7);text-transform:uppercase;">
+          {{ class_label }}
+        </p>
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:24px;line-height:1.1;letter-spacing:2.5px;margin:14px 0 0 0;text-shadow:0 0 22px rgba(46,219,153,0.85);text-transform:uppercase;">
+          Just dropped
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 1. GREETING -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:32px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0 0 14px 0;">
+      &gt; Hey <span style="color:#FFFFFF;">{{ first_name }}</span>_
+    </p>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:16px;line-height:1.65;margin:0;">
+      {% if is_class_1 %}
+      The first piece of <strong style="color:#2EDB99;">Hacking the Urbankizz Code</strong> is live.
+      Most dancers won't watch it. The ones who do are the ones who actually shift their kizz.
+      {% elif is_class_2 %}
+      <strong style="color:#2EDB99;">{{ class_label }}</strong> just unlocked. This is the one
+      where the code starts to click — pay attention to the second half.
+      {% else %}
+      <strong style="color:#2EDB99;">{{ class_label }}</strong> is up — the last one before
+      we meet live. Watch it before the live so you can come prepared with questions.
+      {% endif %}
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- 2. WHAT'S INSIDE — short bullets -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid rgba(46,219,153,0.4);border-radius:8px;">
+    <tr>
+      <td style="padding:18px 20px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 14px 0;">
+          ▌ Inside this class
+        </p>
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.7;margin:0;">
+          {% if is_class_1 %}
+          → The one mistake 90% of urbankiz dancers make<br>
+          → How to break the loop and find your own flow<br>
+          → A practical exercise you can do tonight
+          {% elif is_class_2 %}
+          → How musicality actually works in urbankiz<br>
+          → The exact framework Jesús &amp; Anni use<br>
+          → How to layer it without losing the partner
+          {% else %}
+          → The advanced piece that ties Class 1 + Class 2 together<br>
+          → What separates good from unforgettable on the dance floor<br>
+          → Get this right and the live makes 10× more sense
+          {% endif %}
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 3. PRIMARY CTA — Watch the class -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:28px 32px 0 32px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr>
+      <td align="center" bgcolor="#2EDB99" style="background:#2EDB99;border:2px solid #2EDB99;border-radius:8px;box-shadow:0 0 22px rgba(46,219,153,0.55);">
+        <a href="{{ class_url }}" class="mob-cta-text" style="display:inline-block;padding:18px 40px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:14px;letter-spacing:2.5px;text-transform:uppercase;color:#000000;text-decoration:none;">
+          Watch {{ class_label }}
+        </a>
+      </td>
+    </tr>
+    </table>
+    <p style="margin:16px 0 0 0;">
+      <a href="{{ class_url }}" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;text-decoration:underline;">
+        Or copy the link → {{ class_url }}
+      </a>
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- 4. SECONDARY — Reward reminder + dashboard link -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:32px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.6;margin:0;">
+      And remember — bringing 5 dancers into the launch unlocks
+      {% if community %}
+      <strong style="color:#2EDB99;">your free month of MetaDancers</strong>.
+      {% else %}
+      <strong style="color:#2EDB99;">your live Musicality Masterclass</strong> with Jesús &amp; Anni.
+      {% endif %}
+      Your link, QR and stats live on
+      <a href="{{ dashboard_url }}" style="color:#2EDB99;text-decoration:underline;">your dashboard</a>.
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- 5. DEADLINE BANNER -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a1407" style="background:#1a1407;border:1px solid #FFC857;border-radius:6px;">
+    <tr>
+      <td align="center" style="padding:14px 18px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:12px;letter-spacing:3.5px;text-transform:uppercase;margin:0;">
+          ⧗ Live · May 7 · 19:00 Madrid
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 6. SIGN-OFF -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 32px 32px;">
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      Jesús &amp; Anni · MetaKizz
+    </p>
+  </td>
+</tr>
+</table>
+
+{% endblock %}
+
+{% block prominent_unsubscribe %}
+<tr>
+  <td style="padding:18px 0 0 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid #2D2D44;border-radius:10px;">
+    <tr>
+      <td align="center" style="padding:18px 20px;">
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;margin:0 0 6px 0;">Don't want to keep receiving these emails?</p>
+        <p style="margin:0;"><a href="{{ unsubscribe_url }}" style="color:#2EDB99;text-decoration:underline;font-size:14px;font-weight:bold;">Click here to stop them.</a></p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+{% endblock %}

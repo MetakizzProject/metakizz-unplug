@@ -41,7 +41,7 @@ def _ensure_unsubscribe_columns(db):
         if "first_unplug_sent_at" not in cols:
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN first_unplug_sent_at TIMESTAMP"))
             logger.info("added column ambassadors.first_unplug_sent_at")
-        # Cron-driven email idempotency flags.
+        # Cron-driven email idempotency flags + manual class/webinar sends.
         for col in (
             "activation_nudge_sent_at",
             "activation_push_sent_at",
@@ -50,6 +50,10 @@ def _ensure_unsubscribe_columns(db):
             "last_6h_sent_at",
             "results_sent_at",
             "you_won_sent_at",
+            "class1_email_sent_at",
+            "class2_email_sent_at",
+            "class3_email_sent_at",
+            "webinar_reminder_sent_at",
         ):
             if col not in cols:
                 conn.execute(text(f"ALTER TABLE ambassadors ADD COLUMN {col} TIMESTAMP"))

@@ -1,0 +1,135 @@
+{% extends "emails/_shell.html" %}
+
+{% block title %}{{ first_name }}, the live starts in 1 hour{% endblock %}
+{% block preheader %}Zoom link inside · Hacking the Urbankizz Code · LIVE{% endblock %}
+{% block header_left %}METAKIZZ // WEBINAR.LIVE.IN.1H{% endblock %}
+{% block header_right %}STATUS: <span style="color:#DC2626;">URGENT</span>{% endblock %}
+
+{% block content %}
+
+<!-- 0. URGENT BANNER -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a0a0a" style="background:#1a0a0a;border:2px solid #DC2626;border-radius:12px;box-shadow:0 0 32px rgba(220,38,38,0.4);">
+    <tr>
+      <td align="center" style="padding:28px 18px 24px 18px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#DC2626;font-size:11px;letter-spacing:3.5px;text-transform:uppercase;margin:0 0 14px 0;">
+          ⧗ Live in 1 hour
+        </p>
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:38px;line-height:1.05;letter-spacing:1px;margin:0;text-shadow:0 0 22px rgba(220,38,38,0.7);text-transform:uppercase;">
+          The Live<br>Starts Soon
+        </p>
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFC857;font-size:22px;line-height:1.1;letter-spacing:2.5px;margin:14px 0 0 0;text-shadow:0 0 18px rgba(255,200,87,0.7);text-transform:uppercase;">
+          May 7 · 19:00 Madrid
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 1. GREETING -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:32px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0 0 14px 0;">
+      &gt; Hey <span style="color:#FFFFFF;">{{ first_name }}</span>_
+    </p>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:16px;line-height:1.65;margin:0;">
+      In <strong style="color:#DC2626;">one hour</strong> we're live. This is where the
+      three classes come together — Q&amp;A, breakdowns, and the bit we
+      <em>only</em> share live.
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- 2. WHAT TO BRING -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid rgba(46,219,153,0.4);border-radius:8px;">
+    <tr>
+      <td style="padding:18px 20px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 14px 0;">
+          ▌ Bring with you
+        </p>
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.7;margin:0;">
+          → Headphones (audio matters)<br>
+          → Space to move (we'll do live drills)<br>
+          → A question you want answered<br>
+          → 60 minutes of focus
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 3. PRIMARY CTA — Join Zoom -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:28px 32px 0 32px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr>
+      <td align="center" bgcolor="#DC2626" style="background:#DC2626;border:2px solid #DC2626;border-radius:8px;box-shadow:0 0 28px rgba(220,38,38,0.65);">
+        <a href="{{ join_url }}" class="mob-cta-text" style="display:inline-block;padding:20px 44px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:15px;letter-spacing:2.5px;text-transform:uppercase;color:#FFFFFF;text-decoration:none;">
+          Join the live now
+        </a>
+      </td>
+    </tr>
+    </table>
+    <p style="margin:16px 0 0 0;">
+      <a href="{{ join_url }}" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;text-decoration:underline;word-break:break-all;">
+        {{ join_url }}
+      </a>
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- 4. PROTIP — be on time -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFC857;font-size:13px;line-height:1.6;margin:0;font-style:italic;">
+      ▌ Pro tip: log in 5 minutes early. We'll start sharp at 19:00 and the first
+      10 minutes are the part nobody wants to miss.
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- 5. SIGN-OFF -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:36px 32px 32px 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:0 0 8px 0;">
+      See you in there.
+    </p>
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      Jesús &amp; Anni · MetaKizz
+    </p>
+  </td>
+</tr>
+</table>
+
+{% endblock %}
+
+{% block prominent_unsubscribe %}
+<tr>
+  <td style="padding:18px 0 0 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid #2D2D44;border-radius:10px;">
+    <tr>
+      <td align="center" style="padding:18px 20px;">
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;margin:0 0 6px 0;">Don't want to keep receiving these emails?</p>
+        <p style="margin:0;"><a href="{{ unsubscribe_url }}" style="color:#2EDB99;text-decoration:underline;font-size:14px;font-weight:bold;">Click here to stop them.</a></p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+{% endblock %}

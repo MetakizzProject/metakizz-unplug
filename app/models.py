@@ -54,6 +54,14 @@ class Ambassador(db.Model):
     results_sent_at = db.Column(db.DateTime, nullable=True)           # #8
     you_won_sent_at = db.Column(db.DateTime, nullable=True)           # #9
 
+    # Manual admin sends — fired by the user from /admin/emails when each
+    # piece of content drops. Idempotent so accidental double-clicks don't
+    # double-send.
+    class1_email_sent_at = db.Column(db.DateTime, nullable=True)
+    class2_email_sent_at = db.Column(db.DateTime, nullable=True)
+    class3_email_sent_at = db.Column(db.DateTime, nullable=True)
+    webinar_reminder_sent_at = db.Column(db.DateTime, nullable=True)
+
     # Engagement tracking — bumped on every /dashboard/<code> hit.
     last_dashboard_visit_at = db.Column(db.DateTime, nullable=True)
     dashboard_visit_count = db.Column(db.Integer, default=0)

@@ -412,6 +412,97 @@ def send_activation_push_email(ambassador, app_url):
     )
 
 
+def send_class_ready_email(ambassador, app_url, class_number):
+    """Manual admin send: announce that Class N is now live.
+
+    `class_number` is 1, 2, or 3. Uses the same template with a different
+    class number; copy adapts per class.
+    """
+    if is_unsubscribed(ambassador):
+        return False
+    if class_number not in (1, 2, 3):
+        raise ValueError(f"class_number must be 1/2/3, got {class_number}")
+
+    # Landing where the lesson lives. Each class has its own page.
+    landing_root = _landing_url() or app_url.rstrip("/")
+    class_url = f"{landing_root}/class{class_number}"
+
+    html = render_template(
+        "emails/class_ready.html",
+        first_name=_first_name(ambassador),
+        community=(ambassador.source == "community"),
+        class_number=class_number,
+        class_url=class_url,
+        dashboard_url=f"{app_url}/dashboard/{ambassador.dashboard_code}",
+        unsubscribe_url=_unsubscribe_url(ambassador, app_url),
+        app_url=app_url.rstrip("/"),
+    )
+
+    first = ambassador.name.split()[0] if ambassador.name else "Hey"
+    if class_number == 1:
+        subject = f"{first}, Class 01 just dropped — go watch it"
+    elif class_number == 2:
+        subject = f"{first}, Class 02 is unlocked — your link inside"
+    else:
+        subject = f"{first}, Class 03 is live — last one before the live"
+
+    return _send(
+        ambassador.email,
+        subject,
+        html,
+        template_key=f"class{class_number}_ready",
+        ambassador=ambassador,
+    )
+
+
+def send_class1_ready_email(ambassador, app_url):
+    return send_class_ready_email(ambassador, app_url, 1)
+
+
+def send_class2_ready_email(ambassador, app_url):
+    return send_class_ready_email(ambassador, app_url, 2)
+
+
+def send_class3_ready_email(ambassador, app_url):
+    return send_class_ready_email(ambassador, app_url, 3)
+
+
+def send_webinar_reminder_email(ambassador, app_url):
+    """Manual admin send: 1-hour-before reminder for the live webinar.
+
+    Reads the Zoom URL from env var WEBINAR_JOIN_URL (set in Render so we
+    can update it without redeploying if the URL changes last-minute).
+    """
+    if is_unsubscribed(ambassador):
+        return False
+
+    join_url = os.getenv("WEBINAR_JOIN_URL", "").strip()
+    if not join_url:
+        logger.warning("WEBINAR_JOIN_URL not set — webinar reminder template will show a placeholder")
+        join_url = f"{app_url.rstrip('/')}/webinar"
+
+    html = render_template(
+        "emails/webinar_reminder.html",
+        first_name=_first_name(ambassador),
+        community=(ambassador.source == "community"),
+        join_url=join_url,
+        dashboard_url=f"{app_url}/dashboard/{ambassador.dashboard_code}",
+        unsubscribe_url=_unsubscribe_url(ambassador, app_url),
+        app_url=app_url.rstrip("/"),
+    )
+
+    first = ambassador.name.split()[0] if ambassador.name else "Hey"
+    subject = f"{first}, the live starts in 1 hour"
+
+    return _send(
+        ambassador.email,
+        subject,
+        html,
+        template_key="webinar_reminder",
+        ambassador=ambassador,
+    )
+
+
 def send_activation_nudge_email(ambassador, app_url):
     """Send the activation nudge email (Day 2-3, only if 0 referrals)."""
     if is_unsubscribed(ambassador):

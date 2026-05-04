@@ -21,6 +21,10 @@ from app.mailer import (
     send_last_6h_email,
     send_results_announcement_email,
     send_you_won_email,
+    send_class1_ready_email,
+    send_class2_ready_email,
+    send_class3_ready_email,
+    send_webinar_reminder_email,
     _send as _mailer_send,  # low-level Resend POST, used by /admin/broadcast
     # legacy:
     send_first_referral_email,
@@ -906,6 +910,30 @@ def emails():
         for a in Ambassador.query.filter(Ambassador.id.in_(amb_ids)).all():
             amb_lookup[a.id] = a
 
+    # Eligible counts for each manual content-drop email. "All" segment =
+    # every reachable (opted-in) ambassador minus those whose flag is set.
+    reachable_total = Ambassador.query.filter(Ambassador.unsubscribed_at.is_(None)).count()
+    manual_email_eligibles = {}
+    for key, flag in [
+        ("class1_ready",     "class1_email_sent_at"),
+        ("class2_ready",     "class2_email_sent_at"),
+        ("class3_ready",     "class3_email_sent_at"),
+        ("webinar_reminder", "webinar_reminder_sent_at"),
+    ]:
+        already = Ambassador.query.filter(
+            Ambassador.unsubscribed_at.is_(None),
+            getattr(Ambassador, flag).isnot(None),
+        ).count()
+        manual_email_eligibles[key] = {
+            "eligible": reachable_total - already,
+            "already_sent": already,
+            "label": _SEGMENT_TEMPLATES[key]["label"],
+        }
+
+    # Cron kill-switch status (DISABLE_CRON_EMAILS env var).
+    import os as _os
+    cron_emails_disabled = _os.getenv("DISABLE_CRON_EMAILS", "").strip().lower() in ("1", "true", "yes", "on")
+
     return render_template(
         "admin_emails.html",
         page_title="Emails",
@@ -920,6 +948,8 @@ def emails():
         push_eligible_by_count=push_eligible_by_count,
         push_skipped_too_new=skipped_too_new,
         push_min_age_days=push_min_age,
+        manual_email_eligibles=manual_email_eligibles,
+        cron_emails_disabled=cron_emails_disabled,
         now_ts=datetime.now(timezone.utc),
         **_admin_layout_context(),
     )
@@ -1085,6 +1115,37 @@ _SEGMENT_TEMPLATES = {
         "label": "Midway reminder",
         "min_age_days": 7,  # midway reminder only for those ≥7 days in
     },
+    # ── Manual class/webinar announcements (fired by admin from /admin/emails)
+    # Audience: every active ambassador (no temperature/count gate). Default
+    # segment "all" lets the route layer compute the eligible list.
+    "class1_ready": {
+        "fn": send_class1_ready_email,
+        "default_segment": "all",
+        "flag": "class1_email_sent_at",
+        "label": "Class 1 ready (announcement)",
+        "min_age_days": 0,
+    },
+    "class2_ready": {
+        "fn": send_class2_ready_email,
+        "default_segment": "all",
+        "flag": "class2_email_sent_at",
+        "label": "Class 2 ready (announcement)",
+        "min_age_days": 0,
+    },
+    "class3_ready": {
+        "fn": send_class3_ready_email,
+        "default_segment": "all",
+        "flag": "class3_email_sent_at",
+        "label": "Class 3 ready (announcement)",
+        "min_age_days": 0,
+    },
+    "webinar_reminder": {
+        "fn": send_webinar_reminder_email,
+        "default_segment": "all",
+        "flag": "webinar_reminder_sent_at",
+        "label": "Webinar reminder (1h before)",
+        "min_age_days": 0,
+    },
 }
 
 
@@ -1156,7 +1217,12 @@ def segment_send_template(segment_name):
 
     all_amb = Ambassador.query.all()
     segments = _compute_segments(all_amb)
-    targets = segments.get(segment_name, [])
+    # "all" = every reachable (opted-in) ambassador. Used by class/webinar
+    # announcements that should hit everyone, not a behavioural sub-segment.
+    if segment_name == "all":
+        targets = [a for a in all_amb if a.unsubscribed_at is None]
+    else:
+        targets = segments.get(segment_name, [])
     if not targets:
         flash(f"No ambassadors in segment '{segment_name}'.", "info")
         return redirect(url_for("admin.index"))

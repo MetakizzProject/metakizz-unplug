@@ -9,6 +9,114 @@
     <h1 class="text-2xl font-display font-bold mb-1">Email Control Center</h1>
     <p class="text-sm text-gray-400 mb-6">Every template the system can send, what's working, what's not, and the most recent 50 deliveries. Refresh for live data.</p>
 
+    {# ──────────────────────────────────────────────────────────
+       MANUAL CONTENT-DROP EMAILS
+       Class 1 / Class 2 / Class 3 / Webinar reminder
+       Each is one-click → confirm modal → bulk fire to all reachable ambassadors.
+       ────────────────────────────────────────────────────────── #}
+    <div class="mb-7 p-5 rounded-xl border border-brand-400/40 bg-black/60" style="box-shadow: 0 0 22px rgba(46,219,153,0.08);">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div>
+                <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ Manual sends · content drops</p>
+                <h2 class="text-lg font-display font-bold text-white mt-1">Fire by hand · class & webinar announcements</h2>
+                <p class="text-xs text-gray-400 mt-1">Each button sends to every reachable ambassador (not unsubscribed, not already sent). Idempotent — re-clicking does nothing for already-sent recipients.</p>
+            </div>
+            {% if cron_emails_disabled %}
+            <span class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-yellow-300 bg-yellow-900/30 border border-yellow-500/40 px-3 py-1.5 rounded">▌ Cron emails: DISABLED</span>
+            {% else %}
+            <span class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-300 bg-brand-900/20 border border-brand-500/30 px-3 py-1.5 rounded">▌ Cron emails: active</span>
+            {% endif %}
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+            {% for key, info in manual_email_eligibles.items() %}
+              {% set send_url = url_for('admin.segment_send_template', segment_name='all') %}
+              {% set test_url = url_for('admin.test_email') %}
+              <div class="border border-gray-700 rounded-lg p-4 bg-gray-900/40 flex flex-col gap-3">
+                <div>
+                    <p class="font-mono-term text-[9px] tracking-[0.18em] uppercase text-gray-500">▌ {{ key }}</p>
+                    <h3 class="text-sm font-bold text-white mt-1">{{ info.label }}</h3>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-orbitron font-black text-2xl text-brand-400" style="text-shadow:0 0 10px rgba(46,219,153,0.4);">{{ info.eligible }}</p>
+                        <p class="text-[10px] text-gray-500 font-mono-term tracking-wider uppercase">eligible</p>
+                    </div>
+                    {% if info.already_sent %}
+                    <div class="text-right">
+                        <p class="font-orbitron font-bold text-base text-yellow-300">{{ info.already_sent }}</p>
+                        <p class="text-[10px] text-gray-500 font-mono-term tracking-wider uppercase">sent</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <button type="button" onclick="document.getElementById('confirm-{{ key }}').classList.remove('hidden')"
+                        class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-brand-400 hover:bg-brand-300 px-3 py-2 rounded font-bold transition disabled:bg-gray-700 disabled:text-gray-500"
+                        {% if info.eligible == 0 %}disabled{% endif %}>
+                  ▶ Send to {{ info.eligible }}
+                </button>
+              </div>
+
+              {# Confirmation modal — one per template #}
+              <div id="confirm-{{ key }}" class="hidden fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm">
+                <form method="POST" action="{{ send_url }}"
+                      class="bg-gray-900 border-2 border-brand-400/60 rounded-xl p-6 max-w-md w-full"
+                      style="box-shadow: 0 0 40px rgba(46,219,153,0.3);">
+                    <input type="hidden" name="template" value="{{ key }}">
+
+                    <div class="flex items-center justify-between mb-4">
+                        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ CONFIRM SEND</p>
+                        <button type="button" onclick="document.getElementById('confirm-{{ key }}').classList.add('hidden')" class="text-gray-500 hover:text-white text-xl leading-none">×</button>
+                    </div>
+
+                    <h3 class="text-base font-bold text-white mb-2">{{ info.label }}</h3>
+                    <p class="text-sm text-gray-300 mb-4">
+                        About to send to <strong class="text-brand-400">{{ info.eligible }}</strong> ambassadors.
+                        {% if info.already_sent %}{{ info.already_sent }} already received this — they'll be skipped.{% endif %}
+                    </p>
+
+                    <div class="bg-yellow-900/20 border border-yellow-500/40 rounded p-3 mb-4 text-xs text-yellow-200">
+                        ⚠ This is a <strong>real send to production</strong>. Test on yourself first using the test mode below.
+                    </div>
+
+                    {# TEST MODE — single email override #}
+                    <div class="bg-blue-900/20 border border-blue-500/40 rounded p-3 mb-5">
+                        <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-blue-300 mb-2">🧪 Test on yourself first</p>
+                        <input type="email" name="only_email" placeholder="your@email.com"
+                               class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white font-mono"
+                               oninput="
+                                 var v = this.value.trim();
+                                 var btn = document.getElementById('confirm-{{ key }}-btn');
+                                 if (v) {
+                                   btn.textContent = '🧪 Send TEST to ' + v + ' only';
+                                   btn.classList.remove('bg-brand-400'); btn.classList.add('bg-blue-500');
+                                 } else {
+                                   btn.textContent = '▶ Send to {{ info.eligible }} ambassadors';
+                                   btn.classList.add('bg-brand-400'); btn.classList.remove('bg-blue-500');
+                                 }
+                               ">
+                        <p class="text-[10px] text-gray-500 mt-1">Leave blank to send to everyone. Filling in your email overrides → only that address gets the email.</p>
+                    </div>
+
+                    <div class="flex gap-2 justify-end">
+                        <button type="button" onclick="document.getElementById('confirm-{{ key }}').classList.add('hidden')"
+                                class="font-mono-term text-[11px] tracking-wider uppercase text-gray-400 hover:text-white px-4 py-2.5">Cancel</button>
+                        <button type="submit" id="confirm-{{ key }}-btn"
+                                class="font-mono-term text-[11px] tracking-[0.2em] uppercase text-black bg-brand-400 px-5 py-2.5 rounded-lg font-bold transition"
+                                style="box-shadow: 0 0 16px rgba(46,219,153,0.4);">
+                          ▶ Send to {{ info.eligible }} ambassadors
+                        </button>
+                    </div>
+                </form>
+              </div>
+            {% endfor %}
+        </div>
+
+        <p class="text-[11px] text-gray-500 mt-3">
+            ▌ Webinar reminder reads <code class="text-yellow-300">WEBINAR_JOIN_URL</code> from env. Set it in Render before sending or the link will be a placeholder.
+        </p>
+    </div>
+
+
     {# ── HEALTH HEADER ── #}
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
         <div class="email-health-stat">
