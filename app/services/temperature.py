@@ -78,12 +78,16 @@ def _pct_from_event(event_type: str, pct_field: Optional[int]) -> int:
 
 def compute_max_pct_per_class(lead_events) -> Dict[int, int]:
     """Walk an iterable of LeadEvent rows for one ambassador and return
-    {1: 0..100, 2: 0..100, 3: 0..100} with the max % achieved per class.
+    {1: 0..100, 2: 0..100} with the max % achieved per class.
+
+    Launch is 2 classes + 1 live webinar — Class 3 doesn't exist as
+    content. Webinar attendance is tracked separately via the
+    `webinar_joined` event in compute_temperature.
     """
-    out = {1: 0, 2: 0, 3: 0}
+    out = {1: 0, 2: 0}
     for e in lead_events:
         cn = e.class_number
-        if cn not in (1, 2, 3):
+        if cn not in (1, 2):
             continue
         pct = _pct_from_event(e.event_type or "", e.pct)
         if pct > out[cn]:

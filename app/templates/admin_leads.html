@@ -283,13 +283,6 @@
         ✓ <span style="color:#FFC857; font-weight:bold;">{{ plf_counters.class2_completed }}</span> completed
       </div>
     </a>
-    <a href="?class_3=1" class="filter-card" style="--accent: #F97316;">
-      <div class="label">📺 Class 3 started</div>
-      <div class="value" style="color:#F97316;">{{ plf_counters.class3_started }}</div>
-      <div style="color:#9CA3AF; font-size:10px; margin-top:4px; letter-spacing:0.1em;">
-        ✓ <span style="color:#F97316; font-weight:bold;">{{ plf_counters.class3_completed }}</span> completed
-      </div>
-    </a>
     <div class="stat-card" style="--accent: #DC2626;">
       <div class="label">🎤 Joined live webinar</div>
       <div class="value" style="color:#DC2626; text-shadow: 0 0 12px rgba(220,38,38,0.5);">{{ plf_counters.webinar_joined }}</div>
@@ -388,10 +381,6 @@
             <input type="checkbox" name="class_2" value="1" {% if f_class_2 %}checked{% endif %} onchange="this.form.submit()">
             Class 2
           </label>
-          <label class="checkbox-pill {% if f_class_3 %}checked{% endif %}">
-            <input type="checkbox" name="class_3" value="1" {% if f_class_3 %}checked{% endif %} onchange="this.form.submit()">
-            Class 3
-          </label>
           <label class="checkbox-pill {% if f_has_phone %}checked{% endif %}">
             <input type="checkbox" name="has_phone" value="1" {% if f_has_phone %}checked{% endif %} onchange="this.form.submit()">
             📱 Has phone
@@ -473,7 +462,7 @@
               {% endif %}
             </td>
             <td>
-              {% for cn in [1, 2, 3] %}
+              {% for cn in [1, 2] %}
                 {% set pct = t.max_pct[cn] %}
                 {% if pct >= 95 %}
                   <span class="class-progress" style="background:rgba(46,219,153,0.25); color:#2EDB99;">C{{ cn }} ✓</span>

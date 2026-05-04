@@ -415,13 +415,13 @@ def send_activation_push_email(ambassador, app_url):
 def send_class_ready_email(ambassador, app_url, class_number):
     """Manual admin send: announce that Class N is now live.
 
-    `class_number` is 1, 2, or 3. Uses the same template with a different
-    class number; copy adapts per class.
+    Launch is 2 classes + 1 live webinar — Class 3 doesn't exist as
+    content. The live webinar uses send_webinar_reminder_email().
     """
     if is_unsubscribed(ambassador):
         return False
-    if class_number not in (1, 2, 3):
-        raise ValueError(f"class_number must be 1/2/3, got {class_number}")
+    if class_number not in (1, 2):
+        raise ValueError(f"class_number must be 1 or 2, got {class_number}")
 
     # Landing where the lesson lives. Each class has its own page.
     landing_root = _landing_url() or app_url.rstrip("/")
@@ -441,10 +441,8 @@ def send_class_ready_email(ambassador, app_url, class_number):
     first = ambassador.name.split()[0] if ambassador.name else "Hey"
     if class_number == 1:
         subject = f"{first}, Class 01 just dropped — go watch it"
-    elif class_number == 2:
-        subject = f"{first}, Class 02 is unlocked — your link inside"
     else:
-        subject = f"{first}, Class 03 is live — last one before the live"
+        subject = f"{first}, Class 02 is unlocked — last one before the live"
 
     return _send(
         ambassador.email,
@@ -461,10 +459,6 @@ def send_class1_ready_email(ambassador, app_url):
 
 def send_class2_ready_email(ambassador, app_url):
     return send_class_ready_email(ambassador, app_url, 2)
-
-
-def send_class3_ready_email(ambassador, app_url):
-    return send_class_ready_email(ambassador, app_url, 3)
 
 
 def send_webinar_reminder_email(ambassador, app_url):

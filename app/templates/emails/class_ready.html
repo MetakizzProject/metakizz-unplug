@@ -3,7 +3,6 @@
 {% set class_label = 'Class 0' ~ class_number %}
 {% set is_class_1 = class_number == 1 %}
 {% set is_class_2 = class_number == 2 %}
-{% set is_class_3 = class_number == 3 %}
 
 {% block title %}{{ class_label }} just dropped, {{ first_name }}{% endblock %}
 {% block preheader %}Your link to {{ class_label }} is inside · Hacking the Urbankizz Code{% endblock %}
@@ -58,12 +57,9 @@
       {% if is_class_1 %}
       The first piece of <strong style="color:#2EDB99;">Hacking the Urbankizz Code</strong> is live.
       Most dancers won't watch it. The ones who do are the ones who actually shift their kizz.
-      {% elif is_class_2 %}
-      <strong style="color:#2EDB99;">{{ class_label }}</strong> just unlocked. This is the one
-      where the code starts to click — pay attention to the second half.
       {% else %}
-      <strong style="color:#2EDB99;">{{ class_label }}</strong> is up — the last one before
-      we meet live. Watch it before the live so you can come prepared with questions.
+      <strong style="color:#2EDB99;">{{ class_label }}</strong> just unlocked. This is the one
+      where the code starts to click — and the last one before we meet live.
       {% endif %}
     </p>
   </td>
@@ -85,14 +81,10 @@
           → The one mistake 90% of urbankiz dancers make<br>
           → How to break the loop and find your own flow<br>
           → A practical exercise you can do tonight
-          {% elif is_class_2 %}
+          {% else %}
           → How musicality actually works in urbankiz<br>
           → The exact framework Jesús &amp; Anni use<br>
           → How to layer it without losing the partner
-          {% else %}
-          → The advanced piece that ties Class 1 + Class 2 together<br>
-          → What separates good from unforgettable on the dance floor<br>
-          → Get this right and the live makes 10× more sense
           {% endif %}
         </p>
       </td>

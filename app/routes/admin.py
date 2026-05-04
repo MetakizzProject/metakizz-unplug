@@ -24,7 +24,6 @@ from app.mailer import (
     send_you_won_email,
     send_class1_ready_email,
     send_class2_ready_email,
-    send_class3_ready_email,
     send_webinar_reminder_email,
     _send as _mailer_send,  # low-level Resend POST, used by /admin/broadcast
     # legacy:
@@ -55,15 +54,16 @@ def _safe(fn, default, *args, **kwargs):
 # ════════════════════════════════════════════════════════════════════
 
 # Funnel events used by the SQL-aggregation classification helpers.
+# Launch is 2 classes + 1 live webinar — Class 3 doesn't exist as content.
 _FUNNEL_EVENT_KEYS = [
     "purchase_completed",
     "webinar_joined",
-    "class1_completed", "class2_completed", "class3_completed",
-    "class1_progress_95", "class2_progress_95", "class3_progress_95",
-    "class1_progress_75", "class2_progress_75", "class3_progress_75",
-    "class1_progress_50", "class2_progress_50", "class3_progress_50",
-    "class1_progress_25", "class2_progress_25", "class3_progress_25",
-    "class1_viewed", "class2_viewed", "class3_viewed",
+    "class1_completed", "class2_completed",
+    "class1_progress_95", "class2_progress_95",
+    "class1_progress_75", "class2_progress_75",
+    "class1_progress_50", "class2_progress_50",
+    "class1_progress_25", "class2_progress_25",
+    "class1_viewed", "class2_viewed",
 ]
 
 
@@ -79,14 +79,14 @@ def _email_to_bucket(evts: set) -> str:
         return "customer"
     if "webinar_joined" in evts:
         return "burning"
-    if any(f"class{n}_completed" in evts for n in (1, 2, 3)):
+    if any(f"class{n}_completed" in evts for n in (1, 2)):
         return "burning"
-    if any(f"class{n}_progress_{p}" in evts for n in (1, 2, 3) for p in (75, 95)):
+    if any(f"class{n}_progress_{p}" in evts for n in (1, 2) for p in (75, 95)):
         return "hot"
-    if any(f"class{n}_progress_50" in evts for n in (1, 2, 3)):
+    if any(f"class{n}_progress_50" in evts for n in (1, 2)):
         return "warm"
     if any(f"class{n}_progress_25" in evts or f"class{n}_viewed" in evts
-           for n in (1, 2, 3)):
+           for n in (1, 2)):
         return "cool"
     return "cold"
 
@@ -1132,7 +1132,6 @@ def emails():
     for key, flag in [
         ("class1_ready",     "class1_email_sent_at"),
         ("class2_ready",     "class2_email_sent_at"),
-        ("class3_ready",     "class3_email_sent_at"),
         ("webinar_reminder", "webinar_reminder_sent_at"),
     ]:
         already = Ambassador.query.filter(
@@ -1394,17 +1393,6 @@ _SEGMENT_TEMPLATES = {
         "exclude_if_event_in": [
             "class2_viewed", "class2_progress_25", "class2_progress_50",
             "class2_progress_75", "class2_progress_95", "class2_completed",
-        ],
-    },
-    "class3_ready": {
-        "fn": send_class3_ready_email,
-        "default_segment": "all",
-        "flag": "class3_email_sent_at",
-        "label": "Class 3 ready (announcement)",
-        "min_age_days": 0,
-        "exclude_if_event_in": [
-            "class3_viewed", "class3_progress_25", "class3_progress_50",
-            "class3_progress_75", "class3_progress_95", "class3_completed",
         ],
     },
     "webinar_reminder": {
@@ -3268,8 +3256,6 @@ def plf_status():
         "class1_progress_75", "class1_progress_95", "class1_completed",
         "class2_viewed", "class2_progress_25", "class2_progress_50",
         "class2_progress_75", "class2_progress_95", "class2_completed",
-        "class3_viewed", "class3_progress_25", "class3_progress_50",
-        "class3_progress_75", "class3_progress_95", "class3_completed",
         "webinar_link_clicked", "webinar_joined",
         "purchase_completed",
     ]
@@ -3319,7 +3305,6 @@ def plf_status():
     # Build funnel rows for class 1, 2, 3, webinar, purchase
     class1_max = max(counts["class1_viewed"], 1)
     class2_max = max(counts["class2_viewed"], 1)
-    class3_max = max(counts["class3_viewed"], 1)
 
     rows_html = []
     def _add_row(label, n, max_for_bar, color="#2EDB99"):
@@ -3342,10 +3327,6 @@ def plf_status():
     _add_row("→ 50% watched",                counts["class2_progress_50"], class2_max, "#FFC857")
     _add_row("→ 95% watched",                counts["class2_progress_95"], class2_max, "#F97316")
     _add_row("→ Completed",                  counts["class2_completed"], class2_max, "#DC2626")
-    rows_html.append('<tr><td colspan="3" style="padding:8px 0;"></td></tr>')
-    _add_row("▌ Class 3 — Viewed",           counts["class3_viewed"],   class3_max)
-    _add_row("→ 50% watched",                counts["class3_progress_50"], class3_max, "#FFC857")
-    _add_row("→ Completed",                  counts["class3_completed"], class3_max, "#DC2626")
     rows_html.append('<tr><td colspan="3" style="padding:8px 0;"></td></tr>')
     _add_row("▌ Webinar — Link clicked",     counts["webinar_link_clicked"], max(counts["class1_viewed"], 1))
     _add_row("▌ Webinar — Joined",           counts["webinar_joined"], max(counts["class1_viewed"], 1), "#A78BFA")
@@ -3450,8 +3431,6 @@ def leads_insights():
         "class1_progress_75", "class1_progress_95", "class1_completed",
         "class2_viewed", "class2_progress_25", "class2_progress_50",
         "class2_progress_75", "class2_progress_95", "class2_completed",
-        "class3_viewed", "class3_progress_25", "class3_progress_50",
-        "class3_progress_75", "class3_progress_95", "class3_completed",
         "webinar_joined", "purchase_completed",
     ]
     rows = _safe(
@@ -3489,8 +3468,6 @@ def leads_insights():
     n_class1_done = _ge(1, 95)
     n_class2 = _ge(2, 25)
     n_class2_done = _ge(2, 95)
-    n_class3 = _ge(3, 25)
-    n_class3_done = _ge(3, 95)
     n_webinar = event_counts.get("webinar_joined", 0)
     n_purchased = event_counts.get("purchase_completed", 0)
 
@@ -3498,7 +3475,7 @@ def leads_insights():
     n_hot_or_burning = _safe(
         lambda: db.session.query(func.count(func.distinct(LeadEvent.email)))
             .filter(LeadEvent.event_type.in_([
-                "class1_completed", "class2_completed", "class3_completed",
+                "class1_completed", "class2_completed",
                 "webinar_joined",
             ])).scalar() or 0,
         0,
@@ -3513,8 +3490,6 @@ def leads_insights():
         {"label": "Finished Class 1",  "count": n_class1_done,"color": "#FFC857"},
         {"label": "Started Class 2",   "count": n_class2,    "color": "#FFC857"},
         {"label": "Finished Class 2",  "count": n_class2_done,"color": "#F97316"},
-        {"label": "Started Class 3",   "count": n_class3,    "color": "#F97316"},
-        {"label": "Finished Class 3",  "count": n_class3_done,"color": "#DC2626"},
         {"label": "Joined Webinar",    "count": n_webinar,   "color": "#DC2626"},
         {"label": "Purchased",         "count": n_purchased, "color": "#A78BFA"},
     ]
@@ -3824,7 +3799,7 @@ def leads():
       tag        — must contain this tag in ghl_tags
       temp       — cold | cool | warm | hot | burning | customer
       has_phone  — 1 to require phone
-      class_1    — 1 to require ≥25% watched of class 1 (same for class_2/class_3)
+      class_1    — 1 to require ≥25% watched of class 1 (same for class_2)
       class_min  — 25 | 50 | 75 | 95 (min % watched of any class)
       page       — pagination, 1-indexed
     """
@@ -3844,7 +3819,6 @@ def leads():
     has_phone  = request.args.get("has_phone") == "1"
     class_1    = request.args.get("class_1") == "1"
     class_2    = request.args.get("class_2") == "1"
-    class_3    = request.args.get("class_3") == "1"
     class_min  = request.args.get("class_min", type=int)
     page       = max(1, request.args.get("page", default=1, type=int))
     per_page   = 50
@@ -3909,8 +3883,6 @@ def leads():
         base = _add_class_filter(base, 1)
     if class_2:
         base = _add_class_filter(base, 2)
-    if class_3:
-        base = _add_class_filter(base, 3)
 
     # Origin filter via UTM column match (approximate, but DB-level)
     if origin in ("instagram", "instagram_ad"):
@@ -3984,13 +3956,11 @@ def leads():
     # Single SQL aggregation; matches the numbers shown on /admin/plf-status.
     from app.models import LeadEvent
     plf_counter_keys = [
-        # Started = viewed gate OR any progress
+        # Started = viewed gate OR any progress. Launch is Class 1 + Class 2 + Webinar.
         "class1_viewed", "class1_progress_25", "class1_progress_50", "class1_progress_75",
         "class1_progress_95", "class1_completed",
         "class2_viewed", "class2_progress_25", "class2_progress_50", "class2_progress_75",
         "class2_progress_95", "class2_completed",
-        "class3_viewed", "class3_progress_25", "class3_progress_50", "class3_progress_75",
-        "class3_progress_95", "class3_completed",
         "webinar_joined",
     ]
     plf_rows = _safe(
@@ -4021,8 +3991,6 @@ def leads():
         "class1_completed": _ev_counts["class1_completed"],
         "class2_started": _started_class(2),
         "class2_completed": _ev_counts["class2_completed"],
-        "class3_started": _started_class(3),
-        "class3_completed": _ev_counts["class3_completed"],
         "webinar_joined": _ev_counts["webinar_joined"],
     }
 
@@ -4107,7 +4075,6 @@ def leads():
     if has_phone:  active_chips.append({"label": "has phone", "url": _without("has_phone")})
     if class_1:    active_chips.append({"label": "watched C1", "url": _without("class_1")})
     if class_2:    active_chips.append({"label": "watched C2", "url": _without("class_2")})
-    if class_3:    active_chips.append({"label": "watched C3", "url": _without("class_3")})
     if dance:      active_chips.append({"label": f"dance: {dance}", "url": _without("dance")})
 
     return render_template(
@@ -4125,7 +4092,7 @@ def leads():
         # Filter values to repopulate the UI
         f_q=q, f_source=source, f_origin=origin, f_tag=tag_filter,
         f_temp=temp_bucket, f_has_phone=has_phone,
-        f_class_1=class_1, f_class_2=class_2, f_class_3=class_3,
+        f_class_1=class_1, f_class_2=class_2,
         f_class_min=class_min,
         relevant_tags=sorted(RELEVANT_LEAD_TAGS),
         lookup_country=lookup_country,
@@ -4216,7 +4183,7 @@ def leads_debug():
             "first_seen": e.created_at,
             "last_seen": e.created_at,
             "event_count": 0,
-            "class_max": {1: 0, 2: 0, 3: 0},
+            "class_max": {1: 0, 2: 0},
         })
         s["event_count"] += 1
         if e.created_at and (s["first_seen"] is None or e.created_at < s["first_seen"]):
@@ -4224,7 +4191,7 @@ def leads_debug():
         if e.created_at and (s["last_seen"] is None or e.created_at > s["last_seen"]):
             s["last_seen"] = e.created_at
         cn = e.class_number
-        if cn in (1, 2, 3):
+        if cn in (1, 2):
             p = _pct_from_event(e)
             if p > s["class_max"][cn]:
                 s["class_max"][cn] = p
@@ -4270,7 +4237,6 @@ def leads_debug():
           <td style="padding:6px 10px;">{amb_label}</td>
           <td style="padding:6px 10px; text-align:center;">{_pct_cell(s["class_max"][1])}</td>
           <td style="padding:6px 10px; text-align:center;">{_pct_cell(s["class_max"][2])}</td>
-          <td style="padding:6px 10px; text-align:center;">{_pct_cell(s["class_max"][3])}</td>
           <td style="padding:6px 10px; text-align:center; color:#C9CFD4;">{s["event_count"]}</td>
           <td style="padding:6px 10px; color:#9CA3AF; font-size:11px;">{s["last_seen"].strftime('%m-%d %H:%M:%S') if s["last_seen"] else '—'}</td>
         </tr>""")
@@ -4345,11 +4311,10 @@ def leads_debug():
   <th>Email</th><th>Ambassador</th>
   <th style="text-align:center;">Class 1</th>
   <th style="text-align:center;">Class 2</th>
-  <th style="text-align:center;">Class 3</th>
   <th style="text-align:center;">Events</th>
   <th>Last seen (UTC)</th>
  </tr></thead>
- <tbody>{''.join(summary_rows_html) if summary_rows_html else '<tr><td colspan="7" style="padding:20px; text-align:center; color:#9CA3AF;">No leads yet</td></tr>'}</tbody>
+ <tbody>{''.join(summary_rows_html) if summary_rows_html else '<tr><td colspan="6" style="padding:20px; text-align:center; color:#9CA3AF;">No leads yet</td></tr>'}</tbody>
 </table>
 
 <h2 style="color:#2EDB99; font-size:14px; letter-spacing:1.5px; text-transform:uppercase; margin:24px 0 8px 0;">▌ RAW EVENT LOG · LAST 200</h2>
