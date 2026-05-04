@@ -1187,32 +1187,59 @@ def segment_send_template(segment_name):
         flash(f"Unknown template: {template_key}", "error")
         return redirect(url_for("admin.index"))
 
-    # ── TEST MODE: if only_email is provided, restrict the send to that
-    # one ambassador. Mirrors the full route's logic exactly (lock,
-    # idempotency flag, source-aware copy) so end-to-end is verified.
-    only_email = (request.form.get("only_email", "") or "").strip().lower()
-    if only_email:
-        amb = Ambassador.query.filter(func.lower(Ambassador.email) == only_email).first()
-        if amb is None:
-            flash(f"Test mode: ambassador with email '{only_email}' not found.", "error")
-            return redirect(url_for("admin.emails"))
-        targets = [amb]
-        # In test mode we deliberately ignore the idempotency flag so the
-        # admin can re-trigger the same email on themselves repeatedly.
-        # Skip min_age_days too — it's a test, those rules aren't relevant.
+    # ── TEST / CANARY MODE: if only_email or only_emails is provided,
+    # restrict the send to those specific addresses. Mirrors the full
+    # route's code path (mailer fn, source-aware copy) so end-to-end is
+    # verified end-to-end. Idempotency flag + min_age_days are skipped
+    # so the admin can re-test on themselves repeatedly.
+    #
+    # only_email   — single address (legacy, used by activation_push UI)
+    # only_emails  — comma OR newline separated, max 5 addresses (canary)
+    #
+    # Both forms are accepted on every template; we merge into one list.
+    raw_single = (request.form.get("only_email", "") or "").strip()
+    raw_multi = (request.form.get("only_emails", "") or "").strip()
+    candidate_emails = []
+    if raw_single:
+        candidate_emails.append(raw_single)
+    if raw_multi:
+        for line in raw_multi.replace(",", "\n").splitlines():
+            line = line.strip()
+            if line:
+                candidate_emails.append(line)
+    # Dedupe + lowercase + cap at 5 to make accidental "paste 200 emails" impossible
+    candidate_emails = list(dict.fromkeys(e.lower() for e in candidate_emails))[:5]
+
+    if candidate_emails:
         flag = cfg["flag"]
         label = cfg["label"]
         fn = cfg["fn"]
-        try:
-            ok = fn(amb, current_app.config["APP_URL"])
-            flash(
-                f"{label} TEST · sent to {amb.email}: " +
-                ("✓ delivered to Resend" if ok else "✗ Resend rejected — check logs"),
-                "success" if ok else "error",
-            )
-        except Exception as e:
-            logger.exception("test send failed for %s", amb.email)
-            flash(f"{label} TEST · error: {e}", "error")
+        sent_results = []
+        not_found = []
+        for em in candidate_emails:
+            amb = Ambassador.query.filter(func.lower(Ambassador.email) == em).first()
+            if amb is None:
+                not_found.append(em)
+                continue
+            try:
+                ok = fn(amb, current_app.config["APP_URL"])
+                sent_results.append((em, ok))
+            except Exception as e:
+                logger.exception("canary send failed for %s", em)
+                sent_results.append((em, False))
+
+        ok_count = sum(1 for _, ok in sent_results if ok)
+        fail_count = len(sent_results) - ok_count
+        msg_parts = [f"{label} CANARY · sent to {ok_count}/{len(sent_results)}"]
+        if fail_count:
+            failed_emails = ", ".join(em for em, ok in sent_results if not ok)
+            msg_parts.append(f"failed: {failed_emails}")
+        if not_found:
+            msg_parts.append(f"not in DB: {', '.join(not_found)}")
+        flash(
+            " · ".join(msg_parts),
+            "success" if (ok_count and not fail_count and not not_found) else "error",
+        )
         return redirect(url_for("admin.emails"))
 
     all_amb = Ambassador.query.all()

@@ -78,23 +78,26 @@
                         ⚠ This is a <strong>real send to production</strong>. Test on yourself first using the test mode below.
                     </div>
 
-                    {# TEST MODE — single email override #}
+                    {# CANARY MODE — send to up to 5 trusted addresses first #}
                     <div class="bg-blue-900/20 border border-blue-500/40 rounded p-3 mb-5">
-                        <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-blue-300 mb-2">🧪 Test on yourself first</p>
-                        <input type="email" name="only_email" placeholder="your@email.com"
-                               class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white font-mono"
-                               oninput="
-                                 var v = this.value.trim();
-                                 var btn = document.getElementById('confirm-{{ key }}-btn');
-                                 if (v) {
-                                   btn.textContent = '🧪 Send TEST to ' + v + ' only';
-                                   btn.classList.remove('bg-brand-400'); btn.classList.add('bg-blue-500');
-                                 } else {
-                                   btn.textContent = '▶ Send to {{ info.eligible }} ambassadors';
-                                   btn.classList.add('bg-brand-400'); btn.classList.remove('bg-blue-500');
-                                 }
-                               ">
-                        <p class="text-[10px] text-gray-500 mt-1">Leave blank to send to everyone. Filling in your email overrides → only that address gets the email.</p>
+                        <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-blue-300 mb-2">🧪 Canary send · test addresses first</p>
+                        <textarea name="only_emails" rows="3" placeholder="your@email.com&#10;teammate@email.com&#10;another@email.com"
+                                  class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white font-mono"
+                                  oninput="
+                                    var lines = this.value.trim().split(/[\n,]/).map(function(l){return l.trim();}).filter(Boolean);
+                                    var n = lines.length;
+                                    var btn = document.getElementById('confirm-{{ key }}-btn');
+                                    if (n > 0) {
+                                      btn.textContent = '🧪 Canary: send to ' + n + ' test address' + (n === 1 ? '' : 'es');
+                                      btn.classList.remove('bg-brand-400'); btn.classList.add('bg-blue-500');
+                                    } else {
+                                      btn.textContent = '▶ Send to {{ info.eligible }} ambassadors';
+                                      btn.classList.add('bg-brand-400'); btn.classList.remove('bg-blue-500');
+                                    }
+                                  "></textarea>
+                        <p class="text-[10px] text-gray-500 mt-1">
+                            One email per line (or comma-separated). Max 5. <strong class="text-blue-300">Recommended:</strong> send to yourself + 2 teammates first, verify it looks right, then come back and send to all.
+                        </p>
                     </div>
 
                     <div class="flex gap-2 justify-end">
