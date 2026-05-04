@@ -1378,6 +1378,12 @@ _SEGMENT_TEMPLATES = {
         "flag": "class1_email_sent_at",
         "label": "Class 1 ready (announcement)",
         "min_age_days": 0,
+        # Skip recipients who already engaged with Class 1 — no point
+        # nudging them to "watch" something they've already seen.
+        "exclude_if_event_in": [
+            "class1_viewed", "class1_progress_25", "class1_progress_50",
+            "class1_progress_75", "class1_progress_95", "class1_completed",
+        ],
     },
     "class2_ready": {
         "fn": send_class2_ready_email,
@@ -1385,6 +1391,10 @@ _SEGMENT_TEMPLATES = {
         "flag": "class2_email_sent_at",
         "label": "Class 2 ready (announcement)",
         "min_age_days": 0,
+        "exclude_if_event_in": [
+            "class2_viewed", "class2_progress_25", "class2_progress_50",
+            "class2_progress_75", "class2_progress_95", "class2_completed",
+        ],
     },
     "class3_ready": {
         "fn": send_class3_ready_email,
@@ -1392,6 +1402,10 @@ _SEGMENT_TEMPLATES = {
         "flag": "class3_email_sent_at",
         "label": "Class 3 ready (announcement)",
         "min_age_days": 0,
+        "exclude_if_event_in": [
+            "class3_viewed", "class3_progress_25", "class3_progress_50",
+            "class3_progress_75", "class3_progress_95", "class3_completed",
+        ],
     },
     "webinar_reminder": {
         "fn": send_webinar_reminder_email,
@@ -1399,6 +1413,8 @@ _SEGMENT_TEMPLATES = {
         "flag": "webinar_reminder_sent_at",
         "label": "Webinar reminder (1h before)",
         "min_age_days": 0,
+        # Skip those who've already joined or clicked the link
+        "exclude_if_event_in": ["webinar_joined", "webinar_link_clicked"],
     },
 }
 
@@ -1515,6 +1531,7 @@ def segment_send_template(segment_name):
     label = cfg["label"]
     fn = cfg["fn"]
     min_age_days = cfg.get("min_age_days", 0)
+    exclude_if_event_in = cfg.get("exclude_if_event_in") or []
 
     # Filter 1: already-sent
     eligible = [a for a in targets if getattr(a, flag, None) is None]
@@ -1537,10 +1554,30 @@ def segment_send_template(segment_name):
         skipped_too_new = len(eligible) - len(old_enough)
         eligible = old_enough
 
+    # Filter 3: skip recipients who already engaged with this content
+    # (e.g. don't send "Class 1 ready" to people who already viewed it).
+    skipped_already_engaged = 0
+    if exclude_if_event_in:
+        from app.models import LeadEvent
+        engaged_emails = {
+            (em or "").lower() for (em,) in
+            db.session.query(LeadEvent.email)
+            .filter(LeadEvent.event_type.in_(exclude_if_event_in))
+            .distinct()
+            .all() if em
+        }
+        before = len(eligible)
+        eligible = [
+            a for a in eligible
+            if a.email and a.email.lower() not in engaged_emails
+        ]
+        skipped_already_engaged = before - len(eligible)
+
     if not eligible:
         flash(
             f"{label}: nothing to send. {skipped_already_sent} already received, "
-            f"{skipped_too_new} too recent (<{min_age_days} days since signup).",
+            f"{skipped_too_new} too recent (<{min_age_days} days since signup), "
+            f"{skipped_already_engaged} already engaged with this content.",
             "info",
         )
         return redirect(url_for("admin.index"))
