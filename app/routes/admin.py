@@ -38,9 +38,130 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 logger = logging.getLogger(__name__)
 
 
+def _safe(fn, default, *args, **kwargs):
+    """Wrap a heavy helper call so a single failure doesn't 500 the page.
+    Logs the exception and returns `default`. Used inside Overview /
+    Leads / Insights routes around _compute_* helpers.
+    """
+    try:
+        return fn(*args, **kwargs)
+    except Exception:
+        logger.exception("safe wrapper caught exception in %s", getattr(fn, "__name__", fn))
+        return default
+
+
 # ════════════════════════════════════════════════════════════════════
 # Marketing helpers — segments + chart data
 # ════════════════════════════════════════════════════════════════════
+
+def _quick_temp_dist_sql():
+    """Approximate temperature distribution via SQL aggregation.
+
+    Buckets each ambassador by the strongest behavioural event they have:
+      purchase_completed              → customer
+      webinar_joined                  → burning
+      classN_completed (any N)        → hot   (or burning if multiple classes)
+      classN_progress_50/75/95        → warm
+      classN_viewed/progress_25       → cool
+      no class events                 → cold
+
+    Returns dict {bucket_key: count}. Used by /admin/leads to power the
+    clickable distribution cards without scoring every lead in Python.
+    """
+    from app.models import LeadEvent, Ambassador
+
+    # Pull distinct (email, event_type) pairs for class/webinar/purchase events
+    EVENTS = [
+        "purchase_completed",
+        "webinar_joined",
+        "class1_completed", "class2_completed", "class3_completed",
+        "class1_progress_95", "class2_progress_95", "class3_progress_95",
+        "class1_progress_75", "class2_progress_75", "class3_progress_75",
+        "class1_progress_50", "class2_progress_50", "class3_progress_50",
+        "class1_progress_25", "class2_progress_25", "class3_progress_25",
+        "class1_viewed", "class2_viewed", "class3_viewed",
+    ]
+    rows = (
+        db.session.query(LeadEvent.email, LeadEvent.event_type)
+        .filter(LeadEvent.event_type.in_(EVENTS))
+        .distinct()
+        .all()
+    )
+    by_email = defaultdict(set)
+    for em, et in rows:
+        if em:
+            by_email[em.lower()].add(et)
+
+    # Total reachable ambassadors (for cold count).
+    total_reachable = (
+        Ambassador.query.filter(Ambassador.unsubscribed_at.is_(None)).count()
+    )
+
+    counts = {"customer": 0, "burning": 0, "hot": 0, "warm": 0, "cool": 0, "cold": 0}
+    for em, evts in by_email.items():
+        if "purchase_completed" in evts:
+            counts["customer"] += 1
+        elif "webinar_joined" in evts:
+            counts["burning"] += 1
+        elif any(f"class{n}_completed" in evts for n in (1, 2, 3)):
+            # Multiple full classes → burning, single class → hot
+            n_completed = sum(1 for n in (1, 2, 3) if f"class{n}_completed" in evts)
+            counts["burning" if n_completed >= 2 else "hot"] += 1
+        elif any(f"class{n}_progress_{p}" in evts for n in (1, 2, 3) for p in (50, 75, 95)):
+            counts["warm"] += 1
+        elif any(f"class{n}_progress_25" in evts or f"class{n}_viewed" in evts
+                 for n in (1, 2, 3)):
+            counts["cool"] += 1
+
+    cold = max(0, total_reachable - sum(counts.values()))
+    counts["cold"] = cold
+    return counts
+
+
+def _quick_origin_dist_sql():
+    """Approximate origin distribution via SQL on Ambassador UTM columns.
+
+    Returns dict {bucket_key: count}.
+    """
+    from app.services.temperature import SOURCE_BUCKETS
+    counts = {key: 0 for key, _ in SOURCE_BUCKETS}
+
+    # Pull distinct utm_source counts (and fbclid/gclid presence)
+    rows = (
+        db.session.query(Ambassador.utm_source, Ambassador.utm_medium,
+                         Ambassador.fbclid, Ambassador.gclid, Ambassador.ttclid,
+                         func.count(Ambassador.id))
+        .group_by(Ambassador.utm_source, Ambassador.utm_medium,
+                  Ambassador.fbclid, Ambassador.gclid, Ambassador.ttclid)
+        .all()
+    )
+
+    def _to_bucket(src, med, fbclid, gclid, ttclid):
+        s = (src or "").lower()
+        m = (med or "").lower()
+        is_paid = any(k in m for k in ("cpc", "paid", "ads", "ad ")) or m in ("ad", "paid")
+        if "tiktok" in s or ttclid:
+            return "tiktok_ad" if is_paid else "tiktok"
+        if "google" in s or gclid:
+            return "google_ad" if (is_paid or gclid) else "google"
+        if "instagram" in s or "insta" in s or s == "ig":
+            return "instagram_ad" if is_paid else "instagram"
+        if "facebook" in s or "fb" in s or "meta" in s or fbclid:
+            return "facebook_ad" if (is_paid or fbclid) else "facebook"
+        if "referral" in s or "referral" in m:
+            return "referral"
+        if "email" in s or m == "email":
+            return "email"
+        if s or m:
+            return "other"
+        return "direct"
+
+    for src, med, fb, gc, tt, n in rows:
+        bucket = _to_bucket(src, med, fb, gc, tt)
+        counts[bucket] = counts.get(bucket, 0) + n
+
+    return counts
+
 
 def _get_referral_counts():
     """Map ambassador_id → referral count via a single SQL aggregation.
@@ -1088,32 +1209,56 @@ def index():
             if q in (a.name or "").lower() or q in (a.email or "").lower()
         ]
 
-    sorted_ambassadors = sorted(ambassadors, key=lambda a: ref_counts.get(a.id, 0), reverse=True)
+    sorted_ambassadors_full = sorted(ambassadors, key=lambda a: ref_counts.get(a.id, 0), reverse=True)
 
-    # Top-line stats (cheap aggregate counts via SQL)
-    total_referrals = Referral.query.count()
+    # PERF: paginate the ambassador table at the route level to keep the
+    # rendered HTML small. With 2,500 rows the unpaginated table was
+    # ~5–10 MB output → slow Jinja render → timeout on hot workers.
+    # Stats below still iterate the full set (cheap in-memory now that
+    # N+1 is gone); only the table slice is rendered.
+    PER_PAGE = 50
+    page = max(1, request.args.get("page", default=1, type=int))
+    total_filtered = len(sorted_ambassadors_full)
+    pages = max(1, (total_filtered + PER_PAGE - 1) // PER_PAGE)
+    sorted_ambassadors = sorted_ambassadors_full[(page - 1) * PER_PAGE : page * PER_PAGE]
+
+    # Top-line stats (cheap aggregate counts via SQL or in-memory)
+    total_referrals = _safe(lambda: Referral.query.count(), 0)
     community_count = sum(1 for a in all_amb_for_stats if a.source == "community")
     public_count = sum(1 for a in all_amb_for_stats if a.source == "public")
     unsubscribed = sum(1 for a in all_amb_for_stats if a.unsubscribed_at is not None)
-    prizes_earned = MilestoneNotification.query.count()
-    prizes_pending = MilestoneNotification.query.filter_by(delivered=False).count()
+    prizes_earned = _safe(lambda: MilestoneNotification.query.count(), 0)
+    prizes_pending = _safe(lambda: MilestoneNotification.query.filter_by(delivered=False).count(), 0)
 
-    # Marketing segments + chart data + email stats
-    segments = _compute_segments(all_amb_for_stats, referral_counts=ref_counts)
+    # Marketing segments + chart data + email stats — wrapped in _safe
+    # so a single broken helper degrades the dashboard instead of 500ing.
+    segments = _safe(lambda: _compute_segments(all_amb_for_stats, referral_counts=ref_counts), {})
     segment_counts = {k: len(v) for k, v in segments.items()}
-    charts = _compute_chart_data(ambassadors=all_amb_for_stats, referral_counts=ref_counts)
-    email_stats = _compute_email_stats()
-    turnstile_stats = _compute_turnstile_stats()
-    country_dist = _compute_country_distribution()
+    charts = _safe(
+        lambda: _compute_chart_data(ambassadors=all_amb_for_stats, referral_counts=ref_counts),
+        {"timeline": {"labels": [], "community": [], "public": []},
+         "distribution": {"labels": [], "values": []},
+         "funnel": {"labels": [], "values": []}},
+    )
+    email_stats = _safe(_compute_email_stats, {})
+    turnstile_stats = _safe(_compute_turnstile_stats, {})
+    country_dist = _safe(_compute_country_distribution, {
+        "labels": [], "counts": [], "flags": [], "geo": {},
+        "other_breakdown": [], "total": 0, "with_country": 0,
+        "coverage_pct": 0, "distinct_countries": 0, "max_count": 0,
+    })
 
     # Engagement: how many ambassadors have opened their dashboard at least once
     visited = sum(1 for a in all_amb_for_stats if a.last_dashboard_visit_at is not None)
 
-    # PERF: compute suspicion ONCE per ambassador across all rows, then
-    # filter into per-row dict. Previously this ran twice per row → 2x N+1.
-    suspicion_by_id = {a.id: _compute_suspicion(a) for a in all_amb_for_stats}
-    risk_by_id = {a.id: suspicion_by_id[a.id] for a in sorted_ambassadors}
-    high_risk_total = sum(1 for s in suspicion_by_id.values() if s["level"] == "high")
+    # Suspicion: compute ONLY for the current page slice (was: all 2,500).
+    # high_risk_total still counts across the full set so the headline
+    # stat is accurate.
+    risk_by_id = {a.id: _safe(_compute_suspicion, {"level": "clean", "score": 0, "reason": None, "total": 0}, a) for a in sorted_ambassadors}
+    high_risk_total = _safe(
+        lambda: sum(1 for a in all_amb_for_stats if _compute_suspicion(a)["level"] == "high"),
+        0,
+    )
 
     # How many velocity-throttled signups are sitting in the review queue
     pending_review_count = PendingReferral.query.filter_by(status="pending").count()
@@ -1125,6 +1270,11 @@ def index():
         page_title="Overview",
         active_section="overview",
         ambassadors=sorted_ambassadors,
+        # Pagination context
+        page=page,
+        pages=pages,
+        per_page=PER_PAGE,
+        total_filtered=total_filtered,
         total_ambassadors=len(all_amb_for_stats),
         total_referrals=total_referrals,
         community_count=community_count,
@@ -3359,8 +3509,6 @@ def leads():
     per_page   = 50
 
     # ── DB-level filters first (cheap) ──
-    # PERF: no joinedload — we use the bulk referral_counts dict below
-    # so compute_temperature never touches the lazy relationship.
     base = Ambassador.query
 
     if q:
@@ -3377,21 +3525,90 @@ def leads():
     if has_phone:
         base = base.filter(Ambassador.phone_number.isnot(None))
 
+    # PERF: per-class filters via SQL EXISTS subquery on lead_events,
+    # not Python after loading everyone. ≥25% means the lead has any
+    # of the relevant progress events for that class.
+    from app.models import LeadEvent
+    def _add_class_filter(q_, class_n):
+        progress_events = [
+            f"class{class_n}_viewed",
+            f"class{class_n}_progress_25",
+            f"class{class_n}_progress_50",
+            f"class{class_n}_progress_75",
+            f"class{class_n}_progress_95",
+            f"class{class_n}_completed",
+            f"class{class_n}_resource_unlocked",
+        ]
+        sub = (
+            db.session.query(LeadEvent.email)
+            .filter(func.lower(LeadEvent.email) == func.lower(Ambassador.email))
+            .filter(LeadEvent.event_type.in_(progress_events))
+            .exists()
+        )
+        return q_.filter(sub)
+
+    if class_1:
+        base = _add_class_filter(base, 1)
+    if class_2:
+        base = _add_class_filter(base, 2)
+    if class_3:
+        base = _add_class_filter(base, 3)
+
+    # Origin filter via UTM column match (approximate, but DB-level)
+    if origin in ("instagram", "instagram_ad"):
+        base = base.filter(or_(
+            func.lower(Ambassador.utm_source).like("%insta%"),
+            func.lower(Ambassador.utm_source) == "ig",
+        ))
+    elif origin in ("facebook", "facebook_ad"):
+        base = base.filter(or_(
+            func.lower(Ambassador.utm_source).like("%facebook%"),
+            func.lower(Ambassador.utm_source).like("%meta%"),
+            Ambassador.fbclid.isnot(None),
+        ))
+    elif origin in ("google", "google_ad"):
+        base = base.filter(or_(
+            func.lower(Ambassador.utm_source).like("%google%"),
+            Ambassador.gclid.isnot(None),
+        ))
+    elif origin in ("tiktok", "tiktok_ad"):
+        base = base.filter(or_(
+            func.lower(Ambassador.utm_source).like("%tiktok%"),
+            Ambassador.ttclid.isnot(None),
+        ))
+    elif origin == "direct":
+        base = base.filter(
+            (Ambassador.utm_source.is_(None) | (Ambassador.utm_source == "")) &
+            (Ambassador.fbclid.is_(None)) &
+            (Ambassador.gclid.is_(None)) &
+            (Ambassador.ttclid.is_(None))
+        )
+    # 'referral', 'email', 'other' fall through — no DB filter
+    # (the user can still see them by source / tag instead)
+
     base = base.order_by(
         Ambassador.last_dashboard_visit_at.desc().nullslast(),
         Ambassador.created_at.desc().nullslast(),
     )
 
-    # ── Score everyone matching DB filters so we can compute distributions ──
-    # For ~2k leads with bulk-fetch this is fast (<500ms typically).
-    all_rows = base.limit(5000).all()
-    ids = [a.id for a in all_rows]
-    lead_evts_by_id, email_evts_by_id = fetch_signals_bulk(ids) if ids else ({}, {})
-    # PERF: bulk referral counts to avoid N+1 inside compute_temperature.
+    # ── Total count via SQL (cheap), then pull only the current page ──
+    total_count = base.count()
+    pages = max(1, (total_count + per_page - 1) // per_page)
+    page_amb = base.offset((page - 1) * per_page).limit(per_page).all()
+
+    # ref_counts is a single SQL aggregation — used for sorting and
+    # passed into compute_temperature so it never touches the lazy
+    # property in the hot loop.
     ref_counts = _get_referral_counts()
 
-    scored_all = []
-    for a in all_rows:
+    # PERF: only fetch events for the page (≤50 IDs), not for everyone.
+    page_ids = [a.id for a in page_amb]
+    lead_evts_by_id, email_evts_by_id = (
+        fetch_signals_bulk(page_ids, max_ids=None) if page_ids else ({}, {})
+    )
+
+    rows_with_temp = []
+    for a in page_amb:
         t = compute_temperature(
             a,
             lead_events=lead_evts_by_id.get(a.id, []),
@@ -3399,40 +3616,25 @@ def leads():
             referral_count=ref_counts.get(a.id, 0),
         )
         t["source_info"] = classify_source(a)
-        scored_all.append((a, t))
+        rows_with_temp.append((a, t))
 
-    # ── Distributions over the DB-filtered set (clickable in the UI) ──
-    temp_dist = {key: 0 for key, _, _ in TEMP_BUCKETS}
-    origin_dist = {key: 0 for key, _ in SOURCE_BUCKETS}
-    for _, t in scored_all:
-        key = temp_label_to_key(t["bucket"])
-        if key in temp_dist:
-            temp_dist[key] += 1
-        ok = t["source_info"]["key"]
-        if ok in origin_dist:
-            origin_dist[ok] += 1
-        else:
-            origin_dist["other"] += 1
-
-    # ── Apply Python-level filters (origin / temp / per-class) ──
-    filtered = scored_all
-    if origin:
-        filtered = [(a, t) for a, t in filtered if t["source_info"]["key"] == origin]
+    # If a temperature-bucket filter is active, narrow the page (best-effort).
+    # This loses precision (only filters the current page slice), but it's
+    # the price we pay for not scoring all 2,500 every request. For exact
+    # global temp filtering, the Insights page is the right tool.
     if temp_bucket:
-        filtered = [(a, t) for a, t in filtered if temp_label_to_key(t["bucket"]) == temp_bucket]
-    if class_1:
-        filtered = [(a, t) for a, t in filtered if t["max_pct"].get(1, 0) >= 25]
-    if class_2:
-        filtered = [(a, t) for a, t in filtered if t["max_pct"].get(2, 0) >= 25]
-    if class_3:
-        filtered = [(a, t) for a, t in filtered if t["max_pct"].get(3, 0) >= 25]
-    if class_min:
-        filtered = [(a, t) for a, t in filtered if max(t["max_pct"].values()) >= class_min]
+        rows_with_temp = [
+            (a, t) for a, t in rows_with_temp
+            if temp_label_to_key(t["bucket"]) == temp_bucket
+        ]
 
-    total_count = len(filtered)
-    rows_with_temp = filtered[(page - 1) * per_page : page * per_page]
-
-    pages = max(1, (total_count + per_page - 1) // per_page)
+    # ── Distributions: lightweight SQL approximations (not from scoring) ──
+    # These power the clickable cards at the top. They count distinct
+    # ambassadors that match each bucket via raw event types — close
+    # enough for the headline counters; per-row temperature in the table
+    # remains the precise scored value.
+    temp_dist = _safe(_quick_temp_dist_sql, {key: 0 for key, _, _ in TEMP_BUCKETS})
+    origin_dist = _safe(_quick_origin_dist_sql, {key: 0 for key, _ in SOURCE_BUCKETS})
 
     # Pre-compute WhatsApp message URLs (template-friendly)
     for amb, t in rows_with_temp:

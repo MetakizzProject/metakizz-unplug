@@ -448,6 +448,27 @@
                 </tbody>
             </table>
         </div>
+
+        {% if pages and pages > 1 %}
+        <div class="flex items-center justify-between gap-3 mt-4 px-2 font-mono-term text-[11px]">
+            <span class="text-gray-500">
+                Showing <span class="text-brand-400">{{ ((page - 1) * per_page) + 1 }}–{{ ((page - 1) * per_page) + ambassadors|length }}</span>
+                of <span class="text-white">{{ total_filtered }}</span>
+                {% if total_filtered != total_ambassadors %}<span class="text-gray-600">(filtered from {{ total_ambassadors }})</span>{% endif %}
+            </span>
+            <div class="flex gap-2">
+                {% if page > 1 %}
+                <a href="?{% for k, v in request.args.items() %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page - 1 }}"
+                   class="px-3 py-1.5 border border-brand-400/40 rounded text-brand-400 hover:bg-brand-400/10 tracking-wider uppercase">← prev</a>
+                {% endif %}
+                <span class="px-3 py-1.5 bg-brand-400 text-black rounded font-bold tracking-wider">page {{ page }} / {{ pages }}</span>
+                {% if page < pages %}
+                <a href="?{% for k, v in request.args.items() %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page + 1 }}"
+                   class="px-3 py-1.5 border border-brand-400/40 rounded text-brand-400 hover:bg-brand-400/10 tracking-wider uppercase">next →</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 

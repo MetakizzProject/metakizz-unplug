@@ -209,7 +209,7 @@ def compute_temperature(
     }
 
 
-def fetch_signals_bulk(ambassador_ids):
+def fetch_signals_bulk(ambassador_ids, max_ids: int = 500):
     """Pre-fetch LeadEvents and EmailEvents for a list of ambassador IDs in
     two queries, then return:
         (lead_events_by_id, email_events_by_id)
@@ -217,12 +217,18 @@ def fetch_signals_bulk(ambassador_ids):
     PERF: explicitly defer the heavy `extra` TEXT columns (raw JSON
     payloads up to ~5KB per row). With 30k+ events in prod that field
     alone could pile up to 150MB+ of data we never read, blowing past
-    Render's worker memory and dragging the page into a 500. The
-    defer() option tells SQLAlchemy to leave the column out of the
-    SELECT — it'll be lazy-loaded only if accessed.
+    Render's worker memory and dragging the page into a 500.
+
+    Soft cap (`max_ids`, default 500) prevents accidental "load events
+    for all 2,500 ambassadors" callers from regressing. Callers that
+    legitimately need everyone (e.g. /admin/leads/insights global stats)
+    should pass max_ids=None to opt out of the cap.
     """
     from sqlalchemy.orm import defer
     from app.models import LeadEvent, EmailEvent
+
+    if max_ids is not None and len(ambassador_ids) > max_ids:
+        ambassador_ids = list(ambassador_ids)[:max_ids]
 
     lead_evts = (
         LeadEvent.query
