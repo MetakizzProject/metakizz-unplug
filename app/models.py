@@ -85,6 +85,16 @@ class Ambassador(db.Model):
     phone_number = db.Column(db.String(30), nullable=True, index=True)
     country_code = db.Column(db.String(4), nullable=True, index=True)
 
+    # GoHighLevel mirror columns. Backfilled by tools/import_ghl_csv.py
+    # from a Contacts CSV export, and (later) kept in sync via GHL API.
+    # ghl_contact_id is the GHL contact UUID — used to deep-link from
+    # the leads dashboard to the GHL contact card. ghl_tags is the raw
+    # comma-separated tag string from GHL (e.g. "mkot3_registrado,
+    # masterclass march17th"). Both nullable for rows that pre-date the
+    # import or never appeared in GHL.
+    ghl_contact_id = db.Column(db.String(40), nullable=True, index=True)
+    ghl_tags = db.Column(db.Text, nullable=True)
+
     # Attribution snapshot at first touch — populated either by GHL signup webhook
     # (when GHL forwards the UTMs as custom data) or backfilled by /api/lead-event
     # the first time the ambassador's email shows up with non-empty UTMs.

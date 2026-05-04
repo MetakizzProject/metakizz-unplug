@@ -84,6 +84,14 @@ def _ensure_unsubscribe_columns(db):
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN country_code VARCHAR(4)"))
             logger.info("added column ambassadors.country_code")
 
+        # GHL mirror columns (added 2026-05-04 for the Leads dashboard).
+        if "ghl_contact_id" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN ghl_contact_id VARCHAR(40)"))
+            logger.info("added column ambassadors.ghl_contact_id")
+        if "ghl_tags" not in cols:
+            conn.execute(text("ALTER TABLE ambassadors ADD COLUMN ghl_tags TEXT"))
+            logger.info("added column ambassadors.ghl_tags")
+
         # Attribution / UTM columns (added 2026-05-04 for the Leads tracker).
         # Populated either by the GHL signup webhook (when GHL custom-data
         # forwards the UTMs) OR backfilled by /api/lead-event the first time

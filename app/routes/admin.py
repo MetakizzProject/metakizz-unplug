@@ -2587,6 +2587,141 @@ def pending_bulk_reject(referrer_id):
     return redirect(url_for("admin.pending_review"))
 
 
+# ════════════════════════════════════════════════════════════════════
+# GHL SYNC — pull contacts from GoHighLevel into our Ambassador table
+# ════════════════════════════════════════════════════════════════════
+
+# Module-level state for sync progress (single-instance deploy on Render
+# means this is fine; if we ever scale to multiple workers, move to DB).
+_GHL_SYNC_STATE = {
+    "running": False,
+    "started_at": None,
+    "finished_at": None,
+    "stats": None,
+    "error": None,
+}
+
+
+@admin_bp.route("/sync-ghl", methods=["GET", "POST"])
+def sync_ghl():
+    """Page that shows GHL sync status + a button to trigger a fresh sync.
+
+    GET → render status page (auto-refreshes while running).
+    POST → kick off a background sync, redirect back to GET.
+    """
+    from app.services import ghl as ghl_service
+
+    if request.method == "POST":
+        if _GHL_SYNC_STATE["running"]:
+            flash("A GHL sync is already running.", "info")
+            return redirect(url_for("admin.sync_ghl"))
+
+        if not ghl_service.is_configured():
+            flash(
+                "GHL not configured. Set GHL_PRIVATE_TOKEN and GHL_LOCATION_ID "
+                "in Render env vars.",
+                "error",
+            )
+            return redirect(url_for("admin.sync_ghl"))
+
+        flask_app = current_app._get_current_object()
+
+        def _run():
+            with flask_app.app_context():
+                _GHL_SYNC_STATE["running"] = True
+                _GHL_SYNC_STATE["started_at"] = datetime.now(timezone.utc)
+                _GHL_SYNC_STATE["finished_at"] = None
+                _GHL_SYNC_STATE["stats"] = None
+                _GHL_SYNC_STATE["error"] = None
+                try:
+                    stats = ghl_service.sync_all_contacts(create_missing=True)
+                    _GHL_SYNC_STATE["stats"] = stats
+                except Exception as e:
+                    logger.exception("GHL sync background thread failed")
+                    _GHL_SYNC_STATE["error"] = str(e)
+                finally:
+                    _GHL_SYNC_STATE["finished_at"] = datetime.now(timezone.utc)
+                    _GHL_SYNC_STATE["running"] = False
+
+        threading.Thread(target=_run, daemon=True).start()
+        flash("GHL sync started. Refresh this page to see progress.", "success")
+        return redirect(url_for("admin.sync_ghl"))
+
+    # ── GET: render status page ──
+    state = _GHL_SYNC_STATE
+    is_configured = ghl_service.is_configured()
+
+    if state["running"]:
+        elapsed = (datetime.now(timezone.utc) - state["started_at"]).total_seconds() if state["started_at"] else 0
+        status_html = f'''
+        <div style="padding:14px 18px; background:rgba(255,200,87,0.1); border:1px solid #FFC857; border-radius:6px;">
+          <p style="color:#FFC857; font-size:13px; letter-spacing:2px;">▌ SYNC RUNNING · {int(elapsed)}s elapsed</p>
+        </div>
+        '''
+    elif state["error"]:
+        status_html = f'''
+        <div style="padding:14px 18px; background:rgba(220,38,38,0.15); border:1px solid #DC2626; border-radius:6px;">
+          <p style="color:#FCA5A5; font-size:13px;">▌ LAST RUN FAILED</p>
+          <p style="color:#FCA5A5; font-size:12px; margin-top:6px;">{state["error"][:300]}</p>
+        </div>
+        '''
+    elif state["stats"]:
+        elapsed = (state["finished_at"] - state["started_at"]).total_seconds() if state["started_at"] and state["finished_at"] else 0
+        rows = "".join(
+            f'<tr><td style="padding:6px 10px; color:#9CA3AF;">{k}</td><td style="padding:6px 10px; color:#2EDB99; text-align:right;"><strong>{v}</strong></td></tr>'
+            for k, v in state["stats"].items()
+        )
+        status_html = f'''
+        <div style="padding:14px 18px; background:rgba(46,219,153,0.08); border:1px solid #2EDB99; border-radius:6px;">
+          <p style="color:#2EDB99; font-size:13px; letter-spacing:2px;">▌ LAST SYNC OK · {int(elapsed)}s · finished {state["finished_at"].strftime('%H:%M:%S UTC')}</p>
+          <table style="margin-top:12px; font-family:'Share Tech Mono',monospace; font-size:13px;">{rows}</table>
+        </div>
+        '''
+    else:
+        status_html = '<div style="color:#6B7280; font-size:13px;">No sync run yet.</div>'
+
+    refresh_meta = '<meta http-equiv="refresh" content="5">' if state["running"] else ""
+    config_warning = ""
+    if not is_configured:
+        config_warning = '''
+        <div style="padding:14px 18px; background:rgba(220,38,38,0.15); border:1px solid #DC2626; border-radius:6px; margin-bottom:18px;">
+          <p style="color:#FCA5A5; font-size:13px;">⚠ GHL not configured. Set <code style="color:#fff;">GHL_PRIVATE_TOKEN</code> + <code style="color:#fff;">GHL_LOCATION_ID</code> in Render → Environment Variables → save → redeploy.</p>
+        </div>
+        '''
+
+    button_html = ""
+    if is_configured and not state["running"]:
+        button_html = '''
+        <form method="post" style="margin-top:20px;">
+          <button type="submit" style="background:#2EDB99; color:#000; border:0; padding:14px 28px; font-family:'Orbitron',sans-serif; font-weight:900; letter-spacing:2px; text-transform:uppercase; cursor:pointer; box-shadow:0 0 16px rgba(46,219,153,0.45); font-size:13px;">▶ Run full sync now</button>
+          <p style="color:#6B7280; font-size:11px; margin-top:8px;">Pulls every contact from GHL (~1-2 min for 2k contacts). Idempotent — safe to re-run.</p>
+        </form>
+        '''
+
+    return f'''<!doctype html>
+<html><head>
+<meta charset="utf-8"/>
+{refresh_meta}
+<title>GHL Sync · MetaKizz</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+ body {{ background:#000; color:#fff; font-family:'Share Tech Mono','Courier New',monospace; padding:24px; max-width:720px; margin:0 auto; }}
+ h1 {{ color:#2EDB99; font-size:18px; letter-spacing:2.5px; text-transform:uppercase; margin:0 0 6px 0; font-family:'Orbitron',sans-serif; font-weight:900; }}
+ .sub {{ color:#9CA3AF; font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:24px; }}
+ a {{ color:#2EDB99; }}
+</style>
+</head><body>
+<h1>▌ GHL Sync</h1>
+<p class="sub">Pull contacts from GoHighLevel · enrich Ambassador rows with tags + UTMs + phones</p>
+{config_warning}
+{status_html}
+{button_html}
+<p style="margin-top:30px; font-size:11px; color:#4B5563;">
+  <a href="/admin/leads-debug">▌ Lead events</a> · <a href="/admin/">▌ Back to admin</a>
+</p>
+</body></html>'''
+
+
 @admin_bp.route("/leads-debug")
 def leads_debug():
     """Quick live view of LeadEvent rows arriving from /api/lead-event.
