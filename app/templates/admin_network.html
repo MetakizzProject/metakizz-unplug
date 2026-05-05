@@ -98,6 +98,35 @@
     width: 8px; height: 8px; border-radius: 50%;
 }
 
+.net-zoom-btns {
+    display: flex; gap: 4px; padding-left: 12px;
+    border-left: 1px solid rgba(46,219,153,0.2);
+}
+.net-zoom-btn {
+    background: rgba(46,219,153,0.1);
+    border: 1px solid rgba(46,219,153,0.4);
+    color: #2EDB99;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    line-height: 1;
+    transition: all 120ms;
+}
+.net-zoom-btn:hover {
+    background: rgba(46,219,153,0.25);
+    box-shadow: 0 0 10px rgba(46,219,153,0.3);
+}
+.net-hint {
+    position: absolute; bottom: 12px; left: 12px;
+    color: #6B7280; font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 0.05em;
+    pointer-events: none;
+    background: rgba(0,0,0,0.5);
+    padding: 4px 8px; border-radius: 3px;
+}
+
 .net-tooltip {
     position: absolute; pointer-events: none;
     background: rgba(0,0,0,0.92);
@@ -249,9 +278,16 @@
           <span class="legend-item"><span class="legend-dot" style="background:#A78BFA;"></span> public</span>
           <span class="legend-item"><span class="legend-dot" style="background:#9CA3AF;"></span> other</span>
         </div>
+        <div class="net-zoom-btns">
+          <button class="net-zoom-btn" id="net-zoom-in" title="Zoom in">+</button>
+          <button class="net-zoom-btn" id="net-zoom-out" title="Zoom out">−</button>
+          <button class="net-zoom-btn" id="net-zoom-fit" title="Fit to screen">⛶ Fit</button>
+          <button class="net-zoom-btn" id="net-zoom-reset" title="Reset view">↺</button>
+        </div>
       </div>
       <canvas id="net-canvas"></canvas>
       <div class="net-tooltip" id="net-tooltip"></div>
+      <div class="net-hint">scroll = zoom · drag = pan · click node = highlight tree</div>
     </div>
 
     <aside class="viral-panel">
@@ -291,28 +327,30 @@
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
-    // Set canvas pixel size for crisp rendering on retina
+    let dpr = window.devicePixelRatio || 1;
+    let cssW = 0, cssH = 720;
+
     function resize() {
         const rect = canvas.parentElement.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width  = rect.width * dpr;
-        canvas.height = 720 * dpr;
-        canvas.style.width  = rect.width + 'px';
-        canvas.style.height = '720px';
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        dpr = window.devicePixelRatio || 1;
+        cssW = rect.width;
+        canvas.width  = cssW * dpr;
+        canvas.height = cssH * dpr;
+        canvas.style.width  = cssW + 'px';
+        canvas.style.height = cssH + 'px';
+        // Center force re-positioned on resize
+        if (simulation) {
+            simulation.force('center', d3.forceCenter(cssW / 2, cssH / 2));
+            simulation.alpha(0.3).restart();
+        }
+        draw();
     }
-    resize();
-    window.addEventListener('resize', resize);
-
-    const W = canvas.width / (window.devicePixelRatio || 1);
-    const H = canvas.height / (window.devicePixelRatio || 1);
 
     // Build node-id index for quick lookup
     const allNodes = data.nodes.map(n => Object.assign({}, n));
     const allLinks = data.links.map(l => ({source: l.source, target: l.target}));
     const nodeById = new Map(allNodes.map(n => [n.id, n]));
 
-    // By default, show only nodes that are part of a non-trivial tree (≥2 nodes)
     function nodesInTrees() {
         return allNodes.filter(n => n.descendants > 0 || n.depth_in_tree > 0);
     }
@@ -323,22 +361,21 @@
         nodeById.get(typeof l.target === 'object' ? l.target.id : l.target)
     );
 
-    // Color by source
     function colorOf(src) {
         if (src === 'community') return '#2EDB99';
         if (src === 'public')    return '#A78BFA';
         return '#9CA3AF';
     }
 
-    // Node radius based on descendants
     function radiusOf(n) {
         return Math.max(4, Math.min(36, 4 + Math.log2(n.descendants + 1) * 5));
     }
 
-    let highlightTreeRoot = null;  // node.id when user clicks a tree
+    let highlightTreeRoot = null;
     let hoveredNode = null;
+    let viewTransform = d3.zoomIdentity;
+    let didAutoFit = false;
 
-    // Build subtree set given a root id
     function subtreeIds(rootId) {
         const out = new Set();
         const stack = [rootId];
@@ -355,23 +392,40 @@
         return out;
     }
 
-    // Force simulation
-    let simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links).id(d => d.id).distance(40).strength(0.7))
-        .force('charge', d3.forceManyBody().strength(-120))
-        .force('center', d3.forceCenter(W / 2, H / 2))
-        .force('collision', d3.forceCollide().radius(d => radiusOf(d) + 2))
-        .alpha(1)
-        .alphaDecay(0.025)
-        .on('tick', draw);
+    // Force simulation — initialized AFTER resize sets cssW/cssH
+    let simulation;
+
+    function initSimulation() {
+        simulation = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(links).id(d => d.id).distance(40).strength(0.7))
+            .force('charge', d3.forceManyBody().strength(-120))
+            .force('center', d3.forceCenter(cssW / 2, cssH / 2))
+            .force('collision', d3.forceCollide().radius(d => radiusOf(d) + 2))
+            .alpha(1)
+            .alphaDecay(0.025)
+            .on('tick', () => {
+                draw();
+                // Auto-fit once simulation calms down
+                if (!didAutoFit && simulation.alpha() < 0.05) {
+                    didAutoFit = true;
+                    fitToContent(false);
+                }
+            });
+    }
 
     function draw() {
-        ctx.clearRect(0, 0, W, H);
+        // Reset to identity, clear physical canvas, then re-apply DPR + view transform
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.scale(dpr, dpr);
+        ctx.translate(viewTransform.x, viewTransform.y);
+        ctx.scale(viewTransform.k, viewTransform.k);
 
         const highlightSet = highlightTreeRoot != null ? subtreeIds(highlightTreeRoot) : null;
 
-        // Draw links
+        // Links
         for (const l of links) {
+            if (l.source.x === undefined || l.target.x === undefined) continue;
             const inHighlight = !highlightSet ||
                 (highlightSet.has(l.source.id) && highlightSet.has(l.target.id));
             ctx.beginPath();
@@ -380,12 +434,13 @@
             ctx.strokeStyle = inHighlight
                 ? 'rgba(46,219,153,0.55)'
                 : (highlightSet ? 'rgba(46,219,153,0.06)' : 'rgba(46,219,153,0.18)');
-            ctx.lineWidth = inHighlight ? 1.5 : 0.7;
+            ctx.lineWidth = (inHighlight ? 1.5 : 0.7) / viewTransform.k;
             ctx.stroke();
         }
 
-        // Draw nodes
+        // Nodes
         for (const n of nodes) {
+            if (n.x === undefined) continue;
             const inHighlight = !highlightSet || highlightSet.has(n.id);
             const r = radiusOf(n);
             const isChampion = n.direct_count >= 5;
@@ -398,19 +453,18 @@
             ctx.fill();
 
             if (inHighlight && (isChampion || n === hoveredNode)) {
-                // glow
                 ctx.shadowColor = colorOf(n.source);
-                ctx.shadowBlur = 12;
+                ctx.shadowBlur = 12 / viewTransform.k;
                 ctx.fill();
                 ctx.shadowBlur = 0;
             }
 
             if (n === hoveredNode) {
-                ctx.lineWidth = 2;
+                ctx.lineWidth = 2 / viewTransform.k;
                 ctx.strokeStyle = '#fff';
                 ctx.stroke();
             } else if (isChampion && inHighlight) {
-                ctx.lineWidth = 1.5;
+                ctx.lineWidth = 1.5 / viewTransform.k;
                 ctx.strokeStyle = colorOf(n.source);
                 ctx.stroke();
             }
@@ -426,29 +480,100 @@
             return visIds.has(sid) && visIds.has(tid);
         });
 
-        simulation.nodes(nodes).on('tick', draw);
+        simulation.nodes(nodes);
         simulation.force('link').links(links);
+        didAutoFit = false;
         simulation.alpha(0.6).restart();
     }
     showAll.addEventListener('change', rebuild);
 
-    // Hover detection
-    function nodeAt(mx, my) {
+    // ── Mouse → world coords (account for view transform) ──
+    function mouseToWorld(mx, my) {
+        return {
+            x: (mx - viewTransform.x) / viewTransform.k,
+            y: (my - viewTransform.y) / viewTransform.k,
+        };
+    }
+
+    function nodeAt(wx, wy) {
         for (let i = nodes.length - 1; i >= 0; i--) {
             const n = nodes[i];
-            if (!n.x || !n.y) continue;
+            if (n.x === undefined) continue;
             const r = radiusOf(n);
-            const dx = mx - n.x, dy = my - n.y;
+            const dx = wx - n.x, dy = wy - n.y;
             if (dx * dx + dy * dy <= r * r) return n;
         }
         return null;
     }
 
+    // ── d3.zoom: handles wheel-zoom + drag-pan ──
+    const zoomBehavior = d3.zoom()
+        .scaleExtent([0.1, 8])
+        .filter((event) => {
+            // Always allow wheel/touch. For mousedown, only zoom-pan if cursor
+            // is NOT on a node (so click-on-node still triggers our highlight).
+            if (event.type !== 'mousedown') return !event.ctrlKey;
+            const rect = canvas.getBoundingClientRect();
+            const w = mouseToWorld(event.clientX - rect.left, event.clientY - rect.top);
+            return !nodeAt(w.x, w.y);
+        })
+        .on('zoom', (event) => {
+            viewTransform = event.transform;
+            draw();
+        });
+
+    d3.select(canvas).call(zoomBehavior);
+
+    // ── Fit-to-content / reset ──
+    function computeBoundingBox(idFilter) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const n of nodes) {
+            if (idFilter && !idFilter(n.id)) continue;
+            if (n.x === undefined) continue;
+            const r = radiusOf(n);
+            if (n.x - r < minX) minX = n.x - r;
+            if (n.y - r < minY) minY = n.y - r;
+            if (n.x + r > maxX) maxX = n.x + r;
+            if (n.y + r > maxY) maxY = n.y + r;
+        }
+        if (minX === Infinity) return null;
+        return { minX, minY, maxX, maxY };
+    }
+
+    function fitToContent(animate, idFilter) {
+        const bb = computeBoundingBox(idFilter);
+        if (!bb) return;
+        const w = bb.maxX - bb.minX, h = bb.maxY - bb.minY;
+        if (w <= 0 || h <= 0) return;
+        const k = Math.min(cssW / w, cssH / h) * 0.85;
+        const tx = cssW / 2 - (bb.minX + bb.maxX) / 2 * k;
+        const ty = cssH / 2 - (bb.minY + bb.maxY) / 2 * k;
+        const t = d3.zoomIdentity.translate(tx, ty).scale(k);
+        if (animate) {
+            d3.select(canvas).transition().duration(450).call(zoomBehavior.transform, t);
+        } else {
+            d3.select(canvas).call(zoomBehavior.transform, t);
+        }
+    }
+
+    document.getElementById('net-zoom-in').addEventListener('click', () => {
+        d3.select(canvas).transition().duration(180).call(zoomBehavior.scaleBy, 1.4);
+    });
+    document.getElementById('net-zoom-out').addEventListener('click', () => {
+        d3.select(canvas).transition().duration(180).call(zoomBehavior.scaleBy, 0.7);
+    });
+    document.getElementById('net-zoom-fit').addEventListener('click', () => fitToContent(true));
+    document.getElementById('net-zoom-reset').addEventListener('click', () => {
+        d3.select(canvas).transition().duration(250).call(zoomBehavior.transform, d3.zoomIdentity);
+    });
+
+    // ── Hover (uses world coords) ──
     canvas.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
-        const n = nodeAt(mx, my);
+        const w = mouseToWorld(mx, my);
+        const n = nodeAt(w.x, w.y);
         if (n !== hoveredNode) {
             hoveredNode = n;
             draw();
@@ -478,16 +603,28 @@
         draw();
     });
 
-    canvas.addEventListener('click', (e) => {
+    // ── Click on a node = highlight + fit-to-tree ──
+    // Track click to distinguish from drag (zoom-pan dispatches mousedown/up too).
+    let mouseDownAt = null;
+    canvas.addEventListener('mousedown', (e) => {
+        mouseDownAt = { x: e.clientX, y: e.clientY };
+    });
+    canvas.addEventListener('mouseup', (e) => {
+        if (!mouseDownAt) return;
+        const dx = e.clientX - mouseDownAt.x;
+        const dy = e.clientY - mouseDownAt.y;
+        mouseDownAt = null;
+        if (dx * dx + dy * dy > 25) return;  // moved more than 5px → was a drag, not a click
+
         const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        const n = nodeAt(mx, my);
+        const w = mouseToWorld(e.clientX - rect.left, e.clientY - rect.top);
+        const n = nodeAt(w.x, w.y);
         if (n) {
-            // Walk up to root
+            // Walk up to the root of this tree
             let cursor = n;
-            while (cursor && cursor.depth_in_tree > 0) {
-                // find parent: link with target = cursor.id
+            const safety = 50;
+            let i = 0;
+            while (cursor && cursor.depth_in_tree > 0 && i < safety) {
                 const parent = allLinks.find(l => {
                     const tid = typeof l.target === 'object' ? l.target.id : l.target;
                     return tid === cursor.id;
@@ -495,14 +632,18 @@
                 if (!parent) break;
                 const pid = typeof parent.source === 'object' ? parent.source.id : parent.source;
                 cursor = nodeById.get(pid);
-                if (!cursor) break;
+                i++;
             }
-            highlightTreeRoot = (highlightTreeRoot === (cursor && cursor.id)) ? null : (cursor && cursor.id);
+            const newRoot = cursor && cursor.id;
+            highlightTreeRoot = (highlightTreeRoot === newRoot) ? null : newRoot;
             draw();
-            // sync side panel
             document.querySelectorAll('.viral-card').forEach(el => {
                 el.classList.toggle('active', highlightTreeRoot && Number(el.dataset.nodeId) === highlightTreeRoot);
             });
+            if (highlightTreeRoot) {
+                const ids = subtreeIds(highlightTreeRoot);
+                fitToContent(true, (id) => ids.has(id));
+            }
         } else {
             highlightTreeRoot = null;
             draw();
@@ -510,7 +651,7 @@
         }
     });
 
-    // Side-panel click → highlight tree
+    // ── Side-panel click → highlight + fit-to-tree ──
     document.querySelectorAll('.viral-card').forEach(card => {
         card.addEventListener('click', () => {
             const id = Number(card.dataset.nodeId);
@@ -519,6 +660,10 @@
             document.querySelectorAll('.viral-card').forEach(el => {
                 el.classList.toggle('active', highlightTreeRoot && Number(el.dataset.nodeId) === highlightTreeRoot);
             });
+            if (highlightTreeRoot) {
+                const ids = subtreeIds(highlightTreeRoot);
+                fitToContent(true, (id_) => ids.has(id_));
+            }
         });
     });
 
@@ -527,6 +672,11 @@
             '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
         }[c]));
     }
+
+    // ── Bootstrap ──
+    resize();
+    initSimulation();
+    window.addEventListener('resize', resize);
 })();
 </script>
 {% endblock %}
