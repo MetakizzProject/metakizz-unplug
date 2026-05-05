@@ -2152,6 +2152,18 @@ def test_email():
                 fake.referral_count = 4
                 success = send_you_won_email(fake, position=3, app_url=app_url)  # rama 3 edge case
 
+            elif email_type == "class1_ready":
+                fake.referral_count = 0
+                success = send_class1_ready_email(fake, app_url)
+
+            elif email_type == "class2_ready":
+                fake.referral_count = 0
+                success = send_class2_ready_email(fake, app_url)
+
+            elif email_type == "webinar_reminder":
+                fake.referral_count = 0
+                success = send_webinar_reminder_email(fake, app_url)
+
             else:
                 flash(f"Unknown email type: {email_type}", "error")
                 return redirect(url_for("admin.test_email"))
