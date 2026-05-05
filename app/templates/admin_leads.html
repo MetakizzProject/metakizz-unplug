@@ -71,10 +71,16 @@
 }
 .filter-card.filter-active {
     background: var(--accent); border-color: var(--accent);
-    box-shadow: 0 0 18px rgba(46,219,153,0.6);
+    box-shadow: 0 0 22px var(--accent), inset 0 0 0 2px rgba(255,255,255,0.15);
+    transform: translateY(-2px);
+    position: relative;
+}
+.filter-card.filter-active::before {
+    content: '✓'; position: absolute; top: 4px; right: 8px;
+    color: #000; font-weight: 900; font-size: 12px; opacity: 0.7;
 }
 .filter-card.filter-active .label,
-.filter-card.filter-active .value { color: #000; }
+.filter-card.filter-active .value { color: #000; text-shadow: none; }
 .filter-card .label, .stat-card .label {
     color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
     font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
@@ -238,6 +244,118 @@
 }
 .pager a:hover { border-color: #2EDB99; color: #2EDB99; }
 .pager .current { background: #2EDB99; color: #000; border-color: #2EDB99; }
+
+/* ── Launch funnel + sparkline ── */
+.dash-row {
+    display: grid; grid-template-columns: 2fr 1fr; gap: 14px;
+    margin: 10px 0 8px;
+}
+@media (max-width: 1100px) {
+    .dash-row { grid-template-columns: 1fr; }
+}
+.dash-card {
+    background: rgba(0,0,0,0.45); border: 1px solid rgba(46,219,153,0.18);
+    border-radius: 8px; padding: 16px 18px;
+}
+.dash-card-label {
+    font-family: 'Share Tech Mono', monospace; font-size: 9px;
+    color: #6B7280; letter-spacing: 0.3em; text-transform: uppercase;
+    margin-bottom: 12px;
+}
+
+.funnel-row {
+    display: grid; grid-template-columns: 130px 1fr 90px 70px;
+    gap: 10px; align-items: center;
+    padding: 6px 0; text-decoration: none; color: inherit;
+    border-radius: 4px; transition: background 120ms ease;
+}
+.funnel-row:hover { background: rgba(46,219,153,0.06); }
+.funnel-row .name {
+    font-family: 'Share Tech Mono', monospace; font-size: 11px;
+    color: #C9CFD4; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.funnel-row .bar-track {
+    background: rgba(0,0,0,0.6); border: 1px solid rgba(46,219,153,0.1);
+    border-radius: 3px; height: 16px; overflow: hidden;
+}
+.funnel-row .bar-fill {
+    height: 100%; border-radius: 2px;
+    box-shadow: 0 0 8px currentColor; opacity: 0.9;
+    transition: width 200ms ease;
+}
+.funnel-row .count {
+    font-family: 'Orbitron', sans-serif; font-weight: 800;
+    font-size: 14px; color: #fff; text-align: right;
+}
+.funnel-row .count .pct {
+    font-family: 'Share Tech Mono', monospace; font-size: 10px;
+    color: #6B7280; margin-left: 4px;
+}
+.funnel-row .drop {
+    font-family: 'Share Tech Mono', monospace; font-size: 10px;
+    text-align: right; padding: 2px 6px; border-radius: 3px;
+}
+.drop-low  { color: #2EDB99; }
+.drop-mid  { color: #FFC857; }
+.drop-high { color: #DC2626; background: rgba(220,38,38,0.08); }
+
+/* Sparkline card */
+.spark-shell { height: 180px; position: relative; }
+.spark-legend {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px;
+    font-family: 'Share Tech Mono', monospace; font-size: 10px;
+    color: #9CA3AF; letter-spacing: 0.1em;
+}
+.spark-legend span::before {
+    content: '■ '; margin-right: 2px;
+}
+.spark-legend .signups::before { color: #2EDB99; }
+.spark-legend .class1::before  { color: #FFC857; }
+.spark-legend .class2::before  { color: #F97316; }
+
+/* Active-filter banner */
+.filter-banner {
+    background: rgba(255,200,87,0.08);
+    border: 1px solid rgba(255,200,87,0.4);
+    border-radius: 6px;
+    padding: 10px 14px; margin: 12px 0 6px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; color: #FFC857; letter-spacing: 0.1em;
+}
+.filter-banner .label { color: #FFC857; font-weight: bold; }
+.filter-banner .results {
+    color: #fff; margin-left: auto;
+    font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 700;
+}
+.filter-banner .clear-link {
+    color: #DC2626; text-decoration: underline; font-weight: bold;
+}
+
+/* Empty state */
+.empty-state {
+    margin: 28px auto; padding: 38px 20px; max-width: 480px;
+    text-align: center;
+    background: rgba(0,0,0,0.4);
+    border: 1px dashed rgba(46,219,153,0.3); border-radius: 10px;
+}
+.empty-state .icon { font-size: 36px; margin-bottom: 8px; }
+.empty-state .title {
+    font-family: 'Orbitron', sans-serif; font-weight: 800; color: #fff;
+    font-size: 16px; letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.empty-state .sub {
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
+    font-size: 12px; line-height: 1.6; margin-bottom: 18px;
+}
+.empty-state a {
+    display: inline-block; padding: 10px 22px; border-radius: 4px;
+    background: #2EDB99; color: #000; text-decoration: none;
+    font-family: 'Share Tech Mono', monospace; font-weight: bold;
+    font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase;
+}
+.empty-state a:hover { background: #2bc78a; }
 </style>
 
 <div class="leads-shell">
@@ -264,30 +382,45 @@
   </div>
 
   <!-- ────────────────────────────────────────────────────────────
-       PLF FUNNEL COUNTERS — class & webinar (live SQL counts)
-       Each card is clickable and pre-applies the corresponding filter.
+       LAUNCH FUNNEL + 7-DAY ACTIVITY SPARKLINE
+       Funnel rows are clickable: jump to the matching filter on the table.
        ──────────────────────────────────────────────────────────── -->
-  <div class="section-label">▌ PLF · who reached each stage</div>
-  <div class="cards-row" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
-    <a href="?class_1=1" class="filter-card" style="--accent: #2EDB99;">
-      <div class="label">📺 Class 1 started</div>
-      <div class="value">{{ plf_counters.class1_started }}</div>
-      <div style="color:#9CA3AF; font-size:10px; margin-top:4px; letter-spacing:0.1em;">
-        ✓ <span style="color:#2EDB99; font-weight:bold;">{{ plf_counters.class1_completed }}</span> completed
-      </div>
-    </a>
-    <a href="?class_2=1" class="filter-card" style="--accent: #FFC857;">
-      <div class="label">📺 Class 2 started</div>
-      <div class="value" style="color:#FFC857;">{{ plf_counters.class2_started }}</div>
-      <div style="color:#9CA3AF; font-size:10px; margin-top:4px; letter-spacing:0.1em;">
-        ✓ <span style="color:#FFC857; font-weight:bold;">{{ plf_counters.class2_completed }}</span> completed
-      </div>
-    </a>
-    <div class="stat-card" style="--accent: #DC2626;">
-      <div class="label">🎤 Joined live webinar</div>
-      <div class="value" style="color:#DC2626; text-shadow: 0 0 12px rgba(220,38,38,0.5);">{{ plf_counters.webinar_joined }}</div>
-      <div style="color:#9CA3AF; font-size:10px; margin-top:4px; letter-spacing:0.1em;">
-        live attendance
+  <div class="section-label">▌ Launch funnel · drop-off at each stage</div>
+  <div class="dash-row">
+    <div class="dash-card">
+      {% set _max = funnel_steps[0].count if funnel_steps and funnel_steps[0].count else 1 %}
+      {% for s in funnel_steps %}
+        {% set width_pct = (100.0 * s.count / _max) if _max else 0 %}
+        {% set drop_class = 'drop-low' if s.dropoff_pct < 25 else ('drop-mid' if s.dropoff_pct < 60 else 'drop-high') %}
+        {%- if s.key == 'class1_min25' -%}
+          {% set link = url_for('admin.leads', class_1=1) %}
+        {%- elif s.key == 'class2_min25' -%}
+          {% set link = url_for('admin.leads', class_2=1) %}
+        {%- elif s.key == 'class1_min95' or s.key == 'class2_min95' or s.key == 'webinar' -%}
+          {% set link = url_for('admin.leads', temp='burning') %}
+        {%- elif s.key == 'customer' -%}
+          {% set link = url_for('admin.leads', temp='customer') %}
+        {%- else -%}
+          {% set link = url_for('admin.leads') %}
+        {%- endif -%}
+        <a class="funnel-row" href="{{ link }}" title="{{ s.label }} — click to filter">
+          <div class="name">{{ s.label }}</div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width: {{ width_pct }}%; background: {{ s.color }}; color: {{ s.color }};"></div>
+          </div>
+          <div class="count">{{ "{:,}".format(s.count) }}<span class="pct">({{ s.pct_of_total }}%)</span></div>
+          <div class="drop {{ drop_class }}">{% if not loop.first %}↓{{ s.dropoff_pct }}%{% endif %}</div>
+        </a>
+      {% endfor %}
+    </div>
+
+    <div class="dash-card">
+      <div class="dash-card-label">▌ Last 7 days · daily activity</div>
+      <div class="spark-shell"><canvas id="leadsSpark"></canvas></div>
+      <div class="spark-legend">
+        <span class="signups">signups</span>
+        <span class="class1">class 1</span>
+        <span class="class2">class 2</span>
       </div>
     </div>
   </div>
@@ -401,8 +534,32 @@
   </form>
 
   <!-- ────────────────────────────────────────────────────────────
+       ACTIVE FILTER BANNER (above the table for visibility)
+       ──────────────────────────────────────────────────────────── -->
+  {% if active_chips %}
+  <div class="filter-banner">
+    <span class="label">🔍 Filtering:</span>
+    {% for chip in active_chips %}
+      <a class="chip" href="{{ chip.url }}">{{ chip.label }} <span class="x">×</span></a>
+    {% endfor %}
+    <span class="results">{{ "{:,}".format(total_count) }} {% if total_count == 1 %}result{% else %}results{% endif %}</span>
+    <a class="clear-link" href="{{ clear_all_url }}">clear all</a>
+  </div>
+  {% endif %}
+
+  <!-- ────────────────────────────────────────────────────────────
        TABLE
        ──────────────────────────────────────────────────────────── -->
+  {% if total_count == 0 and active_chips %}
+    <div class="empty-state">
+      <div class="icon">🪐</div>
+      <div class="title">No leads match these filters</div>
+      <div class="sub">
+        Try removing one of the filters above, or start over.
+      </div>
+      <a href="{{ clear_all_url }}">↺ clear all filters</a>
+    </div>
+  {% else %}
   <div class="leads-table-wrap">
     <table class="leads-table">
       <thead>
@@ -495,11 +652,12 @@
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="8" style="padding:30px; text-align:center; color:#9CA3AF;">No leads match the current filters.</td></tr>
+          <tr><td colspan="8" style="padding:30px; text-align:center; color:#9CA3AF;">No leads in this view yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% endif %}
 
   <!-- Pagination -->
   {% if pages > 1 %}
@@ -519,6 +677,7 @@
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 // Submit search input on Enter (keep typing experience smooth)
 document.querySelector('input[name="q"]')?.addEventListener('keydown', function(e) {
@@ -531,6 +690,38 @@ document.querySelector('input[name="q"]')?.addEventListener('keydown', function(
     var initial = input.value;
     input.addEventListener('blur', function() {
         if (input.value !== initial) input.form.submit();
+    });
+})();
+
+// Sparkline — last 7 days activity
+(function() {
+    var el = document.getElementById('leadsSpark');
+    if (!el || typeof Chart === 'undefined') return;
+    var data = {{ activity_series | tojson }};
+    Chart.defaults.color = '#9ca3af';
+    Chart.defaults.font.family = "'Share Tech Mono', 'Courier New', monospace";
+    Chart.defaults.font.size = 10;
+    new Chart(el, {
+        type: 'line',
+        data: {
+            labels: data.labels,
+            datasets: [
+                {label: 'signups', data: data.signups, borderColor: '#2EDB99', backgroundColor: 'rgba(46,219,153,0.12)', borderWidth: 2, tension: 0.35, pointRadius: 2, pointHoverRadius: 5, fill: true},
+                {label: 'class 1', data: data.class1,  borderColor: '#FFC857', backgroundColor: 'rgba(255,200,87,0.08)', borderWidth: 2, tension: 0.35, pointRadius: 2, pointHoverRadius: 5, fill: false},
+                {label: 'class 2', data: data.class2,  borderColor: '#F97316', backgroundColor: 'rgba(249,115,22,0.08)', borderWidth: 2, tension: 0.35, pointRadius: 2, pointHoverRadius: 5, fill: false},
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: '#0a0f0a', borderColor: '#2EDB99', borderWidth: 1, padding: 8 }
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#6B7280' } },
+                y: { beginAtZero: true, grid: { color: 'rgba(46,219,153,0.06)' }, ticks: { color: '#6B7280', precision: 0 } }
+            }
+        }
     });
 })();
 </script>

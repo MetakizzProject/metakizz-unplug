@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent
+from app.services.temperature import bucket_from_event_set
 from app.mailer import (
     send_welcome_email,
     send_activation_nudge_email,
@@ -67,28 +68,10 @@ _FUNNEL_EVENT_KEYS = [
 ]
 
 
-def _email_to_bucket(evts: set) -> str:
-    """Approximate temperature bucket per lead from their event set.
-
-    Tuned for **launch day**: a single class_completed promotes the lead
-    to burning (used to require 2+ for burning). Temperature scoring in
-    compute_temperature() still uses the calibrated 160+ threshold for
-    burning — this only drives the headline distribution counters.
-    """
-    if "purchase_completed" in evts:
-        return "customer"
-    if "webinar_joined" in evts:
-        return "burning"
-    if any(f"class{n}_completed" in evts for n in (1, 2)):
-        return "burning"
-    if any(f"class{n}_progress_{p}" in evts for n in (1, 2) for p in (75, 95)):
-        return "hot"
-    if any(f"class{n}_progress_50" in evts for n in (1, 2)):
-        return "warm"
-    if any(f"class{n}_progress_25" in evts or f"class{n}_viewed" in evts
-           for n in (1, 2)):
-        return "cool"
-    return "cold"
+# Bucket classifier moved to app.services.temperature so that the temp
+# filter, distribution counters, and per-row badge in compute_temperature()
+# all agree. Local alias kept for callers below.
+_email_to_bucket = bucket_from_event_set
 
 
 def _emails_in_temp_bucket(bucket: str) -> set:
@@ -197,6 +180,156 @@ def _quick_origin_dist_sql():
         counts[bucket] = counts.get(bucket, 0) + n
 
     return counts
+
+
+_FUNNEL_STAGES_FOR_BAR = [
+    ("Registered",        "#2EDB99", None),
+    ("Started Class 1",   "#2EDB99", "class1_min25"),
+    ("Finished Class 1",  "#FFC857", "class1_min95"),
+    ("Started Class 2",   "#FFC857", "class2_min25"),
+    ("Finished Class 2",  "#F97316", "class2_min95"),
+    ("Joined Webinar",    "#DC2626", "webinar"),
+    ("Purchased",         "#A78BFA", "customer"),
+]
+
+
+def _compute_launch_funnel(total_leads):
+    """Build the launch-funnel data shape used by /admin/leads and
+    /admin/leads/insights. Returns a list of step dicts:
+
+        {label, count, color, pct_of_total, dropoff_pct}
+
+    Single SQL query for all funnel events; counts via in-memory union
+    of distinct emails per `>= threshold` group. ~30k events / ~2500
+    leads completes in well under a second.
+    """
+    funnel_event_keys = [
+        "class1_viewed", "class1_progress_25", "class1_progress_50",
+        "class1_progress_75", "class1_progress_95", "class1_completed",
+        "class2_viewed", "class2_progress_25", "class2_progress_50",
+        "class2_progress_75", "class2_progress_95", "class2_completed",
+        "webinar_joined", "purchase_completed",
+    ]
+    rows = _safe(
+        lambda: db.session.query(LeadEvent.email, LeadEvent.event_type)
+            .filter(LeadEvent.event_type.in_(funnel_event_keys))
+            .distinct().all(),
+        [],
+    )
+    by_event = defaultdict(set)
+    for em, et in rows:
+        if em:
+            by_event[et].add(em.lower())
+
+    def _count_ge(class_n, threshold):
+        if threshold <= 25:
+            keys = [f"class{class_n}_viewed", f"class{class_n}_progress_25",
+                    f"class{class_n}_progress_50", f"class{class_n}_progress_75",
+                    f"class{class_n}_progress_95", f"class{class_n}_completed"]
+        elif threshold <= 50:
+            keys = [f"class{class_n}_progress_50", f"class{class_n}_progress_75",
+                    f"class{class_n}_progress_95", f"class{class_n}_completed"]
+        elif threshold <= 75:
+            keys = [f"class{class_n}_progress_75", f"class{class_n}_progress_95",
+                    f"class{class_n}_completed"]
+        else:
+            keys = [f"class{class_n}_progress_95", f"class{class_n}_completed"]
+        union = set()
+        for k in keys:
+            union |= by_event.get(k, set())
+        return len(union)
+
+    counts = {
+        "registered":   total_leads,
+        "class1_min25": _count_ge(1, 25),
+        "class1_min95": _count_ge(1, 95),
+        "class2_min25": _count_ge(2, 25),
+        "class2_min95": _count_ge(2, 95),
+        "webinar":      len(by_event.get("webinar_joined", set())),
+        "customer":     len(by_event.get("purchase_completed", set())),
+    }
+
+    funnel_steps = []
+    for i, (label, color, key) in enumerate(_FUNNEL_STAGES_FOR_BAR):
+        count = total_leads if i == 0 else counts.get(key, 0)
+        funnel_steps.append({"label": label, "count": count, "color": color, "key": key})
+
+    for i, step in enumerate(funnel_steps):
+        step["pct_of_total"] = round(100 * step["count"] / total_leads, 1) if total_leads else 0
+        if i == 0:
+            step["dropoff_pct"] = 0
+        else:
+            prev = funnel_steps[i - 1]["count"]
+            step["dropoff_pct"] = round(100 * (prev - step["count"]) / prev, 1) if prev else 0
+
+    return funnel_steps
+
+
+def _compute_7d_activity():
+    """Return per-day counts for the last 7 days as a Chart.js-ready dict.
+
+    {
+      "labels": ["Apr 29", ..., "May 5"],
+      "signups":  [2, 3, 0, ...],
+      "class1":   [0, 1, 4, ...],
+      "class2":   [0, 0, 0, ...],
+    }
+
+    Two cheap SQL aggregates keep this under ~50ms.
+    """
+    today = datetime.now(timezone.utc).date()
+    days = [today - timedelta(days=i) for i in range(6, -1, -1)]
+    day_keys = [d.isoformat() for d in days]
+    labels = [d.strftime("%b %d") for d in days]
+
+    cutoff = datetime.combine(days[0], datetime.min.time(), tzinfo=timezone.utc)
+
+    # Signups per day
+    signup_by_day = {k: 0 for k in day_keys}
+    sig_rows = _safe(
+        lambda: db.session.query(
+            func.date(Ambassador.created_at), func.count(Ambassador.id)
+        ).filter(Ambassador.created_at >= cutoff)
+         .group_by(func.date(Ambassador.created_at)).all(),
+        [],
+    )
+    for d, n in sig_rows:
+        if d is None:
+            continue
+        # SQLite returns str, Postgres returns date
+        key = d.isoformat() if hasattr(d, "isoformat") else str(d)
+        if key in signup_by_day:
+            signup_by_day[key] = n
+
+    # Class viewers per day (distinct emails, viewer-or-better events)
+    class_by_day = {1: {k: 0 for k in day_keys}, 2: {k: 0 for k in day_keys}}
+    for cn in (1, 2):
+        keys = [f"class{cn}_viewed", f"class{cn}_progress_25",
+                f"class{cn}_progress_50", f"class{cn}_progress_75",
+                f"class{cn}_progress_95", f"class{cn}_completed"]
+        rows = _safe(
+            lambda keys=keys: db.session.query(
+                func.date(LeadEvent.created_at),
+                func.count(func.distinct(LeadEvent.email))
+            ).filter(
+                LeadEvent.event_type.in_(keys),
+                LeadEvent.created_at >= cutoff,
+            ).group_by(func.date(LeadEvent.created_at)).all(),
+            [],
+        )
+        for d, n in rows:
+            if d is None:
+                continue
+            key = d.isoformat() if hasattr(d, "isoformat") else str(d)
+            if key in class_by_day[cn]:
+                class_by_day[cn][key] = n
+
+    return {
+        "labels": labels,
+        "signups": [signup_by_day[k] for k in day_keys],
+        "class1":  [class_by_day[1][k] for k in day_keys],
+        "class2":  [class_by_day[2][k] for k in day_keys],
+    }
 
 
 def _get_referral_counts():
@@ -3857,7 +3990,6 @@ def leads():
       temp       — cold | cool | warm | hot | burning | customer
       has_phone  — 1 to require phone
       class_1    — 1 to require ≥25% watched of class 1 (same for class_2)
-      class_min  — 25 | 50 | 75 | 95 (min % watched of any class)
       page       — pagination, 1-indexed
     """
     from app.services.temperature import (
@@ -3876,7 +4008,6 @@ def leads():
     has_phone  = request.args.get("has_phone") == "1"
     class_1    = request.args.get("class_1") == "1"
     class_2    = request.args.get("class_2") == "1"
-    class_min  = request.args.get("class_min", type=int)
     page       = max(1, request.args.get("page", default=1, type=int))
     per_page   = 50
 
@@ -4134,6 +4265,15 @@ def leads():
     if class_2:    active_chips.append({"label": "watched C2", "url": _without("class_2")})
     if dance:      active_chips.append({"label": f"dance: {dance}", "url": _without("dance")})
 
+    # Launch funnel + 7-day activity sparkline. These are GLOBAL views
+    # (not affected by the active filters) — the user wants to see how
+    # the launch is performing regardless of which slice they're inspecting.
+    grand_total = _safe(lambda: Ambassador.query.count(), 0)
+    funnel_steps = _safe(lambda: _compute_launch_funnel(grand_total), [])
+    activity_series = _safe(_compute_7d_activity, {
+        "labels": [], "signups": [], "class1": [], "class2": [],
+    })
+
     return render_template(
         "admin_leads.html",
         rows=rows_with_temp,
@@ -4150,10 +4290,11 @@ def leads():
         f_q=q, f_source=source, f_origin=origin, f_tag=tag_filter,
         f_temp=temp_bucket, f_has_phone=has_phone,
         f_class_1=class_1, f_class_2=class_2,
-        f_class_min=class_min,
         relevant_tags=sorted(RELEVANT_LEAD_TAGS),
         lookup_country=lookup_country,
         plf_counters=plf_counters,
+        funnel_steps=funnel_steps,
+        activity_series=activity_series,
         dance_dist=dance_dist,
         f_dance=dance,
         short_dance=_short_dance,

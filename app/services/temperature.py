@@ -37,11 +37,11 @@ TEMP_WEIGHTS = {
 }
 
 
-# Bucket thresholds. Tuned so:
-#   - Just opening emails → Cold/Cool (passive)
-#   - Watching half of one class → Warm (curious)
-#   - Watching multiple classes → Hot (engaged)
-#   - Webinar attendance OR all 3 classes → Burning (high intent)
+# Bucket thresholds. Kept for post-launch calibration when we have real
+# conversion data — currently NOT used to assign buckets (the launch-day
+# event-presence classifier `bucket_from_event_set` drives both the temp
+# filter and the per-row badge so they always agree). Score is still
+# computed and used for sorting WITHIN a bucket.
 TEMP_THRESHOLDS = {
     "cold":    (0, 14),
     "cool":    (15, 39),
@@ -49,6 +49,46 @@ TEMP_THRESHOLDS = {
     "hot":     (80, 159),
     "burning": (160, 10_000),
 }
+
+
+# Display labels + colors for each bucket key. Single source of truth so
+# filter cards, distribution counters, and per-row badges all render the
+# same emoji + color for the same key.
+BUCKET_LABELS = {
+    "cold":     ("🧊 COLD",     "#6B7280"),
+    "cool":     ("❄ COOL",      "#60A5FA"),
+    "warm":     ("🌡 WARM",     "#FFC857"),
+    "hot":      ("🚀 HOT",      "#F97316"),
+    "burning":  ("🔥 BURNING",  "#DC2626"),
+    "customer": ("💎 CUSTOMER", "#A78BFA"),
+}
+
+
+def bucket_from_event_set(event_types) -> str:
+    """Classify a lead's temperature bucket from the SET of event_types
+    they have. Launch-day-friendly: any class_completed promotes to
+    burning (used to require 2+). Used by:
+      - The temperature filter on /admin/leads (`?temp=burning`)
+      - Distribution counters on /admin/leads + /admin/leads/insights
+      - Per-row badge in compute_temperature()
+
+    Returns one of: cold | cool | warm | hot | burning | customer.
+    """
+    evts = event_types if isinstance(event_types, set) else set(event_types or [])
+    if "purchase_completed" in evts:
+        return "customer"
+    if "webinar_joined" in evts:
+        return "burning"
+    if any(f"class{n}_completed" in evts for n in (1, 2)):
+        return "burning"
+    if any(f"class{n}_progress_{p}" in evts for n in (1, 2) for p in (75, 95)):
+        return "hot"
+    if any(f"class{n}_progress_50" in evts for n in (1, 2)):
+        return "warm"
+    if any(f"class{n}_progress_25" in evts or f"class{n}_viewed" in evts
+           for n in (1, 2)):
+        return "cool"
+    return "cold"
 
 
 def _pct_from_event(event_type: str, pct_field: Optional[int]) -> int:
@@ -113,12 +153,17 @@ def compute_temperature(
 
     Returns a dict:
       {
-        "score":     int total points,
-        "bucket":    label "🧊 COLD" | "❄ COOL" | "🌡 WARM" | "🚀 HOT" | "🔥 BURNING",
-        "color":     hex color for the badge,
-        "signals":   list of human-readable contributing signals,
-        "max_pct":   {1: int, 2: int, 3: int}  per-class progress
+        "score":      int total points (used for sorting within a bucket),
+        "bucket":     label "🧊 COLD" | "❄ COOL" | "🌡 WARM" | "🚀 HOT" | "🔥 BURNING" | "💎 CUSTOMER",
+        "bucket_key": "cold" | "cool" | "warm" | "hot" | "burning" | "customer",
+        "color":      hex color for the badge,
+        "signals":    list of human-readable contributing signals,
+        "max_pct":    {1: int, 2: int} per-class progress
       }
+
+    Bucket assignment uses bucket_from_event_set() — the same classifier
+    that drives the temperature filter on /admin/leads — so the filter
+    and the displayed badge always agree.
     """
     lead_events = lead_events or []
     email_events = email_events or []
@@ -190,23 +235,17 @@ def compute_temperature(
         score += TEMP_WEIGHTS["past_masterclass"]
         signals.append("attended past masterclass")
 
-    # ── Bucket ── (thresholds in TEMP_THRESHOLDS)
-    if any(e.event_type == "purchase_completed" for e in lead_events):
-        bucket, color = "💎 CUSTOMER", "#A78BFA"
-    elif score >= TEMP_THRESHOLDS["burning"][0]:
-        bucket, color = "🔥 BURNING", "#DC2626"
-    elif score >= TEMP_THRESHOLDS["hot"][0]:
-        bucket, color = "🚀 HOT", "#F97316"
-    elif score >= TEMP_THRESHOLDS["warm"][0]:
-        bucket, color = "🌡 WARM", "#FFC857"
-    elif score >= TEMP_THRESHOLDS["cool"][0]:
-        bucket, color = "❄ COOL", "#60A5FA"
-    else:
-        bucket, color = "🧊 COLD", "#6B7280"
+    # ── Bucket ── (event-presence classification, see bucket_from_event_set)
+    # Score is preserved for sorting within a bucket, but bucket assignment
+    # uses the same classifier as the temperature filter so the filter and
+    # the per-row badge always agree.
+    bucket_key = bucket_from_event_set({e.event_type for e in lead_events})
+    bucket, color = BUCKET_LABELS[bucket_key]
 
     return {
         "score": score,
         "bucket": bucket,
+        "bucket_key": bucket_key,
         "color": color,
         "signals": signals,
         "max_pct": max_pct,
