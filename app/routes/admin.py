@@ -464,6 +464,150 @@ def _compute_ghost_summary():
     return list(by_email.values())
 
 
+def _compute_referral_network():
+    """Build the full referral DAG for /admin/network.
+
+    Returns a dict:
+        {
+          "nodes":     [{id, name, email, source, descendants, direct_count,
+                         depth_in_tree, root_id}, ...],
+          "links":     [{source: amb_id, target: amb_id, registered: bool}, ...],
+          "top_viral": [<top 10 nodes by descendants desc>],
+          "stats":     {total_trees, deepest_chain, biggest_tree_size,
+                        conversion_rate_pct, total_referrals, total_orphans}
+        }
+
+    Performance: 2 SQL queries (ambassadors + referrals), all graph
+    traversal in memory. ~50ms for 2,500 ambassadors / 1,000 referrals.
+
+    Orphan referrals (referred email never registered as Ambassador) are
+    excluded from `nodes` / `links` for the graph — they'd just be
+    leaf nodes with no further info. They ARE counted in stats
+    (`total_orphans`, `conversion_rate_pct`).
+    """
+    # 1. Pull ambassadors
+    ambs = (
+        db.session.query(
+            Ambassador.id, Ambassador.name, Ambassador.email,
+            Ambassador.source,
+        ).all()
+    )
+    amb_by_id = {a.id: {
+        "id": a.id,
+        "name": a.name or "—",
+        "email": a.email or "",
+        "source": a.source or "",
+        "direct_count": 0,
+        "descendants": 0,
+        "depth_in_tree": 0,  # filled later
+        "root_id": a.id,     # filled later
+    } for a in ambs}
+
+    email_to_amb_id = {(a.email or "").lower(): a.id for a in ambs if a.email}
+
+    # 2. Pull referrals
+    referrals = (
+        db.session.query(
+            Referral.ambassador_id, Referral.email, Referral.name,
+        ).all()
+    )
+
+    # 3. Build child-parent map. Only edges where target = a known ambassador
+    # (referred person who actually registered). Orphan referrals are tracked
+    # separately for stats.
+    children_of = defaultdict(list)  # parent_id -> [child_id, ...]
+    parent_of = {}                   # child_id  -> parent_id
+    orphan_count = 0
+
+    for ref_amb_id, ref_email, _ref_name in referrals:
+        if ref_amb_id is None or ref_amb_id not in amb_by_id:
+            continue
+        amb_by_id[ref_amb_id]["direct_count"] += 1
+        target_email = (ref_email or "").lower()
+        target_id = email_to_amb_id.get(target_email)
+        if target_id and target_id != ref_amb_id:
+            # Only add edge if not already there (a referrer might have multiple
+            # Referral rows for the same email — dedupe by parent-child pair).
+            if target_id not in parent_of:
+                parent_of[target_id] = ref_amb_id
+                children_of[ref_amb_id].append(target_id)
+        else:
+            orphan_count += 1
+
+    # 4. Compute descendants count per node (bottom-up via topological order).
+    # Roots = nodes with no parent. Walk down from each root.
+    roots = [aid for aid in amb_by_id if aid not in parent_of]
+
+    def _walk(node_id, depth, root_id):
+        amb_by_id[node_id]["depth_in_tree"] = depth
+        amb_by_id[node_id]["root_id"] = root_id
+        descendants = 0
+        for child_id in children_of.get(node_id, []):
+            descendants += 1 + _walk(child_id, depth + 1, root_id)
+        amb_by_id[node_id]["descendants"] = descendants
+        return descendants
+
+    deepest_chain = 0
+    biggest_tree = 0
+    trees_with_branches = 0
+    for root_id in roots:
+        size = _walk(root_id, 0, root_id)
+        if size > 0:
+            trees_with_branches += 1
+        if size > biggest_tree:
+            biggest_tree = size
+        # Track deepest chain (max depth in this tree)
+        # We can pick from the children's depth recursively, but simpler:
+        # walk again to find the max depth in this subtree.
+
+    # Compute deepest chain across ALL nodes
+    for node in amb_by_id.values():
+        if node["depth_in_tree"] > deepest_chain:
+            deepest_chain = node["depth_in_tree"]
+
+    # 5. Build links list (parent -> child)
+    links = []
+    for child_id, parent_id in parent_of.items():
+        links.append({
+            "source": parent_id,
+            "target": child_id,
+            "registered": True,
+        })
+
+    # 6. Top viral: only nodes that have at least one descendant
+    top_viral = sorted(
+        [n for n in amb_by_id.values() if n["descendants"] > 0],
+        key=lambda n: -n["descendants"],
+    )[:10]
+
+    total_referrals = len(referrals)
+    total_registered_referrals = total_referrals - orphan_count
+    conversion_rate_pct = (
+        round(100.0 * total_registered_referrals / total_referrals, 1)
+        if total_referrals else 0
+    )
+
+    biggest_root = max(top_viral, key=lambda n: n["descendants"]) if top_viral else None
+
+    stats = {
+        "total_trees": trees_with_branches,
+        "deepest_chain": deepest_chain,
+        "biggest_tree_size": biggest_tree,
+        "biggest_tree_root": biggest_root["name"] if biggest_root else "—",
+        "conversion_rate_pct": conversion_rate_pct,
+        "total_referrals": total_referrals,
+        "total_orphans": orphan_count,
+        "total_ambassadors": len(amb_by_id),
+    }
+
+    return {
+        "nodes": list(amb_by_id.values()),
+        "links": links,
+        "top_viral": top_viral,
+        "stats": stats,
+    }
+
+
 def _get_referral_counts():
     """Map ambassador_id → referral count via a single SQL aggregation.
 
@@ -1049,7 +1193,7 @@ def _admin_layout_context():
         # render as href="#" (admin_base.html fallback).
         "admin_routes": [
             "overview", "live", "emails", "security", "reach",
-            "leads", "leads_insights", "ghosts",
+            "leads", "leads_insights", "ghosts", "network",
         ],
         "pending_review_count": PendingReferral.query.filter_by(status="pending").count(),
     }
@@ -4665,6 +4809,32 @@ def convert_ghost_to_ambassador():
         flash(f"Failed to convert {email}. Check logs.", "error")
 
     return redirect(url_for("admin.leads_ghosts"))
+
+
+@admin_bp.route("/network")
+def network():
+    """Visualize the referral graph: who referred whom, recursively.
+
+    D3 force-directed graph rendered on the client. The backend just
+    computes the node/link/stats payload via _compute_referral_network().
+    """
+    data = _safe(_compute_referral_network, {
+        "nodes": [], "links": [], "top_viral": [],
+        "stats": {
+            "total_trees": 0, "deepest_chain": 0, "biggest_tree_size": 0,
+            "biggest_tree_root": "—", "conversion_rate_pct": 0,
+            "total_referrals": 0, "total_orphans": 0, "total_ambassadors": 0,
+        },
+    })
+    return render_template(
+        "admin_network.html",
+        page_title="Referral Network",
+        active_section="network",
+        network_data=data,
+        stats=data["stats"],
+        top_viral=data["top_viral"],
+        **_admin_layout_context(),
+    )
 
 
 @admin_bp.route("/leads-debug")

@@ -1,0 +1,532 @@
+{% extends "admin_base.html" %}
+{% set page_title = "Referral Network" %}
+
+{% block admin_content %}
+<style>
+.net-shell { padding: 18px 20px 40px; max-width: 1700px; }
+
+.net-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 4px;
+}
+.net-header h1 {
+    color: #fff; font-family: 'Orbitron', sans-serif; font-weight: 900;
+    font-size: 22px; letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 14px rgba(46,219,153,0.4); margin: 0;
+}
+.net-header h1 .glyph { color: #2EDB99; margin-right: 8px; }
+
+.net-subtitle {
+    color: #6B7280; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    margin-bottom: 22px;
+}
+
+.section-label {
+    font-family: 'Share Tech Mono', monospace; font-size: 9px;
+    color: #6B7280; letter-spacing: 0.3em; text-transform: uppercase;
+    margin: 22px 0 8px 0;
+}
+
+/* Stat cards */
+.net-stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px; margin-bottom: 18px;
+}
+.net-stat {
+    background: rgba(46,219,153,0.04);
+    border: 1px solid rgba(46,219,153,0.18);
+    border-radius: 6px; padding: 12px 14px;
+}
+.net-stat .label {
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+}
+.net-stat .value {
+    color: #2EDB99; font-family: 'Orbitron', sans-serif;
+    font-weight: 900; font-size: 24px; line-height: 1.1; margin-top: 4px;
+    text-shadow: 0 0 10px rgba(46,219,153,0.35);
+}
+.net-stat .sub {
+    color: #6B7280; font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; margin-top: 4px;
+}
+
+/* Layout: graph + sidebar */
+.net-grid {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 16px;
+}
+@media (max-width: 1100px) {
+    .net-grid { grid-template-columns: 1fr; }
+}
+
+.net-canvas-wrap {
+    position: relative;
+    background: radial-gradient(circle at 50% 50%, #050a08 0%, #000000 100%);
+    border: 1px solid rgba(46,219,153,0.18);
+    border-radius: 8px;
+    overflow: hidden;
+}
+#net-canvas {
+    display: block;
+    width: 100%;
+    height: 720px;
+    cursor: grab;
+}
+#net-canvas:active { cursor: grabbing; }
+
+.net-toolbar {
+    position: absolute; top: 12px; left: 12px;
+    display: flex; gap: 8px; align-items: center;
+    background: rgba(0,0,0,0.75);
+    border: 1px solid rgba(46,219,153,0.3);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; color: #C9CFD4; letter-spacing: 0.05em;
+}
+.net-toolbar label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.net-toolbar input[type=checkbox] { accent-color: #2EDB99; }
+.net-toolbar .legend {
+    display: flex; gap: 12px; padding-left: 12px;
+    border-left: 1px solid rgba(46,219,153,0.2);
+}
+.net-toolbar .legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; }
+.net-toolbar .legend-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+}
+
+.net-tooltip {
+    position: absolute; pointer-events: none;
+    background: rgba(0,0,0,0.92);
+    border: 1px solid #2EDB99;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; color: #fff;
+    box-shadow: 0 0 18px rgba(46,219,153,0.4);
+    max-width: 260px; z-index: 10;
+    opacity: 0; transition: opacity 120ms;
+}
+.net-tooltip strong { color: #2EDB99; }
+.net-tooltip .meta { color: #9CA3AF; margin-top: 4px; }
+
+/* Side panel */
+.viral-panel {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(46,219,153,0.18);
+    border-radius: 8px;
+    padding: 14px 14px;
+}
+.viral-panel-label {
+    font-family: 'Share Tech Mono', monospace; font-size: 9px;
+    color: #6B7280; letter-spacing: 0.3em; text-transform: uppercase;
+    margin-bottom: 10px;
+}
+.viral-card {
+    background: rgba(46,219,153,0.05);
+    border: 1px solid rgba(46,219,153,0.18);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 140ms;
+}
+.viral-card:hover {
+    border-color: #2EDB99;
+    box-shadow: 0 0 14px rgba(46,219,153,0.3);
+    transform: translateX(-2px);
+}
+.viral-card.active {
+    border-color: #2EDB99;
+    box-shadow: 0 0 16px rgba(46,219,153,0.45);
+    background: rgba(46,219,153,0.12);
+}
+.viral-rank {
+    display: inline-block; min-width: 26px;
+    background: #2EDB99; color: #000; font-weight: 900;
+    font-family: 'Orbitron', sans-serif; font-size: 11px;
+    text-align: center; padding: 2px 6px; border-radius: 3px;
+    margin-right: 8px;
+}
+.viral-name {
+    color: #fff; font-weight: 700; font-size: 13px;
+    word-break: break-word;
+}
+.viral-source {
+    display: inline-block; padding: 1px 6px;
+    border-radius: 3px; font-size: 10px; font-weight: 700;
+    margin-left: 6px;
+}
+.src-community { background: rgba(46,219,153,0.2); color: #2EDB99; }
+.src-public    { background: rgba(167,139,250,0.2); color: #A78BFA; }
+.src-other     { background: rgba(156,163,175,0.2); color: #9CA3AF; }
+.viral-stats {
+    margin-top: 6px;
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.05em;
+}
+.viral-stats strong { color: #2EDB99; }
+
+.empty-network {
+    margin: 28px auto; padding: 38px 20px; max-width: 480px;
+    text-align: center;
+    background: rgba(0,0,0,0.4);
+    border: 1px dashed rgba(46,219,153,0.3); border-radius: 10px;
+}
+.empty-network .icon { font-size: 36px; margin-bottom: 8px; }
+.empty-network .title {
+    font-family: 'Orbitron', sans-serif; font-weight: 800; color: #fff;
+    font-size: 16px; letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.empty-network .sub {
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
+    font-size: 12px; line-height: 1.6;
+}
+</style>
+
+<div class="net-shell">
+
+  <div class="net-header">
+    <h1><span class="glyph">🌐</span>Referral Network</h1>
+  </div>
+  <p class="net-subtitle">
+    The power of recommendation · who brought who, recursively
+  </p>
+
+  <!-- ─── STATS ─── -->
+  <div class="net-stats">
+    <div class="net-stat">
+      <div class="label">▌ Total trees</div>
+      <div class="value">{{ stats.total_trees }}</div>
+      <div class="sub">ambassadors with at least 1 referral</div>
+    </div>
+    <div class="net-stat">
+      <div class="label">▌ Biggest tree</div>
+      <div class="value">{{ stats.biggest_tree_size }}</div>
+      <div class="sub" title="{{ stats.biggest_tree_root }}">{{ stats.biggest_tree_root[:32] }}{% if stats.biggest_tree_root|length > 32 %}…{% endif %}</div>
+    </div>
+    <div class="net-stat">
+      <div class="label">▌ Deepest chain</div>
+      <div class="value">{{ stats.deepest_chain }}</div>
+      <div class="sub">levels of recursive referrals</div>
+    </div>
+    <div class="net-stat">
+      <div class="label">▌ Conversion rate</div>
+      <div class="value">{{ stats.conversion_rate_pct }}%</div>
+      <div class="sub">{{ "{:,}".format(stats.total_referrals - stats.total_orphans) }} of {{ "{:,}".format(stats.total_referrals) }} referrals registered</div>
+    </div>
+    <div class="net-stat">
+      <div class="label">▌ Total referrals</div>
+      <div class="value">{{ "{:,}".format(stats.total_referrals) }}</div>
+      <div class="sub">{{ "{:,}".format(stats.total_orphans) }} never registered</div>
+    </div>
+  </div>
+
+  {% if stats.total_referrals == 0 %}
+    <div class="empty-network">
+      <div class="icon">🌱</div>
+      <div class="title">No referrals yet</div>
+      <div class="sub">
+        Once ambassadors start bringing in dancers, the network<br>
+        will appear here as a force-directed graph.
+      </div>
+    </div>
+  {% else %}
+  <!-- ─── GRAPH + SIDE PANEL ─── -->
+  <div class="net-grid">
+    <div class="net-canvas-wrap">
+      <div class="net-toolbar">
+        <label>
+          <input type="checkbox" id="net-show-singletons">
+          Show all (incl. nodes with 0 referrals)
+        </label>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-dot" style="background:#2EDB99;"></span> community</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#A78BFA;"></span> public</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#9CA3AF;"></span> other</span>
+        </div>
+      </div>
+      <canvas id="net-canvas"></canvas>
+      <div class="net-tooltip" id="net-tooltip"></div>
+    </div>
+
+    <aside class="viral-panel">
+      <div class="viral-panel-label">▌ Top 10 viral chains</div>
+      {% for n in top_viral %}
+        {% set src_class = 'src-community' if n.source == 'community' else ('src-public' if n.source == 'public' else 'src-other') %}
+        <div class="viral-card" data-node-id="{{ n.id }}">
+          <div>
+            <span class="viral-rank">#{{ loop.index }}</span>
+            <span class="viral-name">{{ n.name }}</span>
+            <span class="viral-source {{ src_class }}">{{ n.source }}</span>
+          </div>
+          <div class="viral-stats">
+            <strong>{{ n.descendants }}</strong> descendants ·
+            <strong>{{ n.direct_count }}</strong> direct
+          </div>
+        </div>
+      {% endfor %}
+    </aside>
+  </div>
+  {% endif %}
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script>
+(function() {
+    const data = {{ network_data | tojson }};
+    if (!data.nodes || !data.nodes.length || !data.links.length) {
+        return;
+    }
+
+    const canvas  = document.getElementById('net-canvas');
+    const tooltip = document.getElementById('net-tooltip');
+    const showAll = document.getElementById('net-show-singletons');
+
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    // Set canvas pixel size for crisp rendering on retina
+    function resize() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width  = rect.width * dpr;
+        canvas.height = 720 * dpr;
+        canvas.style.width  = rect.width + 'px';
+        canvas.style.height = '720px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    const W = canvas.width / (window.devicePixelRatio || 1);
+    const H = canvas.height / (window.devicePixelRatio || 1);
+
+    // Build node-id index for quick lookup
+    const allNodes = data.nodes.map(n => Object.assign({}, n));
+    const allLinks = data.links.map(l => ({source: l.source, target: l.target}));
+    const nodeById = new Map(allNodes.map(n => [n.id, n]));
+
+    // By default, show only nodes that are part of a non-trivial tree (≥2 nodes)
+    function nodesInTrees() {
+        return allNodes.filter(n => n.descendants > 0 || n.depth_in_tree > 0);
+    }
+
+    let nodes = nodesInTrees();
+    let links = allLinks.filter(l =>
+        nodeById.get(typeof l.source === 'object' ? l.source.id : l.source) &&
+        nodeById.get(typeof l.target === 'object' ? l.target.id : l.target)
+    );
+
+    // Color by source
+    function colorOf(src) {
+        if (src === 'community') return '#2EDB99';
+        if (src === 'public')    return '#A78BFA';
+        return '#9CA3AF';
+    }
+
+    // Node radius based on descendants
+    function radiusOf(n) {
+        return Math.max(4, Math.min(36, 4 + Math.log2(n.descendants + 1) * 5));
+    }
+
+    let highlightTreeRoot = null;  // node.id when user clicks a tree
+    let hoveredNode = null;
+
+    // Build subtree set given a root id
+    function subtreeIds(rootId) {
+        const out = new Set();
+        const stack = [rootId];
+        while (stack.length) {
+            const id = stack.pop();
+            if (out.has(id)) continue;
+            out.add(id);
+            for (const link of allLinks) {
+                const sid = typeof link.source === 'object' ? link.source.id : link.source;
+                const tid = typeof link.target === 'object' ? link.target.id : link.target;
+                if (sid === id) stack.push(tid);
+            }
+        }
+        return out;
+    }
+
+    // Force simulation
+    let simulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(links).id(d => d.id).distance(40).strength(0.7))
+        .force('charge', d3.forceManyBody().strength(-120))
+        .force('center', d3.forceCenter(W / 2, H / 2))
+        .force('collision', d3.forceCollide().radius(d => radiusOf(d) + 2))
+        .alpha(1)
+        .alphaDecay(0.025)
+        .on('tick', draw);
+
+    function draw() {
+        ctx.clearRect(0, 0, W, H);
+
+        const highlightSet = highlightTreeRoot != null ? subtreeIds(highlightTreeRoot) : null;
+
+        // Draw links
+        for (const l of links) {
+            const inHighlight = !highlightSet ||
+                (highlightSet.has(l.source.id) && highlightSet.has(l.target.id));
+            ctx.beginPath();
+            ctx.moveTo(l.source.x, l.source.y);
+            ctx.lineTo(l.target.x, l.target.y);
+            ctx.strokeStyle = inHighlight
+                ? 'rgba(46,219,153,0.55)'
+                : (highlightSet ? 'rgba(46,219,153,0.06)' : 'rgba(46,219,153,0.18)');
+            ctx.lineWidth = inHighlight ? 1.5 : 0.7;
+            ctx.stroke();
+        }
+
+        // Draw nodes
+        for (const n of nodes) {
+            const inHighlight = !highlightSet || highlightSet.has(n.id);
+            const r = radiusOf(n);
+            const isChampion = n.direct_count >= 5;
+
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
+            ctx.fillStyle = inHighlight
+                ? colorOf(n.source)
+                : (highlightSet ? 'rgba(107,114,128,0.25)' : colorOf(n.source));
+            ctx.fill();
+
+            if (inHighlight && (isChampion || n === hoveredNode)) {
+                // glow
+                ctx.shadowColor = colorOf(n.source);
+                ctx.shadowBlur = 12;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            if (n === hoveredNode) {
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#fff';
+                ctx.stroke();
+            } else if (isChampion && inHighlight) {
+                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = colorOf(n.source);
+                ctx.stroke();
+            }
+        }
+    }
+
+    function rebuild() {
+        nodes = showAll.checked ? allNodes : nodesInTrees();
+        const visIds = new Set(nodes.map(n => n.id));
+        links = allLinks.filter(l => {
+            const sid = typeof l.source === 'object' ? l.source.id : l.source;
+            const tid = typeof l.target === 'object' ? l.target.id : l.target;
+            return visIds.has(sid) && visIds.has(tid);
+        });
+
+        simulation.nodes(nodes).on('tick', draw);
+        simulation.force('link').links(links);
+        simulation.alpha(0.6).restart();
+    }
+    showAll.addEventListener('change', rebuild);
+
+    // Hover detection
+    function nodeAt(mx, my) {
+        for (let i = nodes.length - 1; i >= 0; i--) {
+            const n = nodes[i];
+            if (!n.x || !n.y) continue;
+            const r = radiusOf(n);
+            const dx = mx - n.x, dy = my - n.y;
+            if (dx * dx + dy * dy <= r * r) return n;
+        }
+        return null;
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const n = nodeAt(mx, my);
+        if (n !== hoveredNode) {
+            hoveredNode = n;
+            draw();
+        }
+        if (n) {
+            tooltip.innerHTML =
+                `<strong>${escapeHtml(n.name)}</strong>` +
+                ` <span style="color:#9CA3AF;font-size:10px;">[${n.source}]</span>` +
+                `<div class="meta">` +
+                `📧 ${escapeHtml(n.email)}<br>` +
+                `↗ ${n.direct_count} direct · ${n.descendants} total descendants` +
+                (n.direct_count >= 5 ? '<br>🏆 <strong>champion</strong>' : '') +
+                `</div>`;
+            tooltip.style.left = (mx + 14) + 'px';
+            tooltip.style.top  = (my + 14) + 'px';
+            tooltip.style.opacity = 1;
+            canvas.style.cursor = 'pointer';
+        } else {
+            tooltip.style.opacity = 0;
+            canvas.style.cursor = 'grab';
+        }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+        hoveredNode = null;
+        tooltip.style.opacity = 0;
+        draw();
+    });
+
+    canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const n = nodeAt(mx, my);
+        if (n) {
+            // Walk up to root
+            let cursor = n;
+            while (cursor && cursor.depth_in_tree > 0) {
+                // find parent: link with target = cursor.id
+                const parent = allLinks.find(l => {
+                    const tid = typeof l.target === 'object' ? l.target.id : l.target;
+                    return tid === cursor.id;
+                });
+                if (!parent) break;
+                const pid = typeof parent.source === 'object' ? parent.source.id : parent.source;
+                cursor = nodeById.get(pid);
+                if (!cursor) break;
+            }
+            highlightTreeRoot = (highlightTreeRoot === (cursor && cursor.id)) ? null : (cursor && cursor.id);
+            draw();
+            // sync side panel
+            document.querySelectorAll('.viral-card').forEach(el => {
+                el.classList.toggle('active', highlightTreeRoot && Number(el.dataset.nodeId) === highlightTreeRoot);
+            });
+        } else {
+            highlightTreeRoot = null;
+            draw();
+            document.querySelectorAll('.viral-card').forEach(el => el.classList.remove('active'));
+        }
+    });
+
+    // Side-panel click → highlight tree
+    document.querySelectorAll('.viral-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const id = Number(card.dataset.nodeId);
+            highlightTreeRoot = (highlightTreeRoot === id) ? null : id;
+            draw();
+            document.querySelectorAll('.viral-card').forEach(el => {
+                el.classList.toggle('active', highlightTreeRoot && Number(el.dataset.nodeId) === highlightTreeRoot);
+            });
+        });
+    });
+
+    function escapeHtml(s) {
+        return String(s || '').replace(/[&<>"']/g, c => ({
+            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+        }[c]));
+    }
+})();
+</script>
+{% endblock %}
