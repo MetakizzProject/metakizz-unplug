@@ -2,7 +2,7 @@ import secrets
 from datetime import datetime, timezone
 from io import BytesIO
 import qrcode
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, send_file
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, send_file, Response
 from app.models import db, Ambassador, Referral
 from app.mailer import send_welcome_email
 
@@ -282,4 +282,43 @@ def story_image(referral_code):
     )
     # Poster content is deterministic per referral_code; cache aggressively.
     response.headers["Cache-Control"] = "public, max-age=86400, immutable"
+    return response
+
+
+@home_bp.route("/webinar.ics")
+def webinar_ics():
+    """Calendar file for the live session — May 7, 2026 · 19:00 Madrid.
+
+    Madrid is CEST in May (UTC+2), so 19:00 local = 17:00 UTC. Duration
+    defaults to 90 minutes. Most clients (Apple Calendar, Outlook, iOS,
+    Android) auto-import .ics; Gmail offers an "Add to Calendar" prompt.
+    """
+    import os
+    join_url = (os.getenv("WEBINAR_JOIN_URL", "").strip()
+                or "Link sent via email before the session")
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//MetaKizz//Hacking the Urbankizz Code//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        "UID:hacking-urbankizz-live-may7-2026@metakizzproject.com",
+        "DTSTAMP:20260505T120000Z",
+        "DTSTART:20260507T170000Z",
+        "DTEND:20260507T183000Z",
+        "SUMMARY:Hacking the Urbankizz Code — Live Session",
+        "DESCRIPTION:Live session with Jesús & Anni · MetaKizz · 90 minutes",
+        f"LOCATION:{join_url}",
+        "STATUS:CONFIRMED",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ]
+    body = "\r\n".join(lines) + "\r\n"
+    response = Response(body, mimetype="text/calendar; charset=utf-8")
+    response.headers["Content-Disposition"] = (
+        'attachment; filename="hacking-urbankizz-live.ics"'
+    )
+    response.headers["Cache-Control"] = "public, max-age=300"
     return response
