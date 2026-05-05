@@ -195,24 +195,38 @@ _FUNNEL_STAGES_FOR_BAR = [
 
 def _compute_launch_funnel(total_leads):
     """Build the launch-funnel data shape used by /admin/leads and
-    /admin/leads/insights. Returns a list of step dicts:
+    /admin/leads/insights. Returns:
 
-        {label, count, color, pct_of_total, dropoff_pct}
+        {
+          "steps": [{label, count, color, pct_of_total, dropoff_pct, key}, ...],
+          "visited": {1: int, 2: int}  # page-loaders only (didn't engage)
+        }
+
+    Uses the canonical `class_started_event_types` and
+    `class_completed_event_types` from temperature.py so this matches
+    every other counter on the site (PLF totals on /admin/leads,
+    insights funnel, etc.).
 
     Single SQL query for all funnel events; counts via in-memory union
-    of distinct emails per `>= threshold` group. ~30k events / ~2500
-    leads completes in well under a second.
+    of distinct emails per group. ~30k events / ~2500 leads runs in
+    well under a second.
     """
-    funnel_event_keys = [
-        "class1_viewed", "class1_progress_25", "class1_progress_50",
-        "class1_progress_75", "class1_progress_95", "class1_completed",
-        "class2_viewed", "class2_progress_25", "class2_progress_50",
-        "class2_progress_75", "class2_progress_95", "class2_completed",
-        "webinar_joined", "purchase_completed",
-    ]
+    from app.services.temperature import (
+        class_started_event_types, class_completed_event_types,
+        class_visited_event_types,
+    )
+
+    # Pull every event type we care about in ONE query.
+    funnel_event_keys = set()
+    for cn in (1, 2):
+        funnel_event_keys.update(class_started_event_types(cn))
+        funnel_event_keys.update(class_completed_event_types(cn))
+        funnel_event_keys.update(class_visited_event_types(cn))
+    funnel_event_keys.update(["webinar_joined", "purchase_completed"])
+
     rows = _safe(
         lambda: db.session.query(LeadEvent.email, LeadEvent.event_type)
-            .filter(LeadEvent.event_type.in_(funnel_event_keys))
+            .filter(LeadEvent.event_type.in_(list(funnel_event_keys)))
             .distinct().all(),
         [],
     )
@@ -221,33 +235,25 @@ def _compute_launch_funnel(total_leads):
         if em:
             by_event[et].add(em.lower())
 
-    def _count_ge(class_n, threshold):
-        # ≥25% means actually pressed play and progressed at least a quarter.
-        # Plain `class{n}_viewed` (page-load) is intentionally excluded so
-        # the funnel matches the /admin/leads "Class N" filter exactly.
-        if threshold <= 25:
-            keys = [f"class{class_n}_progress_25", f"class{class_n}_progress_50",
-                    f"class{class_n}_progress_75", f"class{class_n}_progress_95",
-                    f"class{class_n}_completed"]
-        elif threshold <= 50:
-            keys = [f"class{class_n}_progress_50", f"class{class_n}_progress_75",
-                    f"class{class_n}_progress_95", f"class{class_n}_completed"]
-        elif threshold <= 75:
-            keys = [f"class{class_n}_progress_75", f"class{class_n}_progress_95",
-                    f"class{class_n}_completed"]
-        else:
-            keys = [f"class{class_n}_progress_95", f"class{class_n}_completed"]
-        union = set()
-        for k in keys:
-            union |= by_event.get(k, set())
-        return len(union)
+    def _union(event_types):
+        out = set()
+        for et in event_types:
+            out |= by_event.get(et, set())
+        return out
+
+    started_1 = _union(class_started_event_types(1))
+    started_2 = _union(class_started_event_types(2))
+    finished_1 = _union(class_completed_event_types(1))
+    finished_2 = _union(class_completed_event_types(2))
+    visited_1 = _union(class_visited_event_types(1)) - started_1
+    visited_2 = _union(class_visited_event_types(2)) - started_2
 
     counts = {
         "registered":   total_leads,
-        "class1_min25": _count_ge(1, 25),
-        "class1_min95": _count_ge(1, 95),
-        "class2_min25": _count_ge(2, 25),
-        "class2_min95": _count_ge(2, 95),
+        "class1_min25": len(started_1),
+        "class1_min95": len(finished_1),
+        "class2_min25": len(started_2),
+        "class2_min95": len(finished_2),
         "webinar":      len(by_event.get("webinar_joined", set())),
         "customer":     len(by_event.get("purchase_completed", set())),
     }
@@ -265,7 +271,10 @@ def _compute_launch_funnel(total_leads):
             prev = funnel_steps[i - 1]["count"]
             step["dropoff_pct"] = round(100 * (prev - step["count"]) / prev, 1) if prev else 0
 
-    return funnel_steps
+    return {
+        "steps": funnel_steps,
+        "visited": {1: len(visited_1), 2: len(visited_2)},
+    }
 
 
 def _compute_7d_activity():
@@ -3758,19 +3767,26 @@ def leads_insights():
     for et, n in rows:
         event_counts[et] = n
 
+    # Canonical event-type lists from temperature.py — guarantees the
+    # /admin/leads/insights funnel matches the /admin/leads funnel and
+    # PLF counters.
+    from app.services.temperature import (
+        class_started_event_types as _started_evts,
+        class_completed_event_types as _completed_evts,
+    )
+
     def _ge(class_n, threshold):
-        """Distinct emails who reached >= threshold% in class N (SQL-derived)."""
+        """Distinct emails who reached >= threshold% in class N (SQL-derived).
+        Uses the canonical helpers — `class_viewed` (page-load only) is
+        NOT counted as 'started'; that's tracked separately via Visited."""
         if threshold <= 25:
-            keys = [f"class{class_n}_viewed", f"class{class_n}_progress_25"] + \
-                   [f"class{class_n}_progress_{p}" for p in (50, 75, 95)] + \
-                   [f"class{class_n}_completed"]
+            keys = _started_evts(class_n)
         elif threshold <= 50:
             keys = [f"class{class_n}_progress_{p}" for p in (50, 75, 95)] + [f"class{class_n}_completed"]
         elif threshold <= 75:
             keys = [f"class{class_n}_progress_{p}" for p in (75, 95)] + [f"class{class_n}_completed"]
         else:  # >=95
-            keys = [f"class{class_n}_progress_95", f"class{class_n}_completed"]
-        # Count distinct emails matching any of the relevant event_types
+            keys = _completed_evts(class_n)
         return _safe(
             lambda: db.session.query(func.count(func.distinct(LeadEvent.email)))
                 .filter(LeadEvent.event_type.in_(keys)).scalar() or 0,
@@ -3784,13 +3800,12 @@ def leads_insights():
     n_webinar = event_counts.get("webinar_joined", 0)
     n_purchased = event_counts.get("purchase_completed", 0)
 
-    # Hot/burning approximation: people who completed any class OR joined webinar
+    # Hot/burning approximation: people who completed any class (≥95%) OR
+    # joined webinar OR purchased. Uses canonical "completed" definition.
+    _hot_event_keys = _completed_evts(1) + _completed_evts(2) + ["webinar_joined", "purchase_completed"]
     n_hot_or_burning = _safe(
         lambda: db.session.query(func.count(func.distinct(LeadEvent.email)))
-            .filter(LeadEvent.event_type.in_([
-                "class1_completed", "class2_completed",
-                "webinar_joined",
-            ])).scalar() or 0,
+            .filter(LeadEvent.event_type.in_(_hot_event_keys)).scalar() or 0,
         0,
     )
     n_customers = n_purchased
@@ -4325,47 +4340,11 @@ def leads():
     # stage (see _emails_in_temp_bucket() upstream). The page slice is
     # already correctly narrowed.
 
-    # ── PLF counters at the top: distinct emails per class & webinar ──
-    # Single SQL aggregation; matches the numbers shown on /admin/plf-status.
-    from app.models import LeadEvent
-    plf_counter_keys = [
-        # Started = viewed gate OR any progress. Launch is Class 1 + Class 2 + Webinar.
-        "class1_viewed", "class1_progress_25", "class1_progress_50", "class1_progress_75",
-        "class1_progress_95", "class1_completed",
-        "class2_viewed", "class2_progress_25", "class2_progress_50", "class2_progress_75",
-        "class2_progress_95", "class2_completed",
-        "webinar_joined",
-    ]
-    plf_rows = _safe(
-        lambda: db.session.query(LeadEvent.event_type, func.count(func.distinct(LeadEvent.email)))
-            .filter(LeadEvent.event_type.in_(plf_counter_keys))
-            .group_by(LeadEvent.event_type)
-            .all(),
-        [],
-    )
-    _ev_counts = {k: 0 for k in plf_counter_keys}
-    for et, n in plf_rows:
-        _ev_counts[et] = n
-
-    def _started_class(n):
-        return _safe(
-            lambda: db.session.query(func.count(func.distinct(LeadEvent.email)))
-                .filter(LeadEvent.event_type.in_([
-                    f"class{n}_viewed",
-                    f"class{n}_progress_25", f"class{n}_progress_50",
-                    f"class{n}_progress_75", f"class{n}_progress_95",
-                    f"class{n}_completed",
-                ])).scalar() or 0,
-            0,
-        )
-
-    plf_counters = {
-        "class1_started": _started_class(1),
-        "class1_completed": _ev_counts["class1_completed"],
-        "class2_started": _started_class(2),
-        "class2_completed": _ev_counts["class2_completed"],
-        "webinar_joined": _ev_counts["webinar_joined"],
-    }
+    # PLF counters used to render top cards on /admin/leads. Removed
+    # from the template when the funnel bar replaced them — kept here
+    # as an empty dict for any legacy template ref. The funnel bar +
+    # `funnel_visited` are now the source of truth.
+    plf_counters = {}
 
     # ── Dance-level distribution counters (clickable filter cards) ──
     # Single SQL aggregation. Map each long form-answer string to a
@@ -4460,7 +4439,12 @@ def leads():
     # (not affected by the active filters) — the user wants to see how
     # the launch is performing regardless of which slice they're inspecting.
     grand_total = _safe(lambda: Ambassador.query.count(), 0)
-    funnel_steps = _safe(lambda: _compute_launch_funnel(grand_total), [])
+    funnel_data = _safe(
+        lambda: _compute_launch_funnel(grand_total),
+        {"steps": [], "visited": {1: 0, 2: 0}},
+    )
+    funnel_steps = funnel_data.get("steps", [])
+    funnel_visited = funnel_data.get("visited", {1: 0, 2: 0})
     activity_series = _safe(_compute_7d_activity, {
         "labels": [], "signups": [], "class1": [], "class2": [],
     })
@@ -4487,6 +4471,7 @@ def leads():
         lookup_country=lookup_country,
         plf_counters=plf_counters,
         funnel_steps=funnel_steps,
+        funnel_visited=funnel_visited,
         activity_series=activity_series,
         dance_dist=dance_dist,
         f_dance=dance,

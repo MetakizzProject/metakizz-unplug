@@ -64,6 +64,51 @@ BUCKET_LABELS = {
 }
 
 
+# ────────────────────────────────────────────────────────────────────
+# Canonical event-type predicates per class.
+#
+# Single source of truth for "what counts as Started / Completed /
+# Visited a class". Used by /admin/leads funnel, /admin/leads PLF
+# counters, /admin/leads/insights funnel, and any future caller.
+# Don't compute these definitions inline anywhere else — call these.
+#
+# Intentional choices:
+# - STARTED requires ≥25% watched, NOT just `class{n}_viewed` (page-load).
+#   Page-loaders are tracked separately as "Visited" so they can be
+#   reported but don't pollute the engagement funnel.
+# - COMPLETED includes both `progress_95` and `completed`, tolerating
+#   the occasional missed `completed` event at video end (browser tab
+#   closed, network blip, etc.).
+# ────────────────────────────────────────────────────────────────────
+
+def class_started_event_types(class_n: int):
+    """Event types that count as 'started Class N' (≥25% watched).
+    Excludes class{n}_viewed which is page-load only."""
+    return [
+        f"class{class_n}_progress_25",
+        f"class{class_n}_progress_50",
+        f"class{class_n}_progress_75",
+        f"class{class_n}_progress_95",
+        f"class{class_n}_completed",
+    ]
+
+
+def class_completed_event_types(class_n: int):
+    """Event types that count as 'completed Class N' (≥95% watched).
+    Tolerates the explicit `completed` event not firing at video end."""
+    return [
+        f"class{class_n}_progress_95",
+        f"class{class_n}_completed",
+    ]
+
+
+def class_visited_event_types(class_n: int):
+    """Event types that mean 'opened the Class N page but didn't engage'.
+    Just the page-load fire — separate metric from Started so we can
+    distinguish curious page-loaders from real watchers."""
+    return [f"class{class_n}_viewed"]
+
+
 def bucket_from_event_set(event_types) -> str:
     """Classify a lead's temperature bucket from the SET of event_types
     they have. Launch-day-friendly: any class_completed promotes to
