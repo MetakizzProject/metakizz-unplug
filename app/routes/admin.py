@@ -4012,6 +4012,7 @@ def leads():
     class_1    = request.args.get("class_1") == "1"
     class_2    = request.args.get("class_2") == "1"
     webinar_joined_filter = request.args.get("webinar") == "1"
+    sort_mode  = (request.args.get("sort") or "").strip().lower()  # "" | "temp" | "temp_asc"
     page       = max(1, request.args.get("page", default=1, type=int))
     per_page   = 50
 
@@ -4121,10 +4122,57 @@ def leads():
     # 'referral', 'email', 'other' fall through — no DB filter
     # (the user can still see them by source / tag instead)
 
-    base = base.order_by(
-        Ambassador.last_dashboard_visit_at.desc().nullslast(),
-        Ambassador.created_at.desc().nullslast(),
-    )
+    # Sort: default = recent activity. ?sort=temp = hottest first
+    # (customer → burning → hot → warm → cool → cold). ?sort=temp_asc reverses.
+    if sort_mode in ("temp", "temp_asc"):
+        # Build email → bucket priority map via single SQL (same shape as
+        # _emails_in_temp_bucket). Reuses the launch-day classifier so the
+        # sort matches what the row badge displays.
+        event_rows = _safe(
+            lambda: db.session.query(LeadEvent.email, LeadEvent.event_type)
+                .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
+                .distinct().all(),
+            [],
+        )
+        events_by_email = defaultdict(set)
+        for em, et in event_rows:
+            if em:
+                events_by_email[em.lower()].add(et)
+        PRIORITY = {"customer": 6, "burning": 5, "hot": 4, "warm": 3, "cool": 2, "cold": 1}
+        emails_by_priority = defaultdict(list)
+        for em, evts in events_by_email.items():
+            p = PRIORITY[bucket_from_event_set(evts)]
+            emails_by_priority[p].append(em)
+
+        from sqlalchemy import case as sa_case
+        priority_cases = []
+        for p in (6, 5, 4, 3, 2):  # cold (1) is the implicit else
+            if emails_by_priority[p]:
+                priority_cases.append((func.lower(Ambassador.email).in_(emails_by_priority[p]), p))
+
+        if priority_cases:
+            priority_expr = sa_case(*priority_cases, else_=1)
+            if sort_mode == "temp":
+                base = base.order_by(
+                    priority_expr.desc(),
+                    Ambassador.last_dashboard_visit_at.desc().nullslast(),
+                    Ambassador.created_at.desc().nullslast(),
+                )
+            else:  # temp_asc
+                base = base.order_by(
+                    priority_expr.asc(),
+                    Ambassador.created_at.desc().nullslast(),
+                )
+        else:
+            base = base.order_by(
+                Ambassador.last_dashboard_visit_at.desc().nullslast(),
+                Ambassador.created_at.desc().nullslast(),
+            )
+    else:
+        base = base.order_by(
+            Ambassador.last_dashboard_visit_at.desc().nullslast(),
+            Ambassador.created_at.desc().nullslast(),
+        )
 
     # ── Total count via SQL (cheap), then pull only the current page ──
     total_count = base.count()
@@ -4282,6 +4330,10 @@ def leads():
     if class_2:    active_chips.append({"label": "watched C2", "url": _without("class_2")})
     if webinar_joined_filter:
         active_chips.append({"label": "joined webinar", "url": _without("webinar")})
+    if sort_mode == "temp":
+        active_chips.append({"label": "sort: 🔥 hottest first", "url": _without("sort")})
+    elif sort_mode == "temp_asc":
+        active_chips.append({"label": "sort: 🧊 coldest first", "url": _without("sort")})
     if dance:      active_chips.append({"label": f"dance: {dance}", "url": _without("dance")})
 
     # Launch funnel + 7-day activity sparkline. These are GLOBAL views
@@ -4310,6 +4362,7 @@ def leads():
         f_temp=temp_bucket, f_has_phone=has_phone,
         f_class_1=class_1, f_class_2=class_2,
         f_webinar=webinar_joined_filter,
+        f_sort=sort_mode,
         relevant_tags=sorted(RELEVANT_LEAD_TAGS),
         lookup_country=lookup_country,
         plf_counters=plf_counters,
