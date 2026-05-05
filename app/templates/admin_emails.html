@@ -49,6 +49,13 @@
                     </div>
                     {% endif %}
                 </div>
+                {% if info.already_engaged or info.reachable_total %}
+                <p class="text-[10px] text-gray-500 font-mono-term leading-relaxed -mt-1">
+                  {{ info.reachable_total }} reachable
+                  {% if info.already_engaged %} · <span class="text-gray-400">{{ info.already_engaged }} already engaged</span>{% endif %}
+                  {% if info.already_sent %} · <span class="text-yellow-300/70">{{ info.already_sent }} already received</span>{% endif %}
+                </p>
+                {% endif %}
                 <button type="button" onclick="document.getElementById('confirm-{{ key }}').classList.remove('hidden')"
                         class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-brand-400 hover:bg-brand-300 px-3 py-2 rounded font-bold transition disabled:bg-gray-700 disabled:text-gray-500"
                         {% if info.eligible == 0 %}disabled{% endif %}>
@@ -71,7 +78,8 @@
                     <h3 class="text-base font-bold text-white mb-2">{{ info.label }}</h3>
                     <p class="text-sm text-gray-300 mb-4">
                         About to send to <strong class="text-brand-400">{{ info.eligible }}</strong> ambassadors.
-                        {% if info.already_sent %}{{ info.already_sent }} already received this — they'll be skipped.{% endif %}
+                        {% if info.already_engaged %}<br><span class="text-gray-400">{{ info.already_engaged }} already engaged with this content — they'll be skipped.</span>{% endif %}
+                        {% if info.already_sent %}<br><span class="text-yellow-300/80">{{ info.already_sent }} already received this — they'll be skipped.</span>{% endif %}
                     </p>
 
                     <div class="bg-yellow-900/20 border border-yellow-500/40 rounded p-3 mb-4 text-xs text-yellow-200">

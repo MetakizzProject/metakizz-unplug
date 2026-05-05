@@ -1126,21 +1126,60 @@ def emails():
             amb_lookup[a.id] = a
 
     # Eligible counts for each manual content-drop email. "All" segment =
-    # every reachable (opted-in) ambassador minus those whose flag is set.
+    # every reachable (opted-in) ambassador minus those whose flag is set
+    # AND minus those whose `exclude_if_event_in` filter would skip them
+    # at send time (e.g. already watched the class). Mirroring the actual
+    # send filter at line ~1548 so the card matches what will fire.
     reachable_total = Ambassador.query.filter(Ambassador.unsubscribed_at.is_(None)).count()
-    manual_email_eligibles = {}
-    for key, flag in [
+
+    _MANUAL_TEMPLATES = [
         ("class1_ready",     "class1_email_sent_at"),
         ("class2_ready",     "class2_email_sent_at"),
         ("webinar_reminder", "webinar_reminder_sent_at"),
-    ]:
+    ]
+
+    # Single union query: every (email, event_type) pair that could trigger
+    # an exclusion in any of the manual-send templates above.
+    all_exclude_events = set()
+    for key, _flag in _MANUAL_TEMPLATES:
+        all_exclude_events.update(_SEGMENT_TEMPLATES[key].get("exclude_if_event_in") or [])
+
+    engaged_pairs = []
+    if all_exclude_events:
+        engaged_pairs = (
+            db.session.query(LeadEvent.email, LeadEvent.event_type)
+            .filter(LeadEvent.event_type.in_(all_exclude_events))
+            .distinct()
+            .all()
+        )
+
+    # Lowercased emails of all reachable ambassadors — used to intersect with
+    # engaged emails so the count is consistent with `reachable_total`.
+    reachable_emails = {
+        (e or "").lower() for (e,) in
+        db.session.query(Ambassador.email)
+        .filter(Ambassador.unsubscribed_at.is_(None))
+        .all() if e
+    }
+
+    manual_email_eligibles = {}
+    for key, flag in _MANUAL_TEMPLATES:
         already = Ambassador.query.filter(
             Ambassador.unsubscribed_at.is_(None),
             getattr(Ambassador, flag).isnot(None),
         ).count()
+        excl = set(_SEGMENT_TEMPLATES[key].get("exclude_if_event_in") or [])
+        engaged_emails = {
+            (em or "").lower()
+            for (em, ev) in engaged_pairs
+            if ev in excl and em
+        }
+        already_engaged = len(engaged_emails & reachable_emails)
         manual_email_eligibles[key] = {
-            "eligible": reachable_total - already,
+            "eligible": max(reachable_total - already - already_engaged, 0),
             "already_sent": already,
+            "already_engaged": already_engaged,
+            "reachable_total": reachable_total,
             "label": _SEGMENT_TEMPLATES[key]["label"],
         }
 
