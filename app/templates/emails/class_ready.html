@@ -55,8 +55,7 @@
     </p>
     <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:16px;line-height:1.65;margin:0;">
       {% if is_class_1 %}
-      The first piece of <strong style="color:#2EDB99;">Hacking the Urbankizz Code</strong> is live.
-      Most dancers won't watch it. The ones who do are the ones who actually shift their kizz.
+      In this <strong style="color:#2EDB99;">first class</strong> you're gonna discover:
       {% else %}
       <strong style="color:#2EDB99;">{{ class_label }}</strong> just unlocked. This is the one
       where the code starts to click — and the last one before we meet live.
@@ -78,9 +77,8 @@
         </p>
         <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.7;margin:0;">
           {% if is_class_1 %}
-          → The one mistake 90% of urbankiz dancers make<br>
-          → How to break the loop and find your own flow<br>
-          → A practical exercise you can do tonight
+          → The <strong style="color:#2EDB99;">lie</strong> almost every dancer believes — the one that makes them feel frustrated in the long run, and why it's not true.<br><br>
+          → The <strong style="color:#2EDB99;">SIX PATTERNS</strong> that are blocking thousands of dancers from progressing.
           {% else %}
           → How musicality actually works in urbankiz<br>
           → The exact framework Jesús &amp; Anni use<br>
@@ -94,29 +92,97 @@
 </tr>
 </table>
 
-<!-- 3. PRIMARY CTA — Watch the class -->
+{% if is_class_1 %}
+<!-- 2b. 48H WARNING -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-  <td class="mob-pad" align="center" style="padding:28px 32px 0 32px;">
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a0707" style="background:#1a0707;border:1px solid #FF4D4D;border-radius:8px;">
+    <tr>
+      <td style="padding:18px 20px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FF4D4D;font-size:12px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 10px 0;">
+          ⏰ Important
+        </p>
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.65;margin:0;">
+          Class 1 will <strong style="color:#FF4D4D;">ONLY be available for 48 hours.</strong><br>
+          After that, access will be closed. Watch it now.
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+{% endif %}
+
+<!-- 3. ACCESS — your password is your email -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:2px solid #2EDB99;border-radius:8px;box-shadow:0 0 18px rgba(46,219,153,0.35);">
+    <tr>
+      <td style="padding:20px 22px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 12px 0;">
+          ▌ How to unlock it
+        </p>
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.65;margin:0 0 12px 0;">
+          1. Click the link below.<br>
+          2. Your password is your email:
+        </p>
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:16px;font-weight:bold;letter-spacing:1px;margin:0;word-break:break-all;">
+          {{ email }}
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 4. PRIMARY CTA — Watch the class -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:24px 32px 0 32px;">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
     <tr>
       <td align="center" bgcolor="#2EDB99" style="background:#2EDB99;border:2px solid #2EDB99;border-radius:8px;box-shadow:0 0 22px rgba(46,219,153,0.55);">
         <a href="{{ class_url }}" class="mob-cta-text" style="display:inline-block;padding:18px 40px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:14px;letter-spacing:2.5px;text-transform:uppercase;color:#000000;text-decoration:none;">
-          Watch {{ class_label }}
+          ▶ Watch {{ class_label }}
         </a>
       </td>
     </tr>
     </table>
     <p style="margin:16px 0 0 0;">
-      <a href="{{ class_url }}" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;text-decoration:underline;">
-        Or copy the link → {{ class_url }}
+      <a href="{{ class_url }}" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;text-decoration:underline;word-break:break-all;">
+        {{ class_url }}
       </a>
     </p>
   </td>
 </tr>
 </table>
 
-<!-- 4. SECONDARY — Reward reminder + dashboard link -->
+{% if is_class_1 %}
+<!-- 5. ONE MORE THING — formula of inevitability -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:32px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:12px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 12px 0;">
+      ▌ One more thing…
+    </p>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.65;margin:0;">
+      If you watch until the end, you'll discover the
+      <strong style="color:#2EDB99;">Formula of Inevitability</strong> —
+      the 4 elements that make people want to dance with you again.
+    </p>
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#C9CFD4;font-size:14px;line-height:1.6;margin:14px 0 0 0;">
+      Hit play and start with Class 1.
+    </p>
+  </td>
+</tr>
+</table>
+{% endif %}
+
+<!-- 6. SECONDARY — Reward reminder + dashboard link -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
   <td class="mob-pad" style="padding:32px 32px 0 32px;">
@@ -134,7 +200,7 @@
 </tr>
 </table>
 
-<!-- 5. DEADLINE BANNER -->
+<!-- 7. DEADLINE BANNER -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
   <td class="mob-pad" style="padding:28px 32px 0 32px;">
@@ -142,7 +208,7 @@
     <tr>
       <td align="center" style="padding:14px 18px;">
         <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:12px;letter-spacing:3.5px;text-transform:uppercase;margin:0;">
-          ⧗ Live · May 7 · 19:00 Madrid
+          ⧗ Live webinar · May 7 · 19:00 Madrid
         </p>
       </td>
     </tr>

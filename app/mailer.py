@@ -430,6 +430,7 @@ def send_class_ready_email(ambassador, app_url, class_number):
     html = render_template(
         "emails/class_ready.html",
         first_name=_first_name(ambassador),
+        email=ambassador.email,
         community=(ambassador.source == "community"),
         class_number=class_number,
         class_url=class_url,

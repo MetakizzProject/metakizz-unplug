@@ -29,7 +29,7 @@ OUT_DIR = ROOT / ".tmp"
 OUT_DIR.mkdir(exist_ok=True)
 
 PROD_URL = "https://metakizz-ambassador.onrender.com"
-LANDING_URL = "https://hackingtheurbankizcode.com"
+LANDING_URL = "https://inevitable.metakizzproject.com"
 
 
 def render_one(class_number: int, community: bool) -> Path:
@@ -41,6 +41,7 @@ def render_one(class_number: int, community: bool) -> Path:
         html = render_template(
             "emails/class_ready.html",
             first_name="Alvaro",
+            email="alvarohertinez@gmail.com",
             community=community,
             class_number=class_number,
             class_url=f"{LANDING_URL}/class{class_number}",
