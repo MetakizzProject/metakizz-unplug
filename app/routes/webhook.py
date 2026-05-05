@@ -515,6 +515,24 @@ def lead_event():
                 db.session.rollback()
                 logger.exception("failed to backfill attribution on ambassador %d", amb.id)
 
+    # ── Push milestone tags to GHL so workflows there can move the contact
+    # to the right pipeline stage (class started / completed / webinar joined
+    # / purchased). Fire-and-forget in a background thread so a slow GHL API
+    # call never blocks the Lovable frontend.
+    if amb is not None and amb.ghl_contact_id:
+        from app.services.ghl import LEAD_EVENT_TAG_MAP, add_tags
+        tag = LEAD_EVENT_TAG_MAP.get(event_type)
+        if tag:
+            import threading
+            contact_id = amb.ghl_contact_id
+
+            def _push_tag(cid=contact_id, t=tag, ev=event_type, em=email):
+                try:
+                    add_tags(cid, [t])
+                except Exception:
+                    logger.exception("ghl tag push failed event=%s email=%s tag=%s", ev, em, t)
+            threading.Thread(target=_push_tag, daemon=True).start()
+
     return _add_cors_headers(jsonify({
         "ok": True,
         "stored": event_type,

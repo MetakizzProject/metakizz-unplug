@@ -159,8 +159,29 @@ def extract_custom_fields(contact: Dict[str, Any]) -> Dict[str, Any]:
 # webinar attendees from the previous campaign. Edit this to broaden/narrow.
 RELEVANT_LEAD_TAGS = {
     "mkot3_registrado",
+    "mkot3_class1_started",
+    "mkot3_class1_completed",
+    "mkot3_class2_started",
+    "mkot3_class2_completed",
+    "mkot3_webinar_joined",
+    "mkot3_purchased",
     "masterclass march17th",
     "webinnar 17 marzo",
+}
+
+
+# Lead-event → GHL tag map. When a milestone event arrives at /api/lead-event,
+# the matching tag is pushed to GHL so workflows there can move the contact
+# along the pipeline. Lower-signal events (progress_25/50/75/95) deliberately
+# omitted to keep the GHL pipeline view clean — only "started" and "completed"
+# milestones drive movement.
+LEAD_EVENT_TAG_MAP = {
+    "class1_viewed":      "mkot3_class1_started",
+    "class1_completed":   "mkot3_class1_completed",
+    "class2_viewed":      "mkot3_class2_started",
+    "class2_completed":   "mkot3_class2_completed",
+    "webinar_joined":     "mkot3_webinar_joined",
+    "purchase_completed": "mkot3_purchased",
 }
 
 
