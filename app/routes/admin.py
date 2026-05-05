@@ -222,10 +222,13 @@ def _compute_launch_funnel(total_leads):
             by_event[et].add(em.lower())
 
     def _count_ge(class_n, threshold):
+        # ≥25% means actually pressed play and progressed at least a quarter.
+        # Plain `class{n}_viewed` (page-load) is intentionally excluded so
+        # the funnel matches the /admin/leads "Class N" filter exactly.
         if threshold <= 25:
-            keys = [f"class{class_n}_viewed", f"class{class_n}_progress_25",
-                    f"class{class_n}_progress_50", f"class{class_n}_progress_75",
-                    f"class{class_n}_progress_95", f"class{class_n}_completed"]
+            keys = [f"class{class_n}_progress_25", f"class{class_n}_progress_50",
+                    f"class{class_n}_progress_75", f"class{class_n}_progress_95",
+                    f"class{class_n}_completed"]
         elif threshold <= 50:
             keys = [f"class{class_n}_progress_50", f"class{class_n}_progress_75",
                     f"class{class_n}_progress_95", f"class{class_n}_completed"]
@@ -4008,6 +4011,7 @@ def leads():
     has_phone  = request.args.get("has_phone") == "1"
     class_1    = request.args.get("class_1") == "1"
     class_2    = request.args.get("class_2") == "1"
+    webinar_joined_filter = request.args.get("webinar") == "1"
     page       = max(1, request.args.get("page", default=1, type=int))
     per_page   = 50
 
@@ -4046,12 +4050,15 @@ def leads():
             base = base.filter(Ambassador.id == -1)
 
     # PERF: per-class filters via SQL EXISTS subquery on lead_events,
-    # not Python after loading everyone. ≥25% means the lead has any
-    # of the relevant progress events for that class.
+    # not Python after loading everyone. The filter requires ≥25% watched
+    # (i.e. any progress_25/50/75/95/completed/resource_unlocked event) —
+    # `class{n}_viewed` alone (the page-load fire) is intentionally NOT
+    # counted because it just means "loaded the page", not "actually
+    # watched". This matches the user's mental model: "Class 2" filter
+    # should return people who pressed play, not people who only visited.
     from app.models import LeadEvent
     def _add_class_filter(q_, class_n):
         progress_events = [
-            f"class{class_n}_viewed",
             f"class{class_n}_progress_25",
             f"class{class_n}_progress_50",
             f"class{class_n}_progress_75",
@@ -4071,6 +4078,16 @@ def leads():
         base = _add_class_filter(base, 1)
     if class_2:
         base = _add_class_filter(base, 2)
+
+    # Webinar filter: leads who actually joined the live (webinar_joined event).
+    if webinar_joined_filter:
+        sub = (
+            db.session.query(LeadEvent.email)
+            .filter(func.lower(LeadEvent.email) == func.lower(Ambassador.email))
+            .filter(LeadEvent.event_type == "webinar_joined")
+            .exists()
+        )
+        base = base.filter(sub)
 
     # Origin filter via UTM column match (approximate, but DB-level)
     if origin in ("instagram", "instagram_ad"):
@@ -4263,6 +4280,8 @@ def leads():
     if has_phone:  active_chips.append({"label": "has phone", "url": _without("has_phone")})
     if class_1:    active_chips.append({"label": "watched C1", "url": _without("class_1")})
     if class_2:    active_chips.append({"label": "watched C2", "url": _without("class_2")})
+    if webinar_joined_filter:
+        active_chips.append({"label": "joined webinar", "url": _without("webinar")})
     if dance:      active_chips.append({"label": f"dance: {dance}", "url": _without("dance")})
 
     # Launch funnel + 7-day activity sparkline. These are GLOBAL views
@@ -4290,6 +4309,7 @@ def leads():
         f_q=q, f_source=source, f_origin=origin, f_tag=tag_filter,
         f_temp=temp_bucket, f_has_phone=has_phone,
         f_class_1=class_1, f_class_2=class_2,
+        f_webinar=webinar_joined_filter,
         relevant_tags=sorted(RELEVANT_LEAD_TAGS),
         lookup_country=lookup_country,
         plf_counters=plf_counters,

@@ -396,7 +396,9 @@
           {% set link = url_for('admin.leads', class_1=1) %}
         {%- elif s.key == 'class2_min25' -%}
           {% set link = url_for('admin.leads', class_2=1) %}
-        {%- elif s.key == 'class1_min95' or s.key == 'class2_min95' or s.key == 'webinar' -%}
+        {%- elif s.key == 'webinar' -%}
+          {% set link = url_for('admin.leads', webinar=1) %}
+        {%- elif s.key == 'class1_min95' or s.key == 'class2_min95' -%}
           {% set link = url_for('admin.leads', temp='burning') %}
         {%- elif s.key == 'customer' -%}
           {% set link = url_for('admin.leads', temp='customer') %}
@@ -504,7 +506,7 @@
         </select>
       </div>
       <div class="field">
-        <label>Watched class (≥25%)</label>
+        <label>Watched class (≥25%) · Joined webinar</label>
         <div class="checkbox-group">
           <label class="checkbox-pill {% if f_class_1 %}checked{% endif %}">
             <input type="checkbox" name="class_1" value="1" {% if f_class_1 %}checked{% endif %} onchange="this.form.submit()">
@@ -513,6 +515,10 @@
           <label class="checkbox-pill {% if f_class_2 %}checked{% endif %}">
             <input type="checkbox" name="class_2" value="1" {% if f_class_2 %}checked{% endif %} onchange="this.form.submit()">
             Class 2
+          </label>
+          <label class="checkbox-pill {% if f_webinar %}checked{% endif %}" style="--accent: #DC2626;">
+            <input type="checkbox" name="webinar" value="1" {% if f_webinar %}checked{% endif %} onchange="this.form.submit()">
+            🎤 Webinar
           </label>
           <label class="checkbox-pill {% if f_has_phone %}checked{% endif %}">
             <input type="checkbox" name="has_phone" value="1" {% if f_has_phone %}checked{% endif %} onchange="this.form.submit()">
