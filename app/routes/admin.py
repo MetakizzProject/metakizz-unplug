@@ -705,7 +705,13 @@ def _compute_chart_data(ambassadors=None, referral_counts=None):
     counts_by_day = defaultdict(lambda: {"community": 0, "public": 0})
     cutoff = datetime.combine(days[0], datetime.min.time(), tzinfo=timezone.utc)
     for amb in Ambassador.query.filter(Ambassador.created_at >= cutoff).all():
-        d = (amb.created_at.date() if amb.created_at.tzinfo else amb.created_at.date()).isoformat()
+        # Skip rows that would break the bucket dispatch: missing created_at
+        # or a `source` outside the known {community, public} set (e.g. legacy
+        # imports, GHL-synced rows with empty source). One stray value used to
+        # KeyError out of the loop and `_safe` would zero ALL charts.
+        if amb.created_at is None or amb.source not in ("community", "public"):
+            continue
+        d = amb.created_at.date().isoformat()
         counts_by_day[d][amb.source] += 1
 
     timeline = {
