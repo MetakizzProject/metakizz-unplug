@@ -1,0 +1,486 @@
+{% extends "admin_base.html" %}
+{% set page_title = "Ghost Leads" %}
+
+{% macro filter_link(key, value, label, current_value, color=None) %}
+  {%- set qs = request.args.to_dict() -%}
+  {%- if current_value == value -%}
+    {%- set _ = qs.pop(key, None) -%}
+    {%- set is_active = true -%}
+  {%- else -%}
+    {%- set _ = qs.update({key: value}) -%}
+    {%- set _ = qs.pop('page', None) -%}
+    {%- set is_active = false -%}
+  {%- endif -%}
+  <a href="?{{ qs|urlencode }}" class="filter-card {% if is_active %}filter-active{% endif %}" {% if color %}style="--accent: {{ color }};"{% endif %}>
+    {{ label|safe }}
+  </a>
+{% endmacro %}
+
+{% block admin_content %}
+<style>
+.leads-shell { padding: 18px 20px 40px; max-width: 1500px; }
+
+.leads-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 4px;
+}
+.leads-header h1 {
+    color: #fff; font-family: 'Orbitron', sans-serif; font-weight: 900;
+    font-size: 22px; letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 14px rgba(167,139,250,0.4); margin: 0;
+}
+.leads-header h1 .count { color: #A78BFA; margin-left: 8px; }
+
+.leads-subtitle {
+    color: #6B7280; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    margin-bottom: 22px;
+}
+
+.section-label {
+    font-family: 'Share Tech Mono', monospace; font-size: 9px;
+    color: #6B7280; letter-spacing: 0.3em; text-transform: uppercase;
+    margin: 22px 0 8px 0;
+}
+
+.cards-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+    gap: 8px;
+}
+.stat-card, .filter-card {
+    background: rgba(167,139,250,0.04); border: 1px solid rgba(167,139,250,0.18);
+    border-radius: 6px; padding: 10px 12px; text-decoration: none;
+    color: inherit; display: block; transition: all 140ms ease;
+    cursor: default;
+}
+.filter-card { cursor: pointer; --accent: #A78BFA; }
+.filter-card:hover {
+    border-color: var(--accent);
+    background: rgba(167,139,250,0.08);
+    box-shadow: 0 0 14px rgba(167,139,250,0.25);
+    transform: translateY(-1px);
+}
+.filter-card.filter-active {
+    background: var(--accent); border-color: var(--accent);
+    box-shadow: 0 0 22px var(--accent), inset 0 0 0 2px rgba(255,255,255,0.15);
+    transform: translateY(-2px);
+    position: relative;
+}
+.filter-card.filter-active::before {
+    content: '✓'; position: absolute; top: 4px; right: 8px;
+    color: #000; font-weight: 900; font-size: 12px; opacity: 0.7;
+}
+.filter-card.filter-active .label,
+.filter-card.filter-active .value { color: #000; text-shadow: none; }
+.filter-card .label, .stat-card .label {
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    line-height: 1.3;
+}
+.filter-card .value, .stat-card .value {
+    color: var(--accent, #A78BFA); font-family: 'Orbitron', sans-serif;
+    font-weight: 900; font-size: 22px; line-height: 1.1; margin-top: 2px;
+    text-shadow: 0 0 10px rgba(167,139,250,0.35);
+}
+
+.filters {
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(167,139,250,0.18);
+    border-radius: 8px; padding: 14px 16px; margin-top: 18px;
+}
+.filters .row {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: end;
+}
+.filters .field { display: flex; flex-direction: column; gap: 3px; }
+.filters label {
+    color: #6B7280; font-family: 'Share Tech Mono', monospace;
+    font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+}
+.filters input[type=text] {
+    background: #050a08; color: #fff;
+    border: 1px solid rgba(167,139,250,0.3); border-radius: 4px;
+    padding: 6px 10px; font-family: 'Share Tech Mono', monospace; font-size: 12px;
+    min-width: 200px;
+}
+.filters input[type=text]:focus {
+    outline: none; border-color: #A78BFA;
+    box-shadow: 0 0 10px rgba(167,139,250,0.35);
+}
+.checkbox-group {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+}
+.checkbox-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 4px; cursor: pointer;
+    background: rgba(0,0,0,0.5); border: 1px solid rgba(167,139,250,0.2);
+    color: #C9CFD4; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.1em; transition: all 140ms;
+    user-select: none;
+}
+.checkbox-pill:hover { border-color: rgba(167,139,250,0.5); color: #fff; }
+.checkbox-pill input { display: none; }
+.checkbox-pill.checked {
+    background: rgba(167,139,250,0.18); border-color: #A78BFA; color: #A78BFA;
+    box-shadow: 0 0 10px rgba(167,139,250,0.3);
+}
+
+.filter-banner {
+    background: rgba(255,200,87,0.08);
+    border: 1px solid rgba(255,200,87,0.4);
+    border-radius: 6px;
+    padding: 10px 14px; margin: 12px 0 6px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; color: #FFC857; letter-spacing: 0.1em;
+}
+.filter-banner .label { color: #FFC857; font-weight: bold; }
+.filter-banner .results {
+    color: #fff; margin-left: auto;
+    font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 700;
+}
+.filter-banner .clear-link {
+    color: #DC2626; text-decoration: underline; font-weight: bold;
+}
+.chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 99px;
+    background: rgba(255,200,87,0.15); color: #FFC857;
+    border: 1px solid rgba(255,200,87,0.35);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 0.1em; text-decoration: none;
+}
+.chip:hover { background: rgba(255,200,87,0.25); }
+.chip .x { color: #FFC857; font-weight: bold; }
+
+.leads-table-wrap {
+    overflow-x: auto; margin-top: 14px;
+    border: 1px solid rgba(167,139,250,0.18); border-radius: 6px;
+}
+.leads-table {
+    width: 100%; border-collapse: collapse;
+    background: rgba(0,0,0,0.4); font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+}
+.leads-table thead th {
+    text-align: left; padding: 10px 12px;
+    color: #9CA3AF; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    font-size: 10px;
+    border-bottom: 1px solid rgba(167,139,250,0.2);
+    background: rgba(0,0,0,0.55);
+    position: sticky; top: 0; z-index: 1;
+}
+.leads-table tbody tr {
+    border-bottom: 1px solid rgba(167,139,250,0.08);
+}
+.leads-table tbody tr:hover { background: rgba(167,139,250,0.04); }
+.leads-table td { padding: 10px 12px; vertical-align: top; }
+
+.lead-email {
+    color: #fff; font-weight: 600; font-size: 13px;
+    word-break: break-all;
+}
+.lead-email-mono {
+    font-family: 'Share Tech Mono', monospace;
+    color: #C9CFD4; font-size: 11px;
+}
+
+.temp-badge {
+    display: inline-block; padding: 3px 8px; border-radius: 4px;
+    font-weight: 700; font-size: 11px; letter-spacing: 0.06em;
+}
+.pct-badge {
+    display: inline-block; min-width: 36px; padding: 2px 6px;
+    border-radius: 3px; text-align: center; font-size: 11px;
+    font-weight: 700;
+}
+.pct-95 { background: rgba(46,219,153,0.2); color: #2EDB99; }
+.pct-50 { background: rgba(249,115,22,0.2); color: #F97316; }
+.pct-25 { background: rgba(156,163,175,0.2); color: #9CA3AF; }
+.pct-0  { color: #4B5563; }
+
+.action-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 5px 9px; border-radius: 4px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    text-decoration: none; font-weight: bold; line-height: 1.3;
+    border: 1px solid transparent; cursor: pointer;
+    background: transparent;
+}
+.action-mailto { background: #2EDB99; color: #000; }
+.action-mailto:hover { background: #2bc78a; }
+.action-copy { color: #C9CFD4; border-color: rgba(167,139,250,0.4); }
+.action-copy:hover { background: rgba(167,139,250,0.1); }
+.action-convert { background: #A78BFA; color: #000; }
+.action-convert:hover { background: #9277f0; }
+
+.empty-state {
+    margin: 28px auto; padding: 38px 20px; max-width: 480px;
+    text-align: center;
+    background: rgba(0,0,0,0.4);
+    border: 1px dashed rgba(167,139,250,0.3); border-radius: 10px;
+}
+.empty-state .icon { font-size: 36px; margin-bottom: 8px; }
+.empty-state .title {
+    font-family: 'Orbitron', sans-serif; font-weight: 800; color: #fff;
+    font-size: 16px; letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.empty-state .sub {
+    color: #9CA3AF; font-family: 'Share Tech Mono', monospace;
+    font-size: 12px; line-height: 1.6; margin-bottom: 18px;
+}
+.empty-state a {
+    display: inline-block; padding: 10px 22px; border-radius: 4px;
+    background: #A78BFA; color: #000; text-decoration: none;
+    font-family: 'Share Tech Mono', monospace; font-weight: bold;
+    font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase;
+}
+
+.pager {
+    margin-top: 16px; display: flex; justify-content: center;
+    gap: 6px; font-family: 'Share Tech Mono', monospace; font-size: 12px;
+}
+.pager a, .pager span {
+    padding: 6px 12px; border: 1px solid rgba(167,139,250,0.3);
+    color: #C9CFD4; text-decoration: none; border-radius: 3px;
+}
+.pager a:hover { border-color: #A78BFA; color: #A78BFA; }
+.pager .current { background: #A78BFA; color: #000; border-color: #A78BFA; }
+</style>
+
+<div class="leads-shell">
+
+  <div class="leads-header">
+    <h1>👻 Ghost Leads <span class="count">{{ stats.total }}</span></h1>
+  </div>
+  <p class="leads-subtitle">
+    People watching class videos with emails that don't match any Ambassador · email-only outreach
+  </p>
+
+  <!-- ─── OVERVIEW STATS ─── -->
+  <div class="section-label">▌ Snapshot</div>
+  <div class="cards-row" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
+    <div class="stat-card">
+      <div class="label">Total ghosts</div>
+      <div class="value">{{ stats.total }}</div>
+    </div>
+    <div class="stat-card" style="--accent: #2EDB99;">
+      <div class="label">📺 Watched C1 (≥25%)</div>
+      <div class="value" style="color: #2EDB99;">{{ stats.class1 }}</div>
+    </div>
+    <div class="stat-card" style="--accent: #FFC857;">
+      <div class="label">📺 Watched C2 (≥25%)</div>
+      <div class="value" style="color: #FFC857;">{{ stats.class2 }}</div>
+    </div>
+    <div class="stat-card" style="--accent: #DC2626;">
+      <div class="label">🎤 Joined webinar</div>
+      <div class="value" style="color: #DC2626;">{{ stats.webinar }}</div>
+    </div>
+  </div>
+
+  <!-- ─── TEMPERATURE FILTER CARDS ─── -->
+  <div class="section-label">▌ Temperature · click to filter</div>
+  <div class="cards-row">
+    {% for key, label, color in temp_buckets %}
+      {{ filter_link('temp', key, '<div class="label">' ~ label ~ '</div><div class="value">' ~ temp_dist[key] ~ '</div>', f_temp, color) }}
+    {% endfor %}
+  </div>
+
+  <!-- ─── FILTER BAR ─── -->
+  <form method="GET" action="{{ url_for('admin.leads_ghosts') }}" class="filters">
+    {# Preserve clickable filters as hidden inputs #}
+    {% if f_temp %}<input type="hidden" name="temp" value="{{ f_temp }}">{% endif %}
+    {% if f_sort %}<input type="hidden" name="sort" value="{{ f_sort }}">{% endif %}
+    <div class="row">
+      <div class="field">
+        <label>Search email</label>
+        <input type="text" name="q" placeholder="domain.com or local-part" value="{{ f_q }}">
+      </div>
+      <div class="field">
+        <label>Watched class · joined webinar</label>
+        <div class="checkbox-group">
+          <label class="checkbox-pill {% if f_class_1 %}checked{% endif %}">
+            <input type="checkbox" name="class_1" value="1" {% if f_class_1 %}checked{% endif %} onchange="this.form.submit()">
+            Class 1
+          </label>
+          <label class="checkbox-pill {% if f_class_2 %}checked{% endif %}">
+            <input type="checkbox" name="class_2" value="1" {% if f_class_2 %}checked{% endif %} onchange="this.form.submit()">
+            Class 2
+          </label>
+          <label class="checkbox-pill {% if f_webinar %}checked{% endif %}" style="--accent: #DC2626;">
+            <input type="checkbox" name="webinar" value="1" {% if f_webinar %}checked{% endif %} onchange="this.form.submit()">
+            🎤 Webinar
+          </label>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <!-- ─── ACTIVE FILTER BANNER ─── -->
+  {% if active_chips %}
+  <div class="filter-banner">
+    <span class="label">🔍 Filtering:</span>
+    {% for chip in active_chips %}
+      <a class="chip" href="{{ chip.url }}">{{ chip.label }} <span class="x">×</span></a>
+    {% endfor %}
+    <span class="results">{{ "{:,}".format(total_count) }} {% if total_count == 1 %}result{% else %}results{% endif %}</span>
+    <a class="clear-link" href="{{ clear_all_url }}">clear all</a>
+  </div>
+  {% endif %}
+
+  <!-- ─── TABLE / EMPTY STATE ─── -->
+  {% if total_count == 0 and active_chips %}
+    <div class="empty-state">
+      <div class="icon">🪐</div>
+      <div class="title">No ghosts match these filters</div>
+      <div class="sub">Try removing one of the filters above, or start over.</div>
+      <a href="{{ clear_all_url }}">↺ clear all filters</a>
+    </div>
+  {% elif total_count == 0 %}
+    <div class="empty-state">
+      <div class="icon">👻</div>
+      <div class="title">No ghosts yet</div>
+      <div class="sub">
+        When someone watches a class video with an email that's NOT in our<br>
+        Ambassador DB, they'll appear here so you can reach out.
+      </div>
+    </div>
+  {% else %}
+  <div class="leads-table-wrap">
+    <table class="leads-table">
+      <thead>
+        <tr>
+          <th style="width:24%;">Email</th>
+          <th style="width:12%;">First seen</th>
+          <th style="width:12%;">Last seen</th>
+          <th style="width:8%;" class="text-center">Events</th>
+          <th style="width:13%;">
+            {%- set qs = request.args.to_dict() -%}
+            {%- set _ = qs.pop('page', None) -%}
+            {%- if f_sort == 'temp' -%}
+              {%- set _ = qs.update({'sort': 'temp_asc'}) -%}
+              {%- set arrow = '🔥↓' -%}
+            {%- elif f_sort == 'temp_asc' -%}
+              {%- set _ = qs.pop('sort', None) -%}
+              {%- set arrow = '🧊↑' -%}
+            {%- else -%}
+              {%- set _ = qs.update({'sort': 'temp'}) -%}
+              {%- set arrow = '↕' -%}
+            {%- endif -%}
+            <a href="?{{ qs|urlencode }}" style="color:inherit; text-decoration:none;">
+              Temperature <span style="opacity:0.7;">{{ arrow }}</span>
+            </a>
+          </th>
+          <th style="width:7%;">C1</th>
+          <th style="width:7%;">C2</th>
+          <th style="width:6%;">🎤</th>
+          <th style="width:11%;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in rows %}
+          {% set bucket = bucket_labels[g.bucket_key] %}
+          <tr>
+            <td>
+              <div class="lead-email">{{ g.email }}</div>
+              {% if g.utm_source or g.utm_campaign or g.ref %}
+                <div class="lead-email-mono" style="margin-top:4px;">
+                  {%- if g.utm_source %}<span style="color:#A78BFA;">{{ g.utm_source }}</span>{% endif -%}
+                  {%- if g.utm_campaign %} · {{ g.utm_campaign }}{% endif -%}
+                  {%- if g.ref %} · ref:{{ g.ref }}{% endif -%}
+                </div>
+              {% endif %}
+            </td>
+            <td style="color:#9CA3AF; font-size:11px;">
+              {%- if g.first_seen -%}
+                {%- set fs = g.first_seen if g.first_seen.tzinfo else g.first_seen.replace(tzinfo=now_ts.tzinfo) -%}
+                {%- set delta = (now_ts - fs).total_seconds() -%}
+                {%- if delta < 3600 %}{{ (delta // 60)|int }}m ago
+                {%- elif delta < 86400 %}{{ (delta // 3600)|int }}h ago
+                {%- elif delta < 604800 %}{{ (delta // 86400)|int }}d ago
+                {%- else %}{{ g.first_seen.strftime('%b %d') }}{% endif -%}
+              {% else %}—{% endif %}
+            </td>
+            <td style="color:#C9CFD4; font-size:11px;">
+              {%- if g.last_seen -%}
+                {%- set ls = g.last_seen if g.last_seen.tzinfo else g.last_seen.replace(tzinfo=now_ts.tzinfo) -%}
+                {%- set delta = (now_ts - ls).total_seconds() -%}
+                {%- if delta < 3600 %}<span style="color:#2EDB99;">{{ (delta // 60)|int }}m ago</span>
+                {%- elif delta < 86400 %}<span style="color:#2EDB99;">{{ (delta // 3600)|int }}h ago</span>
+                {%- elif delta < 604800 %}{{ (delta // 86400)|int }}d ago
+                {%- else %}{{ g.last_seen.strftime('%b %d') }}{% endif -%}
+              {% else %}—{% endif %}
+            </td>
+            <td style="text-align:center;">
+              <span style="background:rgba(167,139,250,0.15); color:#A78BFA; padding:2px 8px; border-radius:99px; font-size:10px; font-weight:700;">{{ g.event_count }}</span>
+            </td>
+            <td>
+              <span class="temp-badge" style="color: {{ bucket[1] }}; background: {{ bucket[1] }}20; border:1px solid {{ bucket[1] }}66;">
+                {{ bucket[0] }}
+              </span>
+            </td>
+            <td>
+              <span class="pct-badge {% if g.class1_max >= 95 %}pct-95{% elif g.class1_max >= 50 %}pct-50{% elif g.class1_max >= 25 %}pct-25{% else %}pct-0{% endif %}">
+                {% if g.class1_max %}{{ g.class1_max }}%{% else %}—{% endif %}
+              </span>
+            </td>
+            <td>
+              <span class="pct-badge {% if g.class2_max >= 95 %}pct-95{% elif g.class2_max >= 50 %}pct-50{% elif g.class2_max >= 25 %}pct-25{% else %}pct-0{% endif %}">
+                {% if g.class2_max %}{{ g.class2_max }}%{% else %}—{% endif %}
+              </span>
+            </td>
+            <td style="text-align:center; font-size:14px;">
+              {% if g.webinar_joined %}<span style="color:#DC2626;">✓</span>{% else %}<span style="color:#4B5563;">—</span>{% endif %}
+            </td>
+            <td>
+              <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                <a class="action-btn action-mailto" href="mailto:{{ g.email }}" title="Open in mail client">📧 Mail</a>
+                <button class="action-btn action-copy" type="button" onclick="navigator.clipboard.writeText('{{ g.email }}'); this.textContent='✓ Copied';" title="Copy email">📋 Copy</button>
+                <form method="POST" action="{{ url_for('admin.convert_ghost_to_ambassador') }}" style="display:inline;"
+                      onsubmit="return confirm('Convert {{ g.email }} to a real Ambassador?\n\nThis creates an Ambassador record (source=video_only), backfills UTMs, and links their {{ g.event_count }} event(s). No welcome email is sent.');">
+                  <input type="hidden" name="email" value="{{ g.email }}">
+                  <button type="submit" class="action-btn action-convert" title="Create Ambassador from this ghost">➕ Convert</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- ─── PAGINATION ─── -->
+  {% if pages > 1 %}
+    <div class="pager">
+      {% set qs = request.args.to_dict() %}
+      {% if page > 1 %}
+        {% set _ = qs.update({'page': page - 1}) %}
+        <a href="?{{ qs|urlencode }}">← prev</a>
+      {% endif %}
+      <span class="current">page {{ page }} / {{ pages }}</span>
+      {% if page < pages %}
+        {% set _ = qs.update({'page': page + 1}) %}
+        <a href="?{{ qs|urlencode }}">next →</a>
+      {% endif %}
+    </div>
+  {% endif %}
+
+</div>
+
+<script>
+// Submit search input on Enter
+document.querySelector('input[name="q"]')?.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); this.form.submit(); }
+});
+(function() {
+    var input = document.querySelector('input[name="q"]');
+    if (!input) return;
+    var initial = input.value;
+    input.addEventListener('blur', function() {
+        if (input.value !== initial) input.form.submit();
+    });
+})();
+</script>
+{% endblock %}

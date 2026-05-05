@@ -335,6 +335,126 @@ def _compute_7d_activity():
     }
 
 
+def _compute_ghost_summary():
+    """Aggregate ghost LeadEvents (ambassador_id IS NULL) into per-email rows.
+
+    Ghosts are people who watched a class video but whose email doesn't
+    match any Ambassador record. We surface them so the admin can reach
+    out / convert them.
+
+    Single SQL pass against LeadEvent. Returns a list of dicts:
+
+        {
+          "email":          str,
+          "first_seen":     datetime,
+          "last_seen":      datetime,
+          "event_count":    int,
+          "class1_max":     int (0..100),
+          "class2_max":     int (0..100),
+          "webinar_joined": bool,
+          "event_types":    set[str],
+          "bucket_key":     "cold"|"cool"|"warm"|"hot"|"burning"|"customer",
+          "utm_source":     str|None,
+          "utm_medium":     str|None,
+          "utm_campaign":   str|None,
+          "ref":            str|None,
+          "fbclid":         str|None,
+          "gclid":          str|None,
+          "page_url":       str|None,
+        }
+    """
+    rows = _safe(
+        lambda: db.session.query(
+            LeadEvent.email,
+            LeadEvent.event_type,
+            LeadEvent.pct,
+            LeadEvent.class_number,
+            LeadEvent.created_at,
+            LeadEvent.utm_source,
+            LeadEvent.utm_medium,
+            LeadEvent.utm_campaign,
+            LeadEvent.ref,
+            LeadEvent.fbclid,
+            LeadEvent.gclid,
+            LeadEvent.page_url,
+        ).filter(LeadEvent.ambassador_id.is_(None))
+         .filter(LeadEvent.email.isnot(None))
+         .order_by(LeadEvent.created_at.asc())
+         .all(),
+        [],
+    )
+
+    def _pct_from_event(event_type, pct_field):
+        if pct_field is not None:
+            try:
+                return int(pct_field)
+            except (TypeError, ValueError):
+                pass
+        et = event_type or ""
+        if et.endswith("_completed"):
+            return 100
+        if et.endswith("_resource_unlocked"):
+            return 95
+        if et.endswith("_progress_95"):
+            return 95
+        if et.endswith("_progress_75"):
+            return 75
+        if et.endswith("_progress_50"):
+            return 50
+        if et.endswith("_progress_25"):
+            return 25
+        return 0
+
+    by_email = {}
+    for em, et, pct, cn, ts, utm_s, utm_m, utm_c, ref, fb, gc, page_url in rows:
+        if not em:
+            continue
+        em_lc = em.lower()
+        s = by_email.setdefault(em_lc, {
+            "email": em_lc,
+            "first_seen": ts,
+            "last_seen": ts,
+            "event_count": 0,
+            "class1_max": 0,
+            "class2_max": 0,
+            "event_types": set(),
+            "utm_source": None,
+            "utm_medium": None,
+            "utm_campaign": None,
+            "ref": None,
+            "fbclid": None,
+            "gclid": None,
+            "page_url": None,
+        })
+        s["event_count"] += 1
+        s["event_types"].add(et)
+        if ts and (s["first_seen"] is None or ts < s["first_seen"]):
+            s["first_seen"] = ts
+        if ts and (s["last_seen"] is None or ts > s["last_seen"]):
+            s["last_seen"] = ts
+        if cn in (1, 2):
+            p = _pct_from_event(et, pct)
+            key = f"class{cn}_max"
+            if p > s[key]:
+                s[key] = p
+        # Latest non-null UTM/ref/page_url wins (events ordered ASC by created_at)
+        if utm_s: s["utm_source"] = utm_s
+        if utm_m: s["utm_medium"] = utm_m
+        if utm_c: s["utm_campaign"] = utm_c
+        if ref:   s["ref"] = ref
+        if fb:    s["fbclid"] = fb
+        if gc:    s["gclid"] = gc
+        if page_url: s["page_url"] = page_url
+
+    # Per-ghost bucket from event-set classifier (same as Ambassador rows)
+    from app.services.temperature import bucket_from_event_set
+    for s in by_email.values():
+        s["bucket_key"] = bucket_from_event_set(s["event_types"])
+        s["webinar_joined"] = "webinar_joined" in s["event_types"]
+
+    return list(by_email.values())
+
+
 def _get_referral_counts():
     """Map ambassador_id → referral count via a single SQL aggregation.
 
@@ -920,7 +1040,7 @@ def _admin_layout_context():
         # render as href="#" (admin_base.html fallback).
         "admin_routes": [
             "overview", "live", "emails", "security", "reach",
-            "leads", "leads_insights",
+            "leads", "leads_insights", "ghosts",
         ],
         "pending_review_count": PendingReferral.query.filter_by(status="pending").count(),
     }
@@ -4376,6 +4496,190 @@ def leads():
         active_section="leads",
         **_admin_layout_context(),
     )
+
+
+@admin_bp.route("/leads/ghosts")
+def leads_ghosts():
+    """List people watching class videos with emails that don't match
+    any Ambassador. They show up here so the admin can outreach to them
+    even though they never registered via /community or /join.
+
+    Filters: q (email substring), temp (bucket), class_1, class_2,
+    webinar, sort. Same UX as /admin/leads (filter chips, pagination,
+    temperature sort).
+    """
+    q          = (request.args.get("q") or "").strip().lower()
+    temp_bucket= (request.args.get("temp") or "").strip().lower()
+    class_1    = request.args.get("class_1") == "1"
+    class_2    = request.args.get("class_2") == "1"
+    webinar    = request.args.get("webinar") == "1"
+    sort_mode  = (request.args.get("sort") or "").strip().lower()
+    page       = max(1, request.args.get("page", default=1, type=int))
+    per_page   = 50
+
+    ghosts = _safe(_compute_ghost_summary, [])
+
+    # ── Apply filters in Python (small dataset relative to Ambassadors) ──
+    if q:
+        ghosts = [g for g in ghosts if q in (g["email"] or "")]
+    if temp_bucket:
+        ghosts = [g for g in ghosts if g["bucket_key"] == temp_bucket]
+    if class_1:
+        ghosts = [g for g in ghosts if g["class1_max"] >= 25]
+    if class_2:
+        ghosts = [g for g in ghosts if g["class2_max"] >= 25]
+    if webinar:
+        ghosts = [g for g in ghosts if g["webinar_joined"]]
+
+    # Stats (computed AFTER filters so cards reflect current view's denominator;
+    # but we want the GLOBAL totals for context too)
+    all_ghosts = _safe(_compute_ghost_summary, [])  # cheap; cached at SQL level
+    stats = {
+        "total":       len(all_ghosts),
+        "class1":      sum(1 for g in all_ghosts if g["class1_max"] >= 25),
+        "class2":      sum(1 for g in all_ghosts if g["class2_max"] >= 25),
+        "webinar":     sum(1 for g in all_ghosts if g["webinar_joined"]),
+    }
+
+    # Temp-bucket distribution (for the clickable cards)
+    PRIORITY = {"customer": 6, "burning": 5, "hot": 4, "warm": 3, "cool": 2, "cold": 1}
+    temp_dist = {k: 0 for k in PRIORITY}
+    for g in all_ghosts:
+        temp_dist[g["bucket_key"]] = temp_dist.get(g["bucket_key"], 0) + 1
+
+    # ── Sort ──
+    if sort_mode == "temp":
+        ghosts.sort(key=lambda g: (-PRIORITY.get(g["bucket_key"], 0),
+                                    -(g["last_seen"].timestamp() if g["last_seen"] else 0)))
+    elif sort_mode == "temp_asc":
+        ghosts.sort(key=lambda g: (PRIORITY.get(g["bucket_key"], 0),
+                                   -(g["last_seen"].timestamp() if g["last_seen"] else 0)))
+    else:
+        # Default: most recent activity first
+        ghosts.sort(key=lambda g: g["last_seen"] or datetime.min.replace(tzinfo=timezone.utc),
+                    reverse=True)
+
+    # ── Pagination ──
+    total_count = len(ghosts)
+    pages = max(1, (total_count + per_page - 1) // per_page)
+    page_ghosts = ghosts[(page - 1) * per_page : page * per_page]
+
+    # ── Active chips ──
+    def _without(key):
+        d = {k: v for k, v in request.args.items() if k != key and k != "page"}
+        return url_for("admin.leads_ghosts", **d)
+
+    active_chips = []
+    if q:           active_chips.append({"label": f"search: {q}", "url": _without("q")})
+    if temp_bucket: active_chips.append({"label": f"temp: {temp_bucket}", "url": _without("temp")})
+    if class_1:     active_chips.append({"label": "watched C1", "url": _without("class_1")})
+    if class_2:     active_chips.append({"label": "watched C2", "url": _without("class_2")})
+    if webinar:     active_chips.append({"label": "joined webinar", "url": _without("webinar")})
+    if sort_mode == "temp":
+        active_chips.append({"label": "sort: 🔥 hottest first", "url": _without("sort")})
+    elif sort_mode == "temp_asc":
+        active_chips.append({"label": "sort: 🧊 coldest first", "url": _without("sort")})
+
+    from app.services.temperature import BUCKET_LABELS, TEMP_BUCKETS
+
+    return render_template(
+        "admin_leads_ghosts.html",
+        page_title="Ghost Leads",
+        active_section="ghosts",
+        rows=page_ghosts,
+        total_count=total_count,
+        stats=stats,
+        temp_dist=temp_dist,
+        temp_buckets=TEMP_BUCKETS,
+        bucket_labels=BUCKET_LABELS,
+        page=page,
+        pages=pages,
+        per_page=per_page,
+        f_q=q, f_temp=temp_bucket, f_class_1=class_1, f_class_2=class_2,
+        f_webinar=webinar, f_sort=sort_mode,
+        active_chips=active_chips,
+        clear_all_url=url_for("admin.leads_ghosts"),
+        now_ts=datetime.now(timezone.utc),
+        **_admin_layout_context(),
+    )
+
+
+@admin_bp.route("/leads/ghosts/convert", methods=["POST"])
+def convert_ghost_to_ambassador():
+    """Promote a ghost (LeadEvent rows with ambassador_id=NULL) into a
+    real Ambassador. Backfills UTMs/ref from the most recent event and
+    relinks all matching LeadEvents to the new ambassador.
+
+    Doesn't send a welcome email — the admin reviews + sends manually
+    via /admin/test-email or /admin/emails after triggering convert.
+    """
+    from app.services.signup import _generate_unique_code
+
+    email = (request.form.get("email") or "").strip().lower()
+    if not email:
+        flash("Email is required.", "error")
+        return redirect(url_for("admin.leads_ghosts"))
+
+    # Idempotent: if an Ambassador with this email already exists, just relink events.
+    existing = Ambassador.query.filter(func.lower(Ambassador.email) == email).first()
+    if existing:
+        relinked = (
+            db.session.query(LeadEvent)
+            .filter(func.lower(LeadEvent.email) == email)
+            .filter(LeadEvent.ambassador_id.is_(None))
+            .update({"ambassador_id": existing.id}, synchronize_session=False)
+        )
+        db.session.commit()
+        flash(f"Already an Ambassador. Relinked {relinked} event(s) to {existing.name or email}.", "info")
+        return redirect(url_for("admin.leads_ghosts"))
+
+    # Pull the most recent LeadEvent for this email to backfill UTMs / ref.
+    last_evt = (
+        LeadEvent.query
+        .filter(func.lower(LeadEvent.email) == email)
+        .order_by(LeadEvent.created_at.desc())
+        .first()
+    )
+
+    # Use the email's local-part as a placeholder name. Admin can edit later.
+    placeholder_name = email.split("@", 1)[0] or "Ghost"
+
+    new_amb = Ambassador(
+        name=placeholder_name[:80],
+        email=email,
+        referral_code=_generate_unique_code(),
+        dashboard_code=_generate_unique_code(),
+        source="video_only",
+        utm_source=getattr(last_evt, "utm_source", None) if last_evt else None,
+        utm_medium=getattr(last_evt, "utm_medium", None) if last_evt else None,
+        utm_campaign=getattr(last_evt, "utm_campaign", None) if last_evt else None,
+        utm_content=getattr(last_evt, "utm_content", None) if last_evt else None,
+        utm_term=getattr(last_evt, "utm_term", None) if last_evt else None,
+        fbclid=getattr(last_evt, "fbclid", None) if last_evt else None,
+        gclid=getattr(last_evt, "gclid", None) if last_evt else None,
+        ttclid=getattr(last_evt, "ttclid", None) if last_evt else None,
+    )
+    try:
+        db.session.add(new_amb)
+        db.session.flush()  # get the id without commit
+        relinked = (
+            db.session.query(LeadEvent)
+            .filter(func.lower(LeadEvent.email) == email)
+            .filter(LeadEvent.ambassador_id.is_(None))
+            .update({"ambassador_id": new_amb.id}, synchronize_session=False)
+        )
+        db.session.commit()
+        flash(
+            f"Converted {email} to Ambassador. Relinked {relinked} event(s). "
+            f"Edit name/phone in their detail page if you want.",
+            "success",
+        )
+    except Exception:
+        db.session.rollback()
+        logger.exception("convert ghost to ambassador failed for %s", email)
+        flash(f"Failed to convert {email}. Check logs.", "error")
+
+    return redirect(url_for("admin.leads_ghosts"))
 
 
 @admin_bp.route("/leads-debug")
