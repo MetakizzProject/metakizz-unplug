@@ -355,7 +355,7 @@
                         <th data-sort-by="unplugs" data-default-dir="desc" class="admin-th-sort text-center px-4 py-3 font-bold sort-active sort-desc">Unplugs <span class="sort-arrow">▼</span></th>
                         <th data-sort-by="risk" data-default-dir="desc" class="admin-th-sort text-center px-4 py-3 font-bold">Risk <span class="sort-arrow"></span></th>
                         <th data-sort-by="visit" data-default-dir="desc" class="admin-th-sort text-center px-4 py-3 font-bold hidden md:table-cell">Last visit <span class="sort-arrow"></span></th>
-                        <th class="text-center px-4 py-3 font-bold hidden sm:table-cell">IG</th>
+                        <th data-sort-by="joined" data-default-dir="desc" class="admin-th-sort text-center px-4 py-3 font-bold hidden sm:table-cell">Joined <span class="sort-arrow"></span></th>
                         <th class="text-left px-4 py-3 font-bold">Actions</th>
                     </tr>
                 </thead>
@@ -367,7 +367,8 @@
                         data-source="{{ amb.source }}"
                         data-unplugs="{{ amb.referral_count }}"
                         data-risk="{{ {'clean': 0, 'watch': 1, 'high': 2}.get(risk.level, 0) }}"
-                        data-visit="{{ amb.last_dashboard_visit_at.timestamp()|int if amb.last_dashboard_visit_at else 0 }}">
+                        data-visit="{{ amb.last_dashboard_visit_at.timestamp()|int if amb.last_dashboard_visit_at else 0 }}"
+                        data-joined="{{ amb.created_at.timestamp()|int if amb.created_at else 0 }}">
                         <td class="px-4 py-3 text-gray-600 font-orbitron font-black text-xs admin-row-num">{{ '%02d' % loop.index }}</td>
                         <td class="px-4 py-3 font-semibold text-white">
                             {{ amb.name }}
@@ -411,9 +412,18 @@
                                 <span class="text-gray-700">never</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3 text-center hidden sm:table-cell">
-                            {% if amb.shared_on_instagram %}
-                            <span class="text-brand-400 text-base">✓</span>
+                        <td class="px-4 py-3 text-center hidden sm:table-cell text-xs font-mono-term">
+                            {% if amb.created_at %}
+                              {%- set delta = (now_ts - (amb.created_at if amb.created_at.tzinfo else amb.created_at.replace(tzinfo=now_ts.tzinfo))).total_seconds() -%}
+                              {%- if delta < 3600 -%}
+                                <span class="text-brand-400" title="{{ amb.created_at.strftime('%Y-%m-%d %H:%M UTC') }}">{{ (delta // 60)|int }}m ago</span>
+                              {%- elif delta < 86400 -%}
+                                <span class="text-brand-400" title="{{ amb.created_at.strftime('%Y-%m-%d %H:%M UTC') }}">{{ (delta // 3600)|int }}h ago</span>
+                              {%- elif delta < 604800 -%}
+                                <span class="text-gray-300" title="{{ amb.created_at.strftime('%Y-%m-%d %H:%M UTC') }}">{{ (delta // 86400)|int }}d ago</span>
+                              {%- else -%}
+                                <span class="text-gray-500" title="{{ amb.created_at.strftime('%Y-%m-%d %H:%M UTC') }}">{{ amb.created_at.strftime('%b %d') }}</span>
+                              {%- endif -%}
                             {% else %}
                             <span class="text-gray-700">—</span>
                             {% endif %}
