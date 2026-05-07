@@ -565,7 +565,7 @@ def send_final_signal_email(ambassador, app_url):
     )
 
     first = ambassador.name.split()[0] if ambassador.name else "Hey"
-    subject = f"{first}, T-minus 3 hours — the live is today"
+    subject = f"{first}, T-minus 2 hours — the live is today"
 
     return _send(
         ambassador.email,
