@@ -62,6 +62,7 @@ class Ambassador(db.Model):
     class3_email_sent_at = db.Column(db.DateTime, nullable=True)
     webinar_reminder_sent_at = db.Column(db.DateTime, nullable=True)
     final_signal_sent_at = db.Column(db.DateTime, nullable=True)
+    live_imminent_sent_at = db.Column(db.DateTime, nullable=True)
 
     # Engagement tracking — bumped on every /dashboard/<code> hit.
     last_dashboard_visit_at = db.Column(db.DateTime, nullable=True)

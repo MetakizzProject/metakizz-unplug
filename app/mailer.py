@@ -541,6 +541,42 @@ def send_webinar_reminder_email(ambassador, app_url):
     )
 
 
+def send_live_imminent_email(ambassador, app_url):
+    """T-30min reminder: minimal layout, single Zoom CTA, urgent red banner.
+
+    Hardcoded fallback Zoom URL ships in code so a missing
+    WEBINAR_JOIN_URL env var can't break a time-critical send.
+    Set WEBINAR_JOIN_URL in Render to override (also picked up by
+    send_webinar_reminder_email so both reminders stay in sync).
+    """
+    if is_unsubscribed(ambassador):
+        return False
+
+    join_url = os.getenv("WEBINAR_JOIN_URL", "").strip() or (
+        "https://us06web.zoom.us/j/82504511534"
+        "?pwd=QRvMY8y5htQHjbn5pDVaTFVeYe8K6E.1"
+    )
+
+    html = render_template(
+        "emails/live_imminent.html",
+        first_name=_first_name(ambassador),
+        join_url=join_url,
+        unsubscribe_url=_unsubscribe_url(ambassador, app_url),
+        app_url=app_url.rstrip("/"),
+    )
+
+    first = ambassador.name.split()[0] if ambassador.name else "Hey"
+    subject = f"{first}, we go live in 30 minutes"
+
+    return _send(
+        ambassador.email,
+        subject,
+        html,
+        template_key="live_imminent",
+        ambassador=ambassador,
+    )
+
+
 def send_final_signal_email(ambassador, app_url):
     """T-minus reminder fired ~3h before the live: Class 2 closing + live tonight.
 

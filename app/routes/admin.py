@@ -27,6 +27,7 @@ from app.mailer import (
     send_class2_ready_email,
     send_webinar_reminder_email,
     send_final_signal_email,
+    send_live_imminent_email,
     _send as _mailer_send,  # low-level Resend POST, used by /admin/broadcast
     # legacy:
     send_first_referral_email,
@@ -1554,6 +1555,7 @@ def emails():
         ("class2_ready",     "class2_email_sent_at"),
         ("webinar_reminder", "webinar_reminder_sent_at"),
         ("final_signal",     "final_signal_sent_at"),
+        ("live_imminent",    "live_imminent_sent_at"),
     ]
 
     # Single union query: every (email, event_type) pair that could trigger
@@ -1867,6 +1869,15 @@ _SEGMENT_TEMPLATES = {
         "flag": "final_signal_sent_at",
         "label": "Final signal (T-3h · class 2 closing + live tonight)",
         "min_age_days": 0,
+    },
+    "live_imminent": {
+        "fn": send_live_imminent_email,
+        "default_segment": "all",
+        "flag": "live_imminent_sent_at",
+        "label": "Live imminent (T-30min · join Zoom now)",
+        "min_age_days": 0,
+        # Skip those who've already joined the live or clicked the link
+        "exclude_if_event_in": ["webinar_joined", "webinar_link_clicked"],
     },
 }
 
@@ -2631,6 +2642,10 @@ def test_email():
             elif email_type == "final_signal":
                 fake.referral_count = 0
                 success = send_final_signal_email(fake, app_url)
+
+            elif email_type == "live_imminent":
+                fake.referral_count = 0
+                success = send_live_imminent_email(fake, app_url)
 
             else:
                 flash(f"Unknown email type: {email_type}", "error")
