@@ -5097,6 +5097,132 @@ def _eligible_reservations(state):
     return q.order_by(Reservation.form_completed_at.desc()).all()
 
 
+# ─── MKOT 3.0 pricing matrix (used to project revenue from form choices) ───
+# program_choice × modality_choice → full ticket price (EUR).
+# When either field is 'not_sure', we use the platform average estimate.
+MKOT_PRICING = {
+    ("dancers",     "solo"): 997,
+    ("dancers",     "duo"):  1247,
+    ("instructors", "solo"): 1347,
+    ("instructors", "duo"):  1797,
+}
+MKOT_AVG_ESTIMATE = 1300  # for any "not_sure" combination
+MKOT_DEPOSIT_EUR = 100    # what they already paid
+
+
+def _projected_price_eur(reservation):
+    """Best-effort revenue projection from a single Reservation row.
+
+    Returns None if no form has been completed (we don't know yet).
+    Any 'not_sure' on either axis falls back to MKOT_AVG_ESTIMATE.
+    """
+    if not reservation.form_completed_at:
+        return None
+    program = (reservation.program_choice or "").lower()
+    modality = (reservation.modality_choice or "").lower()
+    if program == "not_sure" or modality == "not_sure":
+        return MKOT_AVG_ESTIMATE
+    return MKOT_PRICING.get((program, modality))
+
+
+def _revenue_breakdown(reservations):
+    """Aggregate revenue stats across a list of Reservation rows.
+
+    Returns a dict ready to render: per-bucket counts + per-bucket revenue,
+    grand totals (estimated revenue, deposits collected, outstanding).
+    """
+    buckets = [
+        ("dancers_solo",     "Dancers · Solo",        997,  "#2EDB99"),
+        ("dancers_duo",      "Dancers · Duo",         1247, "#27ba82"),
+        ("instructors_solo", "Instructors · Solo",    1347, "#c026d3"),
+        ("instructors_duo",  "Instructors · Duo",     1797, "#a21caf"),
+        ("not_sure",         "Not sure (avg)",        1300, "#FFC857"),
+        ("pending",          "Form pending",          0,    "#6B7280"),
+    ]
+    counts = {b[0]: 0 for b in buckets}
+    revenue = {b[0]: 0 for b in buckets}
+
+    paid_total = 0
+    for r in reservations:
+        if r.paid_at:
+            paid_total += 1
+        if not r.form_completed_at:
+            counts["pending"] += 1
+            continue
+        prog = (r.program_choice or "").lower()
+        mod = (r.modality_choice or "").lower()
+        if prog == "not_sure" or mod == "not_sure":
+            key = "not_sure"
+            price = MKOT_AVG_ESTIMATE
+        elif prog == "dancers" and mod == "solo":
+            key, price = "dancers_solo", 997
+        elif prog == "dancers" and mod == "duo":
+            key, price = "dancers_duo", 1247
+        elif prog == "instructors" and mod == "solo":
+            key, price = "instructors_solo", 1347
+        elif prog == "instructors" and mod == "duo":
+            key, price = "instructors_duo", 1797
+        else:
+            # Unknown combo — should never hit if validation works
+            continue
+        counts[key] += 1
+        revenue[key] += price
+
+    estimated_total = sum(revenue.values())
+    deposits_in = paid_total * MKOT_DEPOSIT_EUR
+    outstanding = max(0, estimated_total - deposits_in)
+    completed = sum(counts[k] for k in counts if k != "pending")
+    avg_per_buyer = (estimated_total / completed) if completed > 0 else 0
+
+    return {
+        "buckets": buckets,
+        "counts": counts,
+        "revenue": revenue,
+        "estimated_total": estimated_total,
+        "deposits_in": deposits_in,
+        "outstanding": outstanding,
+        "completed": completed,
+        "paid_total": paid_total,
+        "avg_per_buyer": avg_per_buyer,
+    }
+
+
+@admin_bp.route("/email-preview/reservation-confirmed")
+def preview_reservation_email():
+    """Renders the reservation confirmation email in the browser, with sample
+    data, so we can review the design without sending a real send."""
+    sample_first_name = request.args.get("name", "Maria")
+    sample_email = request.args.get("email", "maria@example.com")
+    sample_amount = request.args.get("amount", "100")
+    return render_template(
+        "emails/reservation_confirmed.html",
+        first_name=sample_first_name,
+        email=sample_email,
+        amount_eur=sample_amount,
+    )
+
+
+@admin_bp.route("/reservations/<int:reservation_id>/delete", methods=["POST"])
+def delete_reservation(reservation_id):
+    """Hard-delete a Reservation. Used to clean up test data.
+    If the deleted row was the raffle winner, also clears the winner."""
+    res = Reservation.query.get(reservation_id)
+    if res is None:
+        flash("Reservation not found.", "error")
+        return redirect(url_for("admin.reservations"))
+
+    state = _get_raffle_state()
+    if state.winner_reservation_id == res.id:
+        state.winner_reservation_id = None
+        state.spun_at = None
+
+    label = f"#{res.id} {res.email}"
+    db.session.delete(res)
+    db.session.commit()
+    flash(f"Deleted reservation {label}.", "success")
+    return redirect(url_for("admin.reservations"))
+
+
 @admin_bp.route("/reservations")
 def reservations():
     """Admin control room for the MKOT 3.0 live event.
@@ -5118,6 +5244,7 @@ def reservations():
         Reservation.form_completed_at.isnot(None),
     ).count()
     pending_form = paid_total - completed_total
+    revenue = _revenue_breakdown(all_rows)
     return render_template(
         "admin_reservations.html",
         page_title="Reservas",
@@ -5129,6 +5256,7 @@ def reservations():
         pending_form=pending_form,
         state=state,
         winner=state.winner if state.winner_reservation_id else None,
+        revenue=revenue,
         **_admin_layout_context(),
     )
 
@@ -5144,6 +5272,7 @@ def reservations_json():
         .all()
     )
     eligible = _eligible_reservations(state)
+    rev = _revenue_breakdown(rows)
     return jsonify({
         "window_closed_at": state.window_closed_at.isoformat() if state.window_closed_at else None,
         "winner_id": state.winner_reservation_id,
@@ -5154,6 +5283,15 @@ def reservations_json():
         "eligible_count": len(eligible),
         "paid_total": sum(1 for r in rows if r.paid_at),
         "completed_total": sum(1 for r in rows if r.paid_at and r.form_completed_at),
+        "revenue": {
+            "estimated_total": rev["estimated_total"],
+            "deposits_in":     rev["deposits_in"],
+            "outstanding":     rev["outstanding"],
+            "completed":       rev["completed"],
+            "avg_per_buyer":   round(rev["avg_per_buyer"], 0),
+            "counts":          rev["counts"],
+            "revenue":         rev["revenue"],
+        },
         "rows": [
             {
                 "id": r.id,
@@ -5170,6 +5308,8 @@ def reservations_json():
                 "amount_cents": r.amount_cents or 0,
                 "stripe_session_id": r.stripe_session_id,
                 "ambassador_id": r.ambassador_id,
+                # Phone (E.164) from the linked Ambassador, if any. Used to open WhatsApp.
+                "phone": (r.ambassador.phone_number if (r.ambassador and r.ambassador.phone_number) else ""),
             }
             for r in rows
         ],

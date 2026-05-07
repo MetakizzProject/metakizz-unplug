@@ -20,6 +20,10 @@
          class="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
         ✓ Preview thanks ↗
       </a>
+      <a href="{{ url_for('admin.preview_reservation_email') }}" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
+        ✉ Preview email ↗
+      </a>
       <a href="{{ url_for('admin.raffle') }}" target="_blank" rel="noopener"
          class="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-400 hover:bg-brand-300 text-black font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
         🎰 Open raffle stage ↗
@@ -44,6 +48,78 @@
     <div class="bg-gray-900/60 border border-brand-800/40 rounded-xl px-4 py-3">
       <p class="text-[10px] uppercase tracking-widest text-brand-400 font-mono mb-1">Elegibles sorteo</p>
       <p id="kpi-eligible" class="font-display font-bold text-2xl text-brand-400">{{ eligible_count }}</p>
+    </div>
+  </div>
+
+  <!-- Revenue dashboard -->
+  <div class="bg-gradient-to-br from-brand-950/30 via-black/60 to-purple-950/20 border border-brand-700/30 rounded-2xl p-5 mb-5">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <p class="text-[10px] uppercase tracking-[0.3em] text-brand-400 font-mono mb-1">// Projected revenue</p>
+        <p class="text-xs text-gray-500">Based on form choices · "Not sure" estimated at €{{ MKOT_AVG_ESTIMATE if MKOT_AVG_ESTIMATE is defined else 1300 }}</p>
+      </div>
+    </div>
+
+    <!-- Big numbers -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+      <div>
+        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Estimated total</p>
+        <p id="kpi-rev-total" class="font-display font-bold text-3xl md:text-4xl text-brand-400">
+          €{{ "{:,}".format(revenue.estimated_total).replace(',', '.') }}
+        </p>
+        <p class="text-xs text-gray-500 mt-1">
+          <span id="kpi-rev-completed">{{ revenue.completed }}</span> reservations counted
+        </p>
+      </div>
+      <div>
+        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Deposits collected</p>
+        <p id="kpi-rev-deposits" class="font-display font-bold text-2xl md:text-3xl text-white">
+          €{{ "{:,}".format(revenue.deposits_in).replace(',', '.') }}
+        </p>
+        <p class="text-xs text-gray-500 mt-1">{{ revenue.paid_total }} × €100</p>
+      </div>
+      <div>
+        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Outstanding</p>
+        <p id="kpi-rev-outstanding" class="font-display font-bold text-2xl md:text-3xl text-yellow-300">
+          €{{ "{:,}".format(revenue.outstanding).replace(',', '.') }}
+        </p>
+        <p class="text-xs text-gray-500 mt-1">avg <span id="kpi-rev-avg">€{{ "{:,.0f}".format(revenue.avg_per_buyer).replace(',', '.') }}</span> per buyer</p>
+      </div>
+    </div>
+
+    <!-- Stacked bar by bucket -->
+    <div>
+      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-2">Revenue breakdown</p>
+      <div id="rev-stacked-bar" class="flex h-6 rounded-full overflow-hidden bg-gray-900 border border-gray-800">
+        {% set total = revenue.estimated_total or 1 %}
+        {% for key, label, price, color in revenue.buckets %}
+          {% if key != 'pending' and revenue.revenue[key] > 0 %}
+          <div style="width: {{ (revenue.revenue[key] / total * 100)|round(2) }}%; background: {{ color }};"
+               title="{{ label }} · €{{ revenue.revenue[key] }} ({{ revenue.counts[key] }} buyers)"
+               class="h-full"></div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <!-- Legend -->
+      <div id="rev-legend" class="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 mt-3 text-xs">
+        {% for key, label, price, color in revenue.buckets %}
+          {% if key != 'pending' %}
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" style="background: {{ color }};"></span>
+            <span class="text-gray-300 flex-1">{{ label }}</span>
+            <span class="text-gray-500 font-mono">{{ revenue.counts[key] }} · €{{ "{:,}".format(revenue.revenue[key]).replace(',', '.') }}</span>
+          </div>
+          {% endif %}
+        {% endfor %}
+        {% if revenue.counts['pending'] > 0 %}
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" style="background: #6B7280;"></span>
+          <span class="text-gray-400 flex-1 italic">Form pending (no estimate yet)</span>
+          <span class="text-gray-500 font-mono">{{ revenue.counts['pending'] }}</span>
+        </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 
@@ -98,19 +174,30 @@
   </div>
 
   <!-- Filters -->
-  <div class="flex items-center gap-2 mb-3">
-    <button data-filter="all" class="filter-btn active text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-      Todas
-    </button>
-    <button data-filter="eligible" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-      Elegibles sorteo
-    </button>
-    <button data-filter="pending" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-      Pagos pendientes form
-    </button>
-    <button data-filter="doubts" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-      Con dudas (call)
-    </button>
+  <div class="space-y-2 mb-3">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Status:</span>
+      <button data-filter="all" class="filter-btn active text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+        All
+      </button>
+      <button data-filter="eligible" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+        Eligible (raffle)
+      </button>
+      <button data-filter="pending" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+        Form pending
+      </button>
+      <button data-filter="doubts" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+        Has doubts
+      </button>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Program:</span>
+      <button data-filter="dancers"     class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Dancers</button>
+      <button data-filter="instructors" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Instructors</button>
+      <button data-filter="solo"        class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Solo</button>
+      <button data-filter="couple"      class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Couple</button>
+      <button data-filter="notsure"     class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Not sure</button>
+    </div>
   </div>
 
   <!-- Reservations table -->
@@ -129,6 +216,7 @@
             <th class="text-left px-4 py-3">Feeling</th>
             <th class="text-left px-4 py-3">Notes</th>
             <th class="text-left px-4 py-3">Stripe</th>
+            <th class="text-right px-4 py-3"></th>
           </tr>
         </thead>
         <tbody id="rsv-body" class="divide-y divide-gray-800/60">
@@ -137,6 +225,8 @@
               data-eligible="{{ '1' if (r.paid_at and r.form_completed_at and (not state.window_closed_at or r.form_completed_at <= state.window_closed_at)) else '0' }}"
               data-pending="{{ '1' if (r.paid_at and not r.form_completed_at) else '0' }}"
               data-doubts="{{ '1' if r.clarity == 'doubts' else '0' }}"
+              data-program="{{ r.program_choice or '' }}"
+              data-modality="{{ r.modality_choice or '' }}"
               class="hover:bg-gray-800/30">
             <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">
               {% if r.paid_at %}{{ r.paid_at.strftime('%H:%M:%S') }}{% else %}—{% endif %}
@@ -182,9 +272,32 @@
             <td class="px-4 py-3 text-[10px] text-gray-600 font-mono">
               {{ (r.stripe_session_id or '')[:14] }}…
             </td>
+            <td class="px-4 py-3 text-right whitespace-nowrap">
+              {% if r.ambassador and r.ambassador.phone_number %}
+                {% set wa_msg = 'Hi ' ~ (r.name or '') ~ '! Following up on your MKOT 3.0 reservation.' %}
+                <a href="https://wa.me/{{ r.ambassador.phone_number|replace('+','')|replace(' ','') }}?text={{ wa_msg|urlencode }}"
+                   target="_blank" rel="noopener"
+                   class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white transition mr-1"
+                   title="WhatsApp {{ r.ambassador.phone_number }}">
+                  💬
+                </a>
+              {% else %}
+                <span class="inline-flex items-center justify-center w-7 h-7 text-gray-700 text-xs cursor-not-allowed mr-1"
+                      title="No phone on file (no ambassador match or missing number)">·</span>
+              {% endif %}
+              <form method="POST" action="{{ url_for('admin.delete_reservation', reservation_id=r.id) }}"
+                    style="display:inline;"
+                    onsubmit="return confirm('Delete reservation for {{ r.email }}? This cannot be undone.');">
+                <button type="submit"
+                        class="text-gray-600 hover:text-red-400 text-xs font-mono uppercase tracking-wider transition px-2 py-1 rounded border border-transparent hover:border-red-700/50"
+                        title="Delete reservation">
+                  ✕ del
+                </button>
+              </form>
+            </td>
           </tr>
           {% else %}
-          <tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
+          <tr><td colspan="11" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -246,10 +359,16 @@
   }
 
   function rowMatchesFilter(row) {
-    if (currentFilter === 'all')      return true;
-    if (currentFilter === 'eligible') return row.dataset.eligible === '1';
-    if (currentFilter === 'pending')  return row.dataset.pending === '1';
-    if (currentFilter === 'doubts')   return row.dataset.doubts === '1';
+    const f = currentFilter;
+    if (f === 'all')         return true;
+    if (f === 'eligible')    return row.dataset.eligible === '1';
+    if (f === 'pending')     return row.dataset.pending === '1';
+    if (f === 'doubts')      return row.dataset.doubts === '1';
+    if (f === 'dancers')     return row.dataset.program === 'dancers';
+    if (f === 'instructors') return row.dataset.program === 'instructors';
+    if (f === 'solo')        return row.dataset.modality === 'solo';
+    if (f === 'couple')      return row.dataset.modality === 'duo';
+    if (f === 'notsure')     return row.dataset.program === 'not_sure' || row.dataset.modality === 'not_sure';
     return true;
   }
 
@@ -295,6 +414,8 @@
           + 'data-eligible="' + (isEligible ? '1' : '0') + '" '
           + 'data-pending="' + (isPending ? '1' : '0') + '" '
           + 'data-doubts="' + (isDoubts ? '1' : '0') + '" '
+          + 'data-program="' + escapeHtml(r.program_choice || '') + '" '
+          + 'data-modality="' + escapeHtml(r.modality_choice || '') + '" '
           + 'class="hover:bg-gray-800/30">'
           + '<td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">' + (r.paid_at ? fmtTime(r.paid_at) : '—') + '</td>'
           + '<td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">' + (r.form_completed_at ? fmtTime(r.form_completed_at) : '<span class="text-yellow-500">—</span>') + '</td>'
@@ -306,9 +427,30 @@
           + '<td class="px-4 py-3">' + clarityBadge(r.clarity) + '</td>'
           + '<td class="px-4 py-3 text-xs text-gray-400 max-w-[260px] truncate" title="' + escapeHtml(r.notes) + '">' + (r.notes ? escapeHtml(r.notes) : '—') + '</td>'
           + '<td class="px-4 py-3 text-[10px] text-gray-600 font-mono">' + escapeHtml((r.stripe_session_id || '').substring(0, 14)) + '…</td>'
+          + '<td class="px-4 py-3 text-right whitespace-nowrap">'
+            + (r.phone
+                ? '<a href="https://wa.me/' + encodeURIComponent(r.phone.replace(/^\+/, '').replace(/\s/g, '')) + '?text=' + encodeURIComponent('Hi ' + (r.name || '') + '! Following up on your MKOT 3.0 reservation.') + '" target="_blank" rel="noopener" class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white transition mr-1" title="WhatsApp ' + escapeHtml(r.phone) + '">💬</a>'
+                : '<span class="inline-flex items-center justify-center w-7 h-7 text-gray-700 text-xs cursor-not-allowed mr-1" title="No phone on file">·</span>'
+              )
+            + '<form method="POST" action="/admin/reservations/' + r.id + '/delete" style="display:inline;" '
+              + 'onsubmit="return confirm(\'Delete reservation for ' + escapeHtml(r.email).replace(/\\u0027/g, "\\\\u0027") + '? This cannot be undone.\');">'
+              + '<button type="submit" class="text-gray-600 hover:text-red-400 text-xs font-mono uppercase tracking-wider transition px-2 py-1 rounded border border-transparent hover:border-red-700/50" title="Delete reservation">✕ del</button>'
+            + '</form>'
+          + '</td>'
           + '</tr>';
       }).join('');
-      tbody.innerHTML = html || '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>';
+      tbody.innerHTML = html || '<tr><td colspan="11" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>';
+
+      // Update revenue KPIs live
+      if (data.revenue) {
+        const fmt = function(n) { return '€' + (n || 0).toLocaleString('es-ES'); };
+        const $ = function(id) { return document.getElementById(id); };
+        if ($('kpi-rev-total'))      $('kpi-rev-total').textContent      = fmt(data.revenue.estimated_total);
+        if ($('kpi-rev-deposits'))   $('kpi-rev-deposits').textContent   = fmt(data.revenue.deposits_in);
+        if ($('kpi-rev-outstanding'))$('kpi-rev-outstanding').textContent= fmt(data.revenue.outstanding);
+        if ($('kpi-rev-completed'))  $('kpi-rev-completed').textContent  = data.revenue.completed;
+        if ($('kpi-rev-avg'))        $('kpi-rev-avg').textContent        = fmt(data.revenue.avg_per_buyer);
+      }
       applyFilter();
     } catch (e) {
       console.warn('poll failed', e);
