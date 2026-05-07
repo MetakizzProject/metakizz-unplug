@@ -1607,6 +1607,10 @@ def emails():
     import os as _os
     cron_emails_disabled = _os.getenv("DISABLE_CRON_EMAILS", "").strip().lower() in ("1", "true", "yes", "on")
 
+    # Zoom API credentials presence — controls the "Pull via API" button state.
+    from app.services import zoom as _zoom_svc
+    zoom_credentials_present = _zoom_svc.credentials_present()
+
     return render_template(
         "admin_emails.html",
         page_title="Emails",
@@ -1623,6 +1627,7 @@ def emails():
         push_min_age_days=push_min_age,
         manual_email_eligibles=manual_email_eligibles,
         cron_emails_disabled=cron_emails_disabled,
+        zoom_credentials_present=zoom_credentials_present,
         now_ts=datetime.now(timezone.utc),
         **_admin_layout_context(),
     )
@@ -5469,3 +5474,97 @@ def raffle_reset():
     state.closed_by_admin = None
     db.session.commit()
     return redirect(url_for("admin.raffle"))
+
+
+# ─── Zoom webinar attendance import ──────────────────────────────────────
+# Two paths to the same goal: insert one LeadEvent(event_type="webinar_joined")
+# per participant email so future reminder emails (live_imminent,
+# webinar_reminder) correctly skip those who already attended via
+# `exclude_if_event_in`.
+#
+#   1. Paste-CSV path: admin pastes the Zoom export (CSV or any text — we
+#      regex-extract emails). Works tonight without a Zoom app.
+#   2. API path: pulls participants directly from the Zoom Reports API
+#      using Server-to-Server OAuth credentials (ZOOM_* env vars).
+#      One-click, idempotent.
+
+@admin_bp.route("/zoom/import-participants", methods=["POST"])
+def import_zoom_participants():
+    import re
+    from app.services import zoom as zoom_svc
+
+    raw = (request.form.get("emails", "") or "").strip()
+    meeting_id = (request.form.get("meeting_id", "") or "").strip()
+
+    emails = []
+    source_label = ""
+
+    if meeting_id:
+        try:
+            participants = zoom_svc.fetch_meeting_participants(meeting_id)
+        except Exception as e:
+            logger.exception("zoom api fetch failed")
+            flash(f"Zoom API error: {e}", "error")
+            return redirect(url_for("admin.emails"))
+        for p in participants:
+            em = (p.get("user_email") or "").strip().lower()
+            if em and "@" in em:
+                emails.append(em)
+        source_label = f"API (meeting {meeting_id})"
+    elif raw:
+        # Tolerant parser: extract anything that looks like an email from the
+        # pasted blob — works whether they paste raw CSV, a list of lines, etc.
+        pattern = re.compile(r"[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}")
+        emails = pattern.findall(raw.lower())
+        source_label = "pasted list"
+    else:
+        flash("Either paste participant emails or enter the meeting ID.", "error")
+        return redirect(url_for("admin.emails"))
+
+    emails = list({e for e in emails if e})  # dedup
+    if not emails:
+        flash("No valid emails found in the input.", "error")
+        return redirect(url_for("admin.emails"))
+
+    now = datetime.now(timezone.utc)
+
+    # Skip emails that already have a webinar_joined event (idempotent re-imports).
+    existing = {
+        em.lower() for (em,) in
+        db.session.query(LeadEvent.email)
+        .filter(LeadEvent.event_type == "webinar_joined")
+        .all() if em
+    }
+
+    # Build email → ambassador_id lookup once.
+    amb_lookup = {
+        (em or "").lower(): aid for (aid, em) in
+        db.session.query(Ambassador.id, Ambassador.email).all()
+        if em
+    }
+
+    new_events = 0
+    matched = 0
+    for em in emails:
+        if em in existing:
+            continue
+        amb_id = amb_lookup.get(em)
+        if amb_id:
+            matched += 1
+        db.session.add(LeadEvent(
+            ambassador_id=amb_id,
+            email=em,
+            event_type="webinar_joined",
+            created_at=now,
+        ))
+        new_events += 1
+    db.session.commit()
+
+    skipped = len(emails) - new_events
+    flash(
+        f"Imported {new_events} new webinar_joined events from {source_label}. "
+        f"{matched} matched to ambassadors, {new_events - matched} ghost leads. "
+        f"{skipped} already had the event (skipped).",
+        "success",
+    )
+    return redirect(url_for("admin.emails"))

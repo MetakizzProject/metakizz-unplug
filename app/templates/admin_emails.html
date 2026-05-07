@@ -128,6 +128,74 @@
     </div>
 
 
+    {# ──────────────────────────────────────────────────────────
+       ZOOM ATTENDANCE IMPORT
+       After the live, mark every participant email as a `webinar_joined`
+       LeadEvent so the next reminder send (live_imminent / webinar_reminder)
+       skips them automatically via `exclude_if_event_in`.
+
+       Two paths:
+         • API: pulls participants directly using ZOOM_* env vars (one click).
+         • Paste: tolerant parser — accepts CSV exports, line-separated emails,
+           or any text containing emails. Regex-extracts addresses.
+       ────────────────────────────────────────────────────────── #}
+    <div class="mb-7 p-5 rounded-xl border border-blue-400/40 bg-black/60" style="box-shadow: 0 0 22px rgba(96,165,250,0.10);">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div>
+                <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-blue-400">▌ Post-live · attendance import</p>
+                <h2 class="text-lg font-display font-bold text-white mt-1">Mark Zoom participants as <code class="text-blue-300">webinar_joined</code></h2>
+                <p class="text-xs text-gray-400 mt-1">Insert one LeadEvent per attendee email so the next reminder skips them. Idempotent — re-running adds nothing for already-imported emails.</p>
+            </div>
+            {% if zoom_credentials_present %}
+            <span class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-300 bg-brand-900/20 border border-brand-500/30 px-3 py-1.5 rounded">▌ Zoom API: connected</span>
+            {% else %}
+            <span class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-yellow-300 bg-yellow-900/30 border border-yellow-500/40 px-3 py-1.5 rounded">▌ Zoom API: env vars missing</span>
+            {% endif %}
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+            {# A · API path #}
+            <form method="POST" action="{{ url_for('admin.import_zoom_participants') }}"
+                  class="border border-gray-700 rounded-lg p-4 bg-gray-900/40 flex flex-col gap-3"
+                  onsubmit="return confirm('Pull participants from Zoom API for this meeting?');">
+                <div>
+                    <p class="font-mono-term text-[9px] tracking-[0.18em] uppercase text-blue-300">A · zoom api</p>
+                    <h3 class="text-sm font-bold text-white mt-1">Pull from Zoom Reports</h3>
+                    <p class="text-[11px] text-gray-500 mt-1">Use after the meeting ends (Zoom needs ~3-5 min to compile the report).</p>
+                </div>
+                <input type="text" name="meeting_id" value="82504511534" placeholder="Meeting ID (digits only)"
+                       class="bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white font-mono"
+                       {% if not zoom_credentials_present %}disabled{% endif %}>
+                <button type="submit"
+                        class="font-mono-term text-[10px] tracking-[0.2em] uppercase bg-blue-500 hover:bg-blue-400 text-white px-3 py-2 rounded font-bold transition disabled:bg-gray-700 disabled:text-gray-500"
+                        {% if not zoom_credentials_present %}disabled title="Set ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET in Render"{% endif %}>
+                  ↓ Import via API
+                </button>
+            </form>
+
+            {# B · Paste path #}
+            <form method="POST" action="{{ url_for('admin.import_zoom_participants') }}"
+                  class="border border-gray-700 rounded-lg p-4 bg-gray-900/40 flex flex-col gap-3">
+                <div>
+                    <p class="font-mono-term text-[9px] tracking-[0.18em] uppercase text-blue-300">B · paste participants</p>
+                    <h3 class="text-sm font-bold text-white mt-1">Paste CSV or email list</h3>
+                    <p class="text-[11px] text-gray-500 mt-1">Tolerant parser — extracts every email it finds. Paste the Zoom CSV export raw.</p>
+                </div>
+                <textarea name="emails" rows="4" placeholder="alice@example.com&#10;bob@example.com&#10;or paste the full Zoom CSV export"
+                          class="bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white font-mono"></textarea>
+                <button type="submit"
+                        class="font-mono-term text-[10px] tracking-[0.2em] uppercase bg-blue-500 hover:bg-blue-400 text-white px-3 py-2 rounded font-bold transition">
+                  ↓ Import pasted list
+                </button>
+            </form>
+        </div>
+
+        <p class="text-[11px] text-gray-500 mt-3">
+            ▌ Manual export: <code class="text-blue-300">zoom.us → Reports → Usage → click meeting → Export Participants CSV</code>, then paste it into option B above.
+        </p>
+    </div>
+
+
     {# ── HEALTH HEADER ── #}
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
         <div class="email-health-stat">
