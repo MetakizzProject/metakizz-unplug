@@ -13,16 +13,33 @@
        3. winner       → hero hides, golden ticket DROPS into center,
                           winner name reveals, confetti
      ───────────────────────────────────────────────────────────── */
-  html, body { background: #000 !important; }
+  html, body { background: #000 !important; margin: 0; }
+  /* Hide any global chrome from base.html so the 16:9 box has the screen to itself. */
+  body > nav, body > header, body > footer { display: none !important; }
 
+  /* ─── 16:9 STAGE ──────────────────────────────────────────────
+     The whole show is letterboxed inside a fixed 16:9 frame. Whichever
+     viewport axis is the bottleneck constrains us; the other axis gets
+     black bars. Everything that used to be `position: fixed` (toasts,
+     reset, confetti) is `position: absolute` against this frame so it
+     can never escape the broadcast crop. */
   .stage {
     background:
       radial-gradient(ellipse at top, rgba(46,219,153,0.10), transparent 65%),
       radial-gradient(ellipse at bottom, rgba(255,200,87,0.06), transparent 60%),
       #000000;
-    min-height: 100vh;
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    width: min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16));
+    aspect-ratio: 16 / 9;
     overflow: hidden;
-    position: relative;
+    /* Make this the query container so cqw/cqh inside scale with the 16:9
+       frame, not the viewport. That way the title, reel, toasts and buttons
+       always fit the broadcast crop regardless of window shape. */
+    container-type: size;
+    container-name: stage;
   }
   .stage::before {
     content: "";
@@ -37,8 +54,8 @@
 
   /* Reusable responsive reel height — used in keyframe pixel math too. */
   :root {
-    --reel-h: clamp(110px, 18vh, 180px);
-    --hero-pad: clamp(16px, 3vw, 48px);
+    --reel-h: clamp(70px, 13cqh, 130px);
+    --hero-pad: clamp(12px, 2.4cqw, 36px);
   }
 
   /* ── HERO TITLE (visible while window open / before winner) ── */
@@ -49,8 +66,8 @@
   .hero-title {
     font-family: 'Unbounded', system-ui, sans-serif;
     font-weight: 800;
-    font-size: clamp(28px, 7vw, 88px);
-    line-height: 1.05;
+    font-size: clamp(20px, 4.6cqw, 64px);
+    line-height: 1.02;
     letter-spacing: 1px;
     text-transform: uppercase;
     color: #FFFFFF;
@@ -66,12 +83,12 @@
     background-clip: text;
   }
   .hero-eyebrow {
-    font-size: clamp(9px, 1.1vw, 13px);
-    letter-spacing: clamp(0.2em, 0.4vw, 0.5em);
+    font-size: clamp(8px, 0.9cqw, 12px);
+    letter-spacing: clamp(0.2em, 0.4cqw, 0.5em);
   }
   .hero-subtitle {
-    font-size: clamp(11px, 1.5vw, 16px);
-    max-width: min(640px, 92vw);
+    font-size: clamp(10px, 1.2cqw, 14px);
+    max-width: min(560px, 80cqw);
   }
 
   /* ── SLOT REEL ── */
@@ -88,7 +105,7 @@
   }
   .reel-frame::before, .reel-frame::after {
     content: ""; position: absolute; left: 0; right: 0;
-    height: clamp(28px, 6vh, 60px); pointer-events: none; z-index: 2;
+    height: clamp(28px, 6cqh, 60px); pointer-events: none; z-index: 2;
   }
   .reel-frame::before { top: 0; background: linear-gradient(180deg, #000 5%, transparent 100%); }
   .reel-frame::after  { bottom: 0; background: linear-gradient(0deg, #000 5%, transparent 100%); }
@@ -105,11 +122,11 @@
     display: flex; align-items: center; justify-content: center;
     font-family: 'Unbounded', system-ui, sans-serif;
     font-weight: 800;
-    font-size: clamp(22px, 4.6vw, 56px);
+    font-size: clamp(16px, 3.2cqw, 42px);
     letter-spacing: 0.5px;
     color: #FFFFFF; text-transform: uppercase;
     white-space: nowrap; overflow: hidden;
-    padding: 0 clamp(16px, 4vw, 40px); line-height: 1.1;
+    padding: 0 clamp(12px, 3cqw, 32px); line-height: 1.1;
     text-shadow: 0 0 30px rgba(46,219,153,0.4);
   }
   .reel-item span { display: inline-block; max-width: 100%; white-space: nowrap; }
@@ -121,17 +138,17 @@
   /* ── ACTION BUTTONS ── */
   .stage-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    gap: clamp(6px, 1vw, 12px);
-    padding: clamp(12px, 2vw, 18px) clamp(20px, 3.5vw, 36px);
+    gap: clamp(6px, 0.8cqw, 10px);
+    padding: clamp(8px, 1.2cqw, 14px) clamp(14px, 2.4cqw, 28px);
     border-radius: 999px;
     font-family: 'Unbounded', system-ui, sans-serif;
     font-weight: 700;
-    font-size: clamp(13px, 1.4vw, 16px);
-    letter-spacing: clamp(1px, 0.2vw, 2px);
+    font-size: clamp(11px, 1.1cqw, 14px);
+    letter-spacing: clamp(1px, 0.18cqw, 2px);
     text-transform: uppercase;
     cursor: pointer; border: none;
     transition: transform 120ms, box-shadow 120ms;
-    min-width: clamp(160px, 22vw, 240px);
+    min-width: clamp(120px, 14cqw, 200px);
     white-space: nowrap;
   }
   .stage-btn:hover { transform: translateY(-2px); }
@@ -153,9 +170,9 @@
     0%, 100% { background-position: 0% 0%; box-shadow: 0 8px 40px rgba(255, 200, 87, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
     50%      { background-position: 0% 100%; box-shadow: 0 12px 60px rgba(255, 200, 87, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.6); }
   }
-  /* Floating reset — fixed at bottom-center, always visible regardless of phase */
+  /* Floating reset — anchored to the 16:9 stage's bottom-center, not the viewport. */
   .reset-floater {
-    position: fixed;
+    position: absolute;
     left: 50%;
     bottom: 14px;
     transform: translateX(-50%);
@@ -177,24 +194,24 @@
   }
   .stage-btn-reset:hover { color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
 
-  /* ── ACTIVITY TOASTS (random pop-ins, bottom-left) ── */
+  /* ── ACTIVITY TOASTS (random pop-ins, bottom-left of the 16:9 stage) ── */
   .toast-zone {
-    position: fixed;
-    left: clamp(8px, 2vw, 24px);
-    bottom: clamp(50px, 6vh, 80px); /* leave room for the reset floater */
+    position: absolute;
+    left: clamp(8px, 2%, 24px);
+    bottom: clamp(50px, 8%, 80px); /* leave room for the reset floater */
     z-index: 40;
     display: flex; flex-direction: column-reverse; gap: 10px;
-    max-width: min(380px, calc(100vw - 32px));
+    max-width: min(360px, 38%);
     pointer-events: none;
   }
   .toast {
     display: flex; align-items: center; gap: 12px;
-    padding: clamp(10px, 1.4vw, 14px) clamp(14px, 1.8vw, 18px);
+    padding: clamp(8px, 1.1cqw, 14px) clamp(12px, 1.5cqw, 18px);
     background: linear-gradient(180deg, rgba(13,20,16,0.95), rgba(8,12,10,0.95));
     border: 1px solid rgba(46, 219, 153, 0.35);
     border-radius: 14px;
     font-family: 'Share Tech Mono', monospace;
-    font-size: clamp(11px, 1.1vw, 13px);
+    font-size: clamp(10px, 1.05cqw, 13px);
     color: #d1fae5;
     backdrop-filter: blur(10px);
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(46, 219, 153, 0.15);
@@ -230,12 +247,17 @@
     display: flex; flex-direction: column; align-items: center;
     padding: 0 16px;
   }
+  /* Tailwind's .hidden = display:none; this single-class override re-asserts
+     it against .winner-stage's display:flex (same specificity, source order
+     would otherwise lose). Without this, hero and winner render together
+     and overflow the 16:9 box. */
+  .winner-stage.hidden { display: none; }
   .winner-ticket-wrap {
     perspective: 1400px;
     perspective-origin: 50% 30%;
     width: 100%;
-    /* Adapt to viewport — the wrap caps so the ticket never busts the layout. */
-    max-width: min(880px, 92vw);
+    /* Adapt to the 16:9 stage — the wrap caps so the ticket never busts the layout. */
+    max-width: min(720px, 80cqw);
     margin: 0 auto;
     position: relative;
     z-index: 1;
@@ -246,8 +268,12 @@
     z-index: 2;
     display: block;
     width: 100%;
-    max-width: min(880px, 92vw);
+    max-width: min(720px, 80cqw);
+    /* Cap the ticket against stage HEIGHT too — at scale 1.12 the entrance
+       would otherwise overflow the 16:9 box on tall windows. */
+    max-height: 56cqh;
     height: auto;
+    object-fit: contain;
     transform-origin: 50% 50%;
     filter:
       drop-shadow(0 0 80px rgba(255, 200, 87, 0.55))
@@ -261,15 +287,16 @@
      overshoot at the end ("camera moves in"). Ends at scale 1.12 to
      match the base state so removing the class doesn't snap back. */
   @keyframes ticket-grand-entrance {
-    /* Off-screen above, small, gentle rotation */
-    0%   { opacity: 0; transform: translate3d(0, -130vh, 0) rotate(-6deg) scale(0.40); }
+    /* Off-screen above, small, gentle rotation. Distances in cqh so the
+       descent stays calibrated to the 16:9 stage, not the viewport. */
+    0%   { opacity: 0; transform: translate3d(0, -130cqh, 0) rotate(-6deg) scale(0.40); }
     6%   { opacity: 1; }
     /* Slow feather-like descent with gentle sway */
-    18%  { transform: translate3d(-32px, -100vh, 0) rotate(-3deg)  scale(0.50); }
-    32%  { transform: translate3d( 28px, -72vh,  0) rotate( 2.5deg) scale(0.62); }
-    46%  { transform: translate3d(-22px, -45vh,  0) rotate(-2deg)  scale(0.74); }
-    60%  { transform: translate3d( 16px, -22vh,  0) rotate( 1.5deg) scale(0.86); }
-    74%  { transform: translate3d( -8px,  -6vh,  0) rotate(-1deg)  scale(0.96); }
+    18%  { transform: translate3d(-32px, -100cqh, 0) rotate(-3deg)  scale(0.50); }
+    32%  { transform: translate3d( 28px, -72cqh,  0) rotate( 2.5deg) scale(0.62); }
+    46%  { transform: translate3d(-22px, -45cqh,  0) rotate(-2deg)  scale(0.74); }
+    60%  { transform: translate3d( 16px, -22cqh,  0) rotate( 1.5deg) scale(0.86); }
+    74%  { transform: translate3d( -8px,  -6cqh,  0) rotate(-1deg)  scale(0.96); }
     /* Lands at center */
     82%  { transform: translate3d(0, 0, 0) rotate(0deg) scale(1.00); }
     /* Zoom-in punch */
@@ -310,7 +337,7 @@
   .winner-name {
     font-family: 'Unbounded', system-ui, sans-serif;
     font-weight: 900;
-    font-size: clamp(28px, 6vw, 72px);
+    font-size: clamp(24px, 5cqw, 64px);
     line-height: 1.05;
     color: #FFC857;
     letter-spacing: 1px;
@@ -319,11 +346,11 @@
       0 0 40px rgba(255, 200, 87, 1),
       0 0 80px rgba(255, 200, 87, 0.5),
       0 0 120px rgba(46, 219, 153, 0.4);
-    margin: clamp(18px, 3vh, 32px) 0 clamp(6px, 1vh, 12px) 0;
+    margin: clamp(10px, 2cqh, 24px) 0 clamp(4px, 0.8cqh, 10px) 0;
     text-align: center;
-    max-width: 96vw;
+    max-width: 96cqw;
     word-break: break-word;
-    padding: 0 clamp(8px, 2vw, 20px);
+    padding: 0 clamp(8px, 2cqw, 20px);
     opacity: 0;
   }
   .winner-line1, .winner-line2 {
@@ -331,23 +358,23 @@
     font-weight: 700;
     text-align: center;
     opacity: 0;
-    max-width: 96vw;
-    padding: 0 clamp(8px, 2vw, 16px);
+    max-width: 96cqw;
+    padding: 0 clamp(8px, 2cqw, 16px);
   }
   .winner-line1 {
-    font-size: clamp(16px, 3.2vw, 36px);
+    font-size: clamp(14px, 2.6cqw, 32px);
     color: #FFFFFF;
     letter-spacing: 1px;
-    margin-bottom: clamp(4px, 0.8vh, 10px);
+    margin-bottom: clamp(4px, 0.7cqh, 10px);
   }
   .winner-line2 {
-    font-size: clamp(20px, 4.2vw, 52px);
+    font-size: clamp(18px, 3.5cqw, 46px);
     background: linear-gradient(90deg, #2EDB99 0%, #FFC857 50%, #2EDB99 100%);
     background-size: 200% auto;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    letter-spacing: clamp(1px, 0.2vw, 2px);
+    letter-spacing: clamp(1px, 0.2cqw, 2px);
     text-transform: uppercase;
   }
   /* Reveal lines — start AFTER the entrance (4.6s) finishes. */
@@ -363,8 +390,8 @@
   @keyframes reveal-line { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes shimmer { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
 
-  /* Confetti */
-  .confetti-wrap { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 50; }
+  /* Confetti — confined to the 16:9 stage so paper doesn't fall on letterbox. */
+  .confetti-wrap { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 50; }
   .confetti {
     position: absolute; top: -20px;
     width: 10px; height: 14px;
@@ -373,32 +400,31 @@
   }
   @keyframes fall {
     0%   { transform: translate3d(0,-40px,0) rotate(0deg); opacity: 1; }
-    100% { transform: translate3d(var(--dx,0px), 110vh, 0) rotate(720deg); opacity: 0.9; }
+    100% { transform: translate3d(var(--dx,0px), 110cqh, 0) rotate(720deg); opacity: 0.9; }
   }
 </style>
 
 <div class="stage">
 
-  <div id="root" class="relative z-10 flex flex-col items-center justify-center min-h-screen w-full"
-       style="padding: clamp(24px, 4vh, 56px) clamp(12px, 3vw, 32px) clamp(60px, 6vh, 80px);">
+  <div id="root" class="relative z-10 flex flex-col items-center justify-center w-full"
+       style="height: 100%; padding: clamp(10px, 2cqh, 28px) clamp(10px, 2.4cqw, 28px) clamp(36px, 5cqh, 56px); box-sizing: border-box;">
 
     <!-- ─── PHASE 1/2: HERO + REEL + BUTTONS ─── -->
     <div id="hero-phase" class="w-full flex flex-col items-center">
 
-      <p class="hero-eyebrow uppercase text-brand-400 mb-4 font-mono"
-         style="margin-bottom: clamp(10px, 1.5vh, 18px);">
+      <p class="hero-eyebrow uppercase text-brand-400 font-mono"
+         style="margin: 0 0 clamp(4px, 0.8cqh, 12px) 0;">
         ✦ MKOT 3.0 · LIVE RAFFLE ✦
       </p>
-      <h1 class="hero-title" style="margin-bottom: clamp(8px, 1.2vh, 16px);">
-        Win <span class="accent">Bali</span><br>
-        Immersive Experience
+      <h1 class="hero-title" style="margin: 0 0 clamp(4px, 0.6cqh, 10px) 0;">
+        Win <span class="accent">Bali</span> · Immersive Experience
       </h1>
       <p class="hero-subtitle text-gray-400 text-center"
-         style="margin-bottom: clamp(20px, 4vh, 44px);">
+         style="margin: 0 0 clamp(10px, 2cqh, 22px) 0;">
         One spot · €2,000 value · For everyone who reserved during the live.
       </p>
 
-      <div class="w-full" style="max-width: min(880px, 95vw); margin-bottom: clamp(20px, 3.5vh, 36px);">
+      <div class="w-full" style="max-width: min(720px, 72cqw); margin-bottom: clamp(10px, 1.8cqh, 22px);">
         <div id="reel-frame" class="reel-frame rounded-2xl">
           <div class="selector"></div>
           <div id="reel" class="reel-strip">
@@ -408,7 +434,7 @@
       </div>
 
       <div id="action-row" class="flex flex-wrap items-center justify-center"
-           style="gap: clamp(12px, 1.5vw, 18px);">
+           style="gap: clamp(10px, 1.4cqw, 18px);">
         {% if not state.window_closed_at %}
         <form method="POST" action="{{ url_for('admin.raffle_close') }}" id="close-form">
           <button type="submit" class="stage-btn stage-btn-close">🔒 Close raffle</button>
@@ -463,7 +489,7 @@
   const playBtn      = document.getElementById('play-btn');
   const toastZone    = document.getElementById('toast-zone');
 
-  const initialWinner = {{ ('"' ~ winner.name ~ ' ' ~ winner.surname ~ '"') if winner else 'null' }};
+  const initialWinner = {{ ((winner.name ~ ' ' ~ winner.surname) | tojson) if winner else 'null' }};
   const initialClosed = {{ 'true' if state.window_closed_at else 'false' }};
 
   let pool = [];          // current eligible names (full)
