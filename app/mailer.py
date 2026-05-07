@@ -541,6 +541,41 @@ def send_webinar_reminder_email(ambassador, app_url):
     )
 
 
+def send_final_signal_email(ambassador, app_url):
+    """T-minus reminder fired ~3h before the live: Class 2 closing + live tonight.
+
+    Single CTA points to the public Instructions page where the recipient
+    finds both the Class 2 link and the live access in one place.
+    """
+    if is_unsubscribed(ambassador):
+        return False
+
+    instructions_url = os.getenv(
+        "INSTRUCTIONS_URL",
+        "https://inevitable.metakizzproject.com/instructions",
+    )
+
+    html = render_template(
+        "emails/final_signal.html",
+        first_name=_first_name(ambassador),
+        email=ambassador.email,
+        instructions_url=instructions_url,
+        unsubscribe_url=_unsubscribe_url(ambassador, app_url),
+        app_url=app_url.rstrip("/"),
+    )
+
+    first = ambassador.name.split()[0] if ambassador.name else "Hey"
+    subject = f"{first}, T-minus 3 hours — the live is today"
+
+    return _send(
+        ambassador.email,
+        subject,
+        html,
+        template_key="final_signal",
+        ambassador=ambassador,
+    )
+
+
 def send_activation_nudge_email(ambassador, app_url):
     """Send the activation nudge email (Day 2-3, only if 0 referrals)."""
     if is_unsubscribed(ambassador):

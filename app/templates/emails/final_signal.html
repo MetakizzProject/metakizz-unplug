@@ -1,0 +1,157 @@
+{% extends "emails/_shell.html" %}
+
+{% block title %}{{ first_name }}, T-minus 3 hours · the live is today{% endblock %}
+{% block preheader %}Two signals · Class 2 closes in 3h · live tonight 19:00 Madrid{% endblock %}
+{% block header_left %}METAKIZZ // FINAL.SIGNAL{% endblock %}
+{% block header_right %}STATUS: <span style="color:#DC2626;">URGENT</span>{% endblock %}
+
+{% block content %}
+
+<!-- 0. HERO POSTER — "TODAY · 19:00 · LIVE" Matrix art -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td align="center" style="padding:18px 16px 0 16px;background:#000000;line-height:0;font-size:0;">
+    <img src="{{ app_url }}/static/email/WhatsApp%20Image%202026-05-07%20at%2013.00.37.jpeg"
+         alt="Live Masterclass · Today · 19:00 Madrid · LIVE"
+         width="568"
+         style="display:block;width:100%;max-width:568px;height:auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;border-radius:10px;box-shadow:0 0 32px rgba(220,38,38,0.35);">
+  </td>
+</tr>
+</table>
+
+<!-- 1. TWO SIGNALS HEADLINE -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:34px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:13px;letter-spacing:3px;text-transform:uppercase;margin:0 0 10px 0;">
+      &gt; Hey <span style="color:#FFFFFF;">{{ first_name }}</span>_
+    </p>
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:34px;line-height:1.05;letter-spacing:1.5px;margin:0;text-transform:uppercase;text-shadow:0 0 18px rgba(46,219,153,0.45);">
+      Two signals
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- 2. SIGNAL #1 — Class 2 · 3 hours left -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:30px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a0707" style="background:#1a0707;border:2px solid #DC2626;border-radius:12px;box-shadow:0 0 28px rgba(220,38,38,0.4);">
+    <tr>
+      <td align="center" style="padding:30px 22px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#DC2626;font-size:12px;letter-spacing:4px;text-transform:uppercase;margin:0 0 14px 0;">
+          ▌ Class 2
+        </p>
+        <p class="mob-h1" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:44px;line-height:1.0;letter-spacing:2px;margin:0;text-shadow:0 0 22px rgba(220,38,38,0.7);text-transform:uppercase;">
+          3 hours<br>left
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 3. SIGNAL #2 — Live session · today 19:00 -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:18px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a1407" style="background:#1a1407;border:2px solid #FFC857;border-radius:12px;box-shadow:0 0 28px rgba(255,200,87,0.35);">
+    <tr>
+      <td align="center" style="padding:30px 22px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:12px;letter-spacing:4px;text-transform:uppercase;margin:0 0 14px 0;">
+          ◉ Live session
+        </p>
+        <p class="mob-h1" style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:40px;line-height:1.0;letter-spacing:2px;margin:0 0 10px 0;text-shadow:0 0 22px rgba(255,200,87,0.7);text-transform:uppercase;">
+          Today · 19:00
+        </p>
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:14px;letter-spacing:3px;text-transform:uppercase;margin:0;">
+          Madrid time
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 4. CTA — Instructions to access the LIVE -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:40px 32px 0 32px;">
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:18px;letter-spacing:2px;text-transform:uppercase;margin:0 0 6px 0;text-shadow:0 0 16px rgba(46,219,153,0.55);">
+      Instructions to access the LIVE
+    </p>
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#2EDB99;font-size:32px;line-height:1;margin:0 0 14px 0;text-shadow:0 0 22px rgba(46,219,153,0.85);">
+      ↓
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr>
+      <td align="center" bgcolor="#2EDB99" style="background:#2EDB99;border:2px solid #2EDB99;border-radius:8px;box-shadow:0 0 32px rgba(46,219,153,0.7);">
+        <a href="{{ instructions_url }}" class="mob-cta-text" style="display:inline-block;padding:22px 48px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:16px;letter-spacing:2.5px;text-transform:uppercase;color:#000000;text-decoration:none;">
+          ▶ Open the instructions
+        </a>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 5. PRO TIP — capacity warning -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:36px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid rgba(255,200,87,0.5);border-radius:8px;">
+    <tr>
+      <td style="padding:20px 22px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFC857;font-size:12px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 12px 0;">
+          ▌ Pro tip
+        </p>
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:15px;line-height:1.65;margin:0;">
+          Almost <strong style="color:#FFC857;">3,000 dancers</strong> have signed up.
+          The room only holds <strong style="color:#FFC857;">1,000</strong>.<br><br>
+          We recommend logging in <strong style="color:#FFC857;">15 minutes early</strong>
+          so you don't get locked out.
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 6. SIGN-OFF -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:36px 32px 32px 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:0 0 8px 0;">
+      See you in there.
+    </p>
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#6B7280;font-size:12px;letter-spacing:1.5px;margin:0 0 14px 0;">
+      &gt; follow the white rabbit_ <span style="color:#9CA3AF;">🐇</span>
+    </p>
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      Jesús &amp; Anni · MetaKizz
+    </p>
+  </td>
+</tr>
+</table>
+
+{% endblock %}
+
+{% block prominent_unsubscribe %}
+<tr>
+  <td style="padding:18px 0 0 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid #2D2D44;border-radius:10px;">
+    <tr>
+      <td align="center" style="padding:18px 20px;">
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;margin:0 0 6px 0;">Don't want to keep receiving these emails?</p>
+        <p style="margin:0;"><a href="{{ unsubscribe_url }}" style="color:#2EDB99;text-decoration:underline;font-size:14px;font-weight:bold;">Click here to stop them.</a></p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+{% endblock %}

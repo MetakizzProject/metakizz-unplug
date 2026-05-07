@@ -54,6 +54,7 @@ def _ensure_unsubscribe_columns(db):
             "class2_email_sent_at",
             "class3_email_sent_at",
             "webinar_reminder_sent_at",
+            "final_signal_sent_at",
         ):
             if col not in cols:
                 conn.execute(text(f"ALTER TABLE ambassadors ADD COLUMN {col} TIMESTAMP"))
