@@ -62,6 +62,19 @@
 
             <div class="admin-nav-divider"></div>
 
+            <!-- MKOT 3.0 reservation flow -->
+            <a href="{{ url_for('admin.reservations') if 'reservations' in admin_routes else '#' }}" class="admin-nav-link {{ 'active' if active == 'reservations' }}">
+                <span class="nav-icon">💳</span>
+                <span class="nav-label">Reservas</span>
+            </a>
+            <a href="{{ url_for('admin.raffle') if 'raffle' in admin_routes else '#' }}" target="_blank" rel="noopener" class="admin-nav-link {{ 'active' if active == 'raffle' }}">
+                <span class="nav-icon">🎰</span>
+                <span class="nav-label">Sorteo (stage)</span>
+                <span class="nav-badge nav-badge-amber" style="font-size:9px;">↗</span>
+            </a>
+
+            <div class="admin-nav-divider"></div>
+
             <a href="{{ url_for('admin.rewards') }}" class="admin-nav-link {{ 'active' if active == 'rewards' }}">
                 <span class="nav-icon">🎁</span>
                 <span class="nav-label">Rewards</span>

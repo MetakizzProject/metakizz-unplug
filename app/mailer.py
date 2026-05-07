@@ -234,6 +234,49 @@ def _stats_card(stats_html):
 </table>"""
 
 
+# ─── MKOT 3.0 RESERVATION CONFIRMATION ───────────────────────────
+
+def send_reservation_confirmed(reservation):
+    """Confirmation email sent immediately after the buyer completes the
+    post-payment form for MKOT 3.0.
+
+    Standalone HTML template (same terminal/MetaKizz aesthetic as welcome.html).
+    Best-effort: callers should not block on the result.
+    """
+    if not reservation or not reservation.email:
+        return False
+
+    # If the buyer matches an existing Ambassador and they unsubscribed,
+    # respect that. Pure non-ambassador buyers receive the email regardless
+    # (transactional purchase confirmation, not marketing).
+    ambassador = reservation.ambassador
+    if ambassador is not None and is_unsubscribed(ambassador):
+        return False
+
+    first_name = "there"
+    if reservation.name and reservation.name.strip():
+        first_name = reservation.name.strip().split()[0]
+    elif ambassador is not None and ambassador.name and ambassador.name.strip():
+        first_name = ambassador.name.strip().split()[0]
+
+    amount_eur = "{:.0f}".format((reservation.amount_cents or 10000) / 100)
+
+    html = render_template(
+        "emails/reservation_confirmed.html",
+        first_name=first_name,
+        email=reservation.email,
+        amount_eur=amount_eur,
+    )
+
+    return _send(
+        reservation.email,
+        "Your MKOT 3.0 reservation is confirmed ✦",
+        html,
+        template_key="reservation_confirmed",
+        ambassador=ambassador,
+    )
+
+
 # ─── EMAIL 1: WELCOME ────────────────────────────────────────────
 
 def send_welcome_email(ambassador, app_url):

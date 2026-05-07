@@ -1,0 +1,322 @@
+{% extends "admin_base.html" %}
+
+{% block admin_content %}
+<div class="px-4 lg:px-6 py-5">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-5">
+    <div>
+      <h1 class="font-display font-bold text-2xl text-white">Reservas MKOT 3.0</h1>
+      <p class="text-xs text-gray-500 font-mono uppercase tracking-widest mt-1">
+        // En vivo · auto-refresh 3s
+      </p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="{{ url_for('reservation.reservation_preview') }}" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
+        📝 Preview form ↗
+      </a>
+      <a href="{{ url_for('reservation.reservation_thanks') }}" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
+        ✓ Preview thanks ↗
+      </a>
+      <a href="{{ url_for('admin.raffle') }}" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-400 hover:bg-brand-300 text-black font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
+        🎰 Open raffle stage ↗
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
+      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Pagos</p>
+      <p id="kpi-paid" class="font-display font-bold text-2xl text-white">{{ paid_total }}</p>
+    </div>
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
+      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Pendientes form</p>
+      <p id="kpi-pending" class="font-display font-bold text-2xl text-yellow-400">{{ pending_form }}</p>
+    </div>
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
+      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Completados</p>
+      <p id="kpi-completed" class="font-display font-bold text-2xl text-brand-400">{{ completed_total }}</p>
+    </div>
+    <div class="bg-gray-900/60 border border-brand-800/40 rounded-xl px-4 py-3">
+      <p class="text-[10px] uppercase tracking-widest text-brand-400 font-mono mb-1">Elegibles sorteo</p>
+      <p id="kpi-eligible" class="font-display font-bold text-2xl text-brand-400">{{ eligible_count }}</p>
+    </div>
+  </div>
+
+  <!-- Raffle control bar -->
+  <div class="bg-black/60 border border-brand-700/40 rounded-2xl p-5 mb-6">
+    <div class="flex flex-wrap items-center gap-4 justify-between">
+      <div>
+        <p class="text-[10px] uppercase tracking-widest text-brand-400 font-mono mb-1">// Estado del sorteo</p>
+        <div id="raffle-status-line" class="flex items-center gap-2">
+          {% if winner %}
+            <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+            <span class="text-white font-medium">★ Sorteo realizado · {{ winner.name }} {{ winner.surname }}</span>
+          {% elif state.window_closed_at %}
+            <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
+            <span class="text-white font-medium">Ventana cerrada · listo para girar</span>
+          {% else %}
+            <span class="w-2 h-2 rounded-full bg-brand-400 animate-pulse"></span>
+            <span class="text-white font-medium">Recibiendo reservas</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="flex gap-2">
+        {% if not state.window_closed_at %}
+        <form method="POST" action="{{ url_for('admin.raffle_close') }}" onsubmit="return confirm('¿Cerrar la ventana? No entrarán más participantes al sorteo.');">
+          <button type="submit" class="bg-red-600 hover:bg-red-500 text-white font-display font-bold uppercase tracking-wider px-5 py-2.5 rounded-lg text-xs transition">
+            🔒 Cerrar ventana
+          </button>
+        </form>
+        {% endif %}
+
+        {% if state.window_closed_at and not winner %}
+        <form method="POST" action="{{ url_for('admin.raffle_spin') }}" id="spin-form">
+          <button type="submit" class="bg-brand-400 hover:bg-brand-300 text-black font-display font-bold uppercase tracking-wider px-6 py-2.5 rounded-lg text-xs transition">
+            🎰 Girar la ruleta
+          </button>
+        </form>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('admin.raffle_reset') }}"
+              onsubmit="return confirm('¿Resetear sorteo? Esto borra el ganador y reabre la ventana.');">
+          <button type="submit" class="text-[10px] uppercase tracking-widest text-gray-500 hover:text-red-400 px-3 py-2 font-mono">
+            reset
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <p class="text-xs text-gray-500 mt-3 font-mono">
+      💡 Tip: abre el stage en otra ventana antes del live (botón verde arriba) y compártela. Desde aquí controlas el sorteo — el stage se actualiza solo.
+    </p>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex items-center gap-2 mb-3">
+    <button data-filter="all" class="filter-btn active text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+      Todas
+    </button>
+    <button data-filter="eligible" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+      Elegibles sorteo
+    </button>
+    <button data-filter="pending" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+      Pagos pendientes form
+    </button>
+    <button data-filter="doubts" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+      Con dudas (call)
+    </button>
+  </div>
+
+  <!-- Reservations table -->
+  <div class="bg-gray-900/40 border border-gray-800 rounded-2xl overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm" id="rsv-table">
+        <thead class="bg-black/60 border-b border-gray-800">
+          <tr class="text-[10px] uppercase tracking-widest text-gray-500 font-mono">
+            <th class="text-left px-4 py-3">Paid</th>
+            <th class="text-left px-4 py-3">Form</th>
+            <th class="text-left px-4 py-3">Name</th>
+            <th class="text-left px-4 py-3">Email</th>
+            <th class="text-left px-4 py-3">Program</th>
+            <th class="text-left px-4 py-3">Modality</th>
+            <th class="text-left px-4 py-3">Payment</th>
+            <th class="text-left px-4 py-3">Feeling</th>
+            <th class="text-left px-4 py-3">Notes</th>
+            <th class="text-left px-4 py-3">Stripe</th>
+          </tr>
+        </thead>
+        <tbody id="rsv-body" class="divide-y divide-gray-800/60">
+          {% for r in rows %}
+          <tr data-row-id="{{ r.id }}"
+              data-eligible="{{ '1' if (r.paid_at and r.form_completed_at and (not state.window_closed_at or r.form_completed_at <= state.window_closed_at)) else '0' }}"
+              data-pending="{{ '1' if (r.paid_at and not r.form_completed_at) else '0' }}"
+              data-doubts="{{ '1' if r.clarity == 'doubts' else '0' }}"
+              class="hover:bg-gray-800/30">
+            <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">
+              {% if r.paid_at %}{{ r.paid_at.strftime('%H:%M:%S') }}{% else %}—{% endif %}
+            </td>
+            <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">
+              {% if r.form_completed_at %}{{ r.form_completed_at.strftime('%H:%M:%S') }}{% else %}<span class="text-yellow-500">—</span>{% endif %}
+            </td>
+            <td class="px-4 py-3 text-white">{{ r.name or '' }} {{ r.surname or '' }}</td>
+            <td class="px-4 py-3 text-gray-300 text-xs">{{ r.email }}</td>
+            <td class="px-4 py-3">
+              {% if r.program_choice == 'dancers' %}<span class="inline-block bg-brand-900/40 text-brand-300 px-2 py-0.5 rounded text-xs font-mono uppercase">Dancers</span>
+              {% elif r.program_choice == 'instructors' %}<span class="inline-block bg-purple-900/40 text-purple-300 px-2 py-0.5 rounded text-xs font-mono uppercase">Instructors</span>
+              {% elif r.program_choice == 'not_sure' %}<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase">? Not sure</span>
+              {% else %}<span class="text-gray-600 text-xs">—</span>{% endif %}
+            </td>
+            <td class="px-4 py-3 text-xs">
+              {% if r.modality_choice == 'not_sure' %}<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase">? Not sure</span>
+              {% elif r.modality_choice %}<span class="text-gray-300 uppercase font-mono">{{ r.modality_choice }}</span>
+              {% else %}<span class="text-gray-600">—</span>{% endif %}
+            </td>
+            <td class="px-4 py-3 text-xs">
+              {% if r.payment_plan == 'one_payment' %}<span class="inline-block bg-brand-900/40 text-brand-300 px-2 py-0.5 rounded text-xs font-mono uppercase">1 pay</span>
+              {% elif r.payment_plan == 'six_installments' %}<span class="inline-block bg-blue-900/40 text-blue-300 px-2 py-0.5 rounded text-xs font-mono uppercase">6×</span>
+              {% elif r.payment_plan == 'not_sure' %}<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase">? Not sure</span>
+              {% else %}<span class="text-gray-600">—</span>{% endif %}
+            </td>
+            <td class="px-4 py-3">
+              {% if r.clarity == 'clear' %}
+                <span class="inline-flex items-center gap-1 text-brand-400 text-xs font-mono uppercase">
+                  ✓ Clear
+                </span>
+              {% elif r.clarity == 'doubts' %}
+                <span class="inline-flex items-center gap-1 text-yellow-400 text-xs font-mono uppercase">
+                  ⚠ Has doubts
+                </span>
+              {% else %}
+                <span class="text-gray-600 text-xs">—</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-xs text-gray-400 max-w-[260px] truncate" title="{{ r.notes or '' }}">
+              {{ r.notes or '—' }}
+            </td>
+            <td class="px-4 py-3 text-[10px] text-gray-600 font-mono">
+              {{ (r.stripe_session_id or '')[:14] }}…
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<style>
+  .filter-btn { color: #9ca3af; border-color: rgba(46,219,153,0.18); background: transparent; }
+  .filter-btn:hover { color: #fff; border-color: rgba(46,219,153,0.4); }
+  .filter-btn.active { background: rgba(46,219,153,0.12); color: #2EDB99; border-color: rgba(46,219,153,0.6); }
+</style>
+
+<script>
+(function() {
+  const STATE_URL = "{{ url_for('admin.reservations_json') }}";
+  const tbody = document.getElementById('rsv-body');
+  let currentFilter = 'all';
+  let lastWinnerId = {{ winner.id if winner else 'null' }};
+  let lastClosed = {{ 'true' if state.window_closed_at else 'false' }};
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  }
+
+  function programBadge(p) {
+    if (p === 'dancers')     return '<span class="inline-block bg-brand-900/40 text-brand-300 px-2 py-0.5 rounded text-xs font-mono uppercase">Dancers</span>';
+    if (p === 'instructors') return '<span class="inline-block bg-purple-900/40 text-purple-300 px-2 py-0.5 rounded text-xs font-mono uppercase">Instructors</span>';
+    if (p === 'not_sure')    return '<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase">? Not sure</span>';
+    return '<span class="text-gray-600 text-xs">—</span>';
+  }
+
+  function modalityBadge(m) {
+    if (m === 'not_sure') return '<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase">? Not sure</span>';
+    if (m) return '<span class="text-gray-300 uppercase font-mono">' + escapeHtml(m) + '</span>';
+    return '<span class="text-gray-600">—</span>';
+  }
+
+  function paymentBadge(p) {
+    if (p === 'one_payment')      return '<span class="inline-block bg-brand-900/40 text-brand-300 px-2 py-0.5 rounded text-xs font-mono uppercase">1 pay</span>';
+    if (p === 'six_installments') return '<span class="inline-block bg-blue-900/40 text-blue-300 px-2 py-0.5 rounded text-xs font-mono uppercase">6×</span>';
+    if (p === 'not_sure')         return '<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase">? Not sure</span>';
+    return '<span class="text-gray-600">—</span>';
+  }
+
+  function clarityBadge(c) {
+    if (c === 'clear')  return '<span class="text-brand-400 text-xs font-mono uppercase">✓ Clear</span>';
+    if (c === 'doubts') return '<span class="text-yellow-400 text-xs font-mono uppercase">⚠ Has doubts</span>';
+    return '<span class="text-gray-600 text-xs">—</span>';
+  }
+
+  function rowMatchesFilter(row) {
+    if (currentFilter === 'all')      return true;
+    if (currentFilter === 'eligible') return row.dataset.eligible === '1';
+    if (currentFilter === 'pending')  return row.dataset.pending === '1';
+    if (currentFilter === 'doubts')   return row.dataset.doubts === '1';
+    return true;
+  }
+
+  function applyFilter() {
+    Array.prototype.forEach.call(tbody.querySelectorAll('tr[data-row-id]'), function(tr) {
+      tr.style.display = rowMatchesFilter(tr) ? '' : 'none';
+    });
+  }
+
+  document.querySelectorAll('.filter-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      applyFilter();
+    });
+  });
+
+  async function poll() {
+    try {
+      const resp = await fetch(STATE_URL, { cache: 'no-store' });
+      const data = await resp.json();
+
+      // Update KPIs
+      document.getElementById('kpi-paid').textContent = data.paid_total;
+      document.getElementById('kpi-completed').textContent = data.completed_total;
+      document.getElementById('kpi-pending').textContent = (data.paid_total - data.completed_total);
+      document.getElementById('kpi-eligible').textContent = data.eligible_count;
+
+      // Reload page if raffle state changed (so the action buttons re-render)
+      const isClosed = !!data.window_closed_at;
+      if (isClosed !== lastClosed) { window.location.reload(); return; }
+      if (data.winner_id && data.winner_id !== lastWinnerId) { window.location.reload(); return; }
+
+      // Re-render rows
+      const closed_at = data.window_closed_at ? new Date(data.window_closed_at) : null;
+      const html = data.rows.map(function(r) {
+        const formAt = r.form_completed_at ? new Date(r.form_completed_at) : null;
+        const isEligible = !!(r.paid_at && r.form_completed_at && (!closed_at || formAt <= closed_at));
+        const isPending = !!(r.paid_at && !r.form_completed_at);
+        const isDoubts  = r.clarity === 'doubts';
+        return '<tr data-row-id="' + r.id + '" '
+          + 'data-eligible="' + (isEligible ? '1' : '0') + '" '
+          + 'data-pending="' + (isPending ? '1' : '0') + '" '
+          + 'data-doubts="' + (isDoubts ? '1' : '0') + '" '
+          + 'class="hover:bg-gray-800/30">'
+          + '<td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">' + (r.paid_at ? fmtTime(r.paid_at) : '—') + '</td>'
+          + '<td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">' + (r.form_completed_at ? fmtTime(r.form_completed_at) : '<span class="text-yellow-500">—</span>') + '</td>'
+          + '<td class="px-4 py-3 text-white">' + escapeHtml(r.name) + ' ' + escapeHtml(r.surname) + '</td>'
+          + '<td class="px-4 py-3 text-gray-300 text-xs">' + escapeHtml(r.email) + '</td>'
+          + '<td class="px-4 py-3">' + programBadge(r.program_choice) + '</td>'
+          + '<td class="px-4 py-3 text-xs">' + modalityBadge(r.modality_choice) + '</td>'
+          + '<td class="px-4 py-3 text-xs">' + paymentBadge(r.payment_plan) + '</td>'
+          + '<td class="px-4 py-3">' + clarityBadge(r.clarity) + '</td>'
+          + '<td class="px-4 py-3 text-xs text-gray-400 max-w-[260px] truncate" title="' + escapeHtml(r.notes) + '">' + (r.notes ? escapeHtml(r.notes) : '—') + '</td>'
+          + '<td class="px-4 py-3 text-[10px] text-gray-600 font-mono">' + escapeHtml((r.stripe_session_id || '').substring(0, 14)) + '…</td>'
+          + '</tr>';
+      }).join('');
+      tbody.innerHTML = html || '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>';
+      applyFilter();
+    } catch (e) {
+      console.warn('poll failed', e);
+    }
+  }
+
+  applyFilter();
+  setInterval(poll, 3000);
+})();
+</script>
+{% endblock %}

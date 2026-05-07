@@ -134,6 +134,13 @@ def _ensure_unsubscribe_columns(db):
             conn.execute(text("ALTER TABLE referrals ADD COLUMN signup_user_agent VARCHAR(500)"))
             logger.info("added column referrals.signup_user_agent")
 
+        # MKOT 3.0 reservations table — add payment_plan if missing.
+        if "reservations" in inspector.get_table_names():
+            res_cols = {c["name"] for c in inspector.get_columns("reservations")}
+            if "payment_plan" not in res_cols:
+                conn.execute(text("ALTER TABLE reservations ADD COLUMN payment_plan VARCHAR(20)"))
+                logger.info("added column reservations.payment_plan")
+
         # Backfill tokens for any rows that don't have one yet (existing ambassadors).
         rows = conn.execute(text("SELECT id FROM ambassadors WHERE unsubscribe_token IS NULL")).fetchall()
         for row in rows:
@@ -178,6 +185,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         _ensure_unsubscribe_columns(db)
+        _seed_raffle_state(db)
 
     from app.routes.home import home_bp
     from app.routes.dashboard import dashboard_bp
@@ -185,6 +193,8 @@ def create_app():
     from app.routes.admin import admin_bp
     from app.routes.webhook import webhook_bp
     from app.routes.cron import cron_bp
+    from app.routes.reservation import reservation_bp
+    from app.routes.stripe_webhook import stripe_bp
 
     app.register_blueprint(home_bp)
     app.register_blueprint(dashboard_bp)
@@ -192,8 +202,21 @@ def create_app():
     app.register_blueprint(admin_bp)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(cron_bp)
+    app.register_blueprint(reservation_bp)
+    app.register_blueprint(stripe_bp)
 
     return app
+
+
+def _seed_raffle_state(db):
+    """Ensure the singleton RaffleState row exists. The /admin/raffle page
+    creates it on demand, but seeding here keeps the JSON state endpoint
+    valid from the very first request."""
+    from app.models import RaffleState
+    if RaffleState.query.get(1) is None:
+        db.session.add(RaffleState(id=1))
+        db.session.commit()
+        logger.info("seeded raffle_state row id=1")
 
 
 if __name__ == "__main__":

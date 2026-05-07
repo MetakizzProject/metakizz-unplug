@@ -357,3 +357,70 @@ class PendingReferral(db.Model):
 
     referrer = db.relationship("Ambassador", foreign_keys=[referrer_ambassador_id])
     new_ambassador = db.relationship("Ambassador", foreign_keys=[new_ambassador_id])
+
+
+class Reservation(db.Model):
+    """A €100 deposit reservation for MKOT 3.0, captured during a live session.
+
+    Two-phase lifecycle:
+      1. Stripe webhook (checkout.session.completed) inserts the row with
+         stripe_session_id + paid_at + email (from Stripe customer_details).
+      2. The buyer is redirected to /reservation/form where they fill in
+         name/surname/program/modality/clarity. The same row is updated
+         and form_completed_at is set.
+
+    Raffle eligibility = paid_at IS NOT NULL AND form_completed_at IS NOT NULL
+    AND form_completed_at < raffle_state.window_closed_at (or window still open).
+    """
+    __tablename__ = "reservations"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Stripe identifiers — session_id is unique per checkout, used for idempotency.
+    stripe_session_id = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    stripe_payment_intent_id = db.Column(db.String(120), nullable=True)
+    amount_cents = db.Column(db.Integer, nullable=True)
+    currency = db.Column(db.String(3), nullable=True)
+    paid_at = db.Column(db.DateTime, nullable=True, index=True)
+
+    # Customer fields. Email comes from Stripe; the rest from the form.
+    email = db.Column(db.String(200), nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=True)
+    surname = db.Column(db.String(200), nullable=True)
+
+    # Form choices — persisted as short strings, not enums, for SQLite friendliness.
+    # All choice fields accept 'not_sure' so the buyer can leave the decision open
+    # for the call. None of these are binding — they're orientative for prep.
+    program_choice = db.Column(db.String(20), nullable=True)   # 'dancers' | 'instructors' | 'not_sure'
+    modality_choice = db.Column(db.String(20), nullable=True)  # 'solo' | 'duo' | 'not_sure'
+    payment_plan = db.Column(db.String(20), nullable=True)     # 'one_payment' | 'six_installments' | 'not_sure'
+    clarity = db.Column(db.String(20), nullable=True)          # 'clear' | 'doubts'
+    notes = db.Column(db.Text, nullable=True)
+
+    # Match by email at webhook time. Nullable — buyer may not be in the ambassador list.
+    ambassador_id = db.Column(db.Integer, db.ForeignKey("ambassadors.id"), nullable=True, index=True)
+
+    form_completed_at = db.Column(db.DateTime, nullable=True, index=True)
+    confirmation_email_sent_at = db.Column(db.DateTime, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    ambassador = db.relationship("Ambassador", foreign_keys=[ambassador_id])
+
+
+class RaffleState(db.Model):
+    """Singleton row (id=1) holding the current raffle window state.
+
+    A separate table from Reservation avoids mass updates when the admin
+    clicks "Close window". window_closed_at = NULL means the window is open
+    and any newly-completed reservation is eligible.
+    """
+    __tablename__ = "raffle_state"
+
+    id = db.Column(db.Integer, primary_key=True)
+    window_closed_at = db.Column(db.DateTime, nullable=True)
+    winner_reservation_id = db.Column(db.Integer, db.ForeignKey("reservations.id"), nullable=True)
+    closed_by_admin = db.Column(db.String(80), nullable=True)
+    spun_at = db.Column(db.DateTime, nullable=True)
+
+    winner = db.relationship("Reservation", foreign_keys=[winner_reservation_id])

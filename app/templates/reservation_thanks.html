@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Reservation confirmed — MKOT 3.0{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto px-4 pt-16 pb-12 text-center">
+  <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-900/40 border border-brand-500/40 mb-6">
+    <svg class="w-8 h-8 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+    </svg>
+  </div>
+
+  <h1 class="text-3xl font-display font-bold mb-3">Your reservation is confirmed ✦</h1>
+  <p class="text-gray-400 mb-6 leading-relaxed">
+    We've sent you a confirmation email.<br>
+    Check your spam folder too, just in case.
+  </p>
+
+  <div class="bg-gray-900 border border-gray-800 rounded-lg p-5 text-left text-sm text-gray-300 leading-relaxed">
+    <p class="font-display text-brand-400 text-base mb-2">What's next</p>
+    <p>
+      Someone from our team will reach out in the next few days to walk through the details with you,
+      answer your questions, and finalize the setup. In the meantime, stay with the live —
+      there's a giveaway running 👀
+    </p>
+  </div>
+
+  <p class="text-xs text-gray-600 mt-8">You can close this window and head back to the live.</p>
+</div>
+{% endblock %}

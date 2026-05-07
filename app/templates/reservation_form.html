@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Your reservation — MKOT 3.0{% endblock %}
+
+{% block meta %}
+{% if waiting %}
+<meta http-equiv="refresh" content="3;url={{ url_for('reservation.reservation_form', sid=sid, attempt=attempt) }}">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto px-4 pt-10 pb-12">
+
+  {% if waiting %}
+    <div class="text-center mb-8">
+      <h1 class="text-2xl font-display font-bold mb-3">Confirming your payment…</h1>
+      <p class="text-gray-400">We're checking with Stripe. This takes just a few seconds.</p>
+      <div class="mt-6 inline-block w-8 h-8 border-2 border-brand-400/30 border-t-brand-400 rounded-full animate-spin"></div>
+    </div>
+  {% elif error_message and not reservation %}
+    <div class="text-center mb-8">
+      <h1 class="text-2xl font-display font-bold mb-3">Something doesn't add up</h1>
+      <p class="text-gray-400">{{ error_message }}</p>
+    </div>
+  {% elif reservation %}
+    <div class="text-center mb-6">
+      <h1 class="text-2xl font-display font-bold mb-2">Reservation received ✦</h1>
+      <p class="text-gray-400">Your {{ "%.0f"|format((reservation.amount_cents or 10000) / 100) }}€ deposit is confirmed.<br>Just a few quick details so we can prepare for our call.</p>
+    </div>
+
+    <!-- Reassurance banner — none of this is binding -->
+    <div class="bg-brand-900/20 border border-brand-700/40 rounded-lg px-4 py-3 mb-6">
+      <p class="text-xs uppercase tracking-widest text-brand-400 font-mono mb-1">Heads up</p>
+      <p class="text-sm text-gray-300 leading-relaxed">
+        Nothing you pick here is final — these answers are <strong class="text-white">just to give us a sense</strong> of where you're at.
+        We'll figure out the actual setup together on the call. If you're unsure about something, that's totally fine — pick <strong class="text-brand-400">"Not sure yet"</strong> and we'll cover it live.
+      </p>
+    </div>
+
+    {% if error_message %}
+    <div class="rounded-lg px-4 py-3 mb-4 text-sm bg-red-900/50 text-red-200 border border-red-800">
+      {{ error_message }}
+    </div>
+    {% endif %}
+
+    {% set fv = form_values or {} %}
+    <form method="POST" action="{{ url_for('reservation.reservation_form_submit') }}" class="space-y-5">
+      <input type="hidden" name="sid" value="{{ sid }}">
+
+      <div>
+        <label for="email" class="block text-sm text-gray-400 mb-1">Registered email</label>
+        <input type="email" id="email" value="{{ reservation.email }}" readonly
+               class="w-full bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 text-gray-400 cursor-not-allowed">
+        <p class="text-xs text-gray-600 mt-1">Same email you used to pay — we'll reach out here.</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label for="name" class="block text-sm text-gray-400 mb-1">First name</label>
+          <input type="text" id="name" name="name" required value="{{ fv.get('name', '') }}"
+                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+        </div>
+        <div>
+          <label for="surname" class="block text-sm text-gray-400 mb-1">Last name</label>
+          <input type="text" id="surname" name="surname" required value="{{ fv.get('surname', '') }}"
+                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+        </div>
+      </div>
+
+      <!-- Program -->
+      <div>
+        <p class="block text-sm text-gray-400 mb-2">Which program are you leaning toward?</p>
+        <div class="space-y-2">
+          <label class="flex items-center gap-3 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+            <input type="radio" name="program_choice" value="dancers" required {% if fv.get('program_choice') == 'dancers' %}checked{% endif %} class="accent-brand-400">
+            <span class="text-sm font-medium">Meta Dancers</span>
+          </label>
+          <label class="flex items-center gap-3 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+            <input type="radio" name="program_choice" value="instructors" required {% if fv.get('program_choice') == 'instructors' %}checked{% endif %} class="accent-brand-400">
+            <span class="text-sm font-medium">Meta Instructors</span>
+          </label>
+          <label class="flex items-center gap-3 bg-gray-900 border border-gray-700/50 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+            <input type="radio" name="program_choice" value="not_sure" required {% if fv.get('program_choice') == 'not_sure' %}checked{% endif %} class="accent-brand-400">
+            <span class="text-sm text-gray-300">Not sure yet — let's talk about it</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Modality -->
+      <div>
+        <p class="block text-sm text-gray-400 mb-2">Solo or in a duo?</p>
+        <div class="space-y-2">
+          <label class="flex items-center gap-3 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+            <input type="radio" name="modality_choice" value="solo" required {% if fv.get('modality_choice') == 'solo' %}checked{% endif %} class="accent-brand-400">
+            <span class="text-sm font-medium">Solo</span>
+          </label>
+          <label class="flex items-center gap-3 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+            <input type="radio" name="modality_choice" value="duo" required {% if fv.get('modality_choice') == 'duo' %}checked{% endif %} class="accent-brand-400">
+            <span class="text-sm font-medium">In a duo (with my dance partner)</span>
+          </label>
+          <label class="flex items-center gap-3 bg-gray-900 border border-gray-700/50 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+            <input type="radio" name="modality_choice" value="not_sure" required {% if fv.get('modality_choice') == 'not_sure' %}checked{% endif %} class="accent-brand-400">
+            <span class="text-sm text-gray-300">Not sure yet — let's talk about it</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Payment plan -->
+      <div>
+        <p class="block text-sm text-gray-400 mb-2">How would you like to pay the rest?</p>
+        <div class="space-y-2">
+          <label class="flex items-center gap-3 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+            <input type="radio" name="payment_plan" value="one_payment" required {% if fv.get('payment_plan') == 'one_payment' %}checked{% endif %} class="accent-brand-400">
+            <span class="text-sm font-medium">1 payment</span>
+          </label>
+          <label class="flex items-center gap-3 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+            <input type="radio" name="payment_plan" value="six_installments" required {% if fv.get('payment_plan') == 'six_installments' %}checked{% endif %} class="accent-brand-400">
+            <span class="text-sm font-medium">6 installments</span>
+          </label>
+          <label class="flex items-center gap-3 bg-gray-900 border border-gray-700/50 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+            <input type="radio" name="payment_plan" value="not_sure" required {% if fv.get('payment_plan') == 'not_sure' %}checked{% endif %} class="accent-brand-400">
+            <span class="text-sm text-gray-300">Not sure yet — I'd like more info</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Overall feeling -->
+      <div>
+        <p class="block text-sm text-gray-400 mb-2">How do you feel right now?</p>
+        <div class="space-y-2">
+          <label class="flex items-start gap-3 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+            <input type="radio" name="clarity" value="clear" required {% if fv.get('clarity') == 'clear' %}checked{% endif %} class="mt-1 accent-brand-400" id="clarity-clear">
+            <span class="text-sm">I have it all clear and I'm ready to move forward.</span>
+          </label>
+          <label class="flex items-start gap-3 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+            <input type="radio" name="clarity" value="doubts" required {% if fv.get('clarity') == 'doubts' %}checked{% endif %} class="mt-1 accent-brand-400" id="clarity-doubts">
+            <span class="text-sm">I have some questions or things I'd like to understand better.</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Free-form notes (always visible — they may want to give context regardless) -->
+      <div>
+        <label for="notes" class="block text-sm text-gray-400 mb-1">Anything you'd like us to know? <span class="text-gray-600">(optional)</span></label>
+        <textarea id="notes" name="notes" rows="3" placeholder="Questions, hesitations, scheduling notes — anything that helps us prepare for our call."
+                  class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">{{ fv.get('notes', '') }}</textarea>
+      </div>
+
+      <button type="submit" class="w-full bg-brand-400 hover:bg-brand-300 text-black font-semibold py-3 rounded-lg transition mt-2">
+        Confirm my reservation
+      </button>
+
+      <p class="text-center text-xs text-gray-600 mt-2">
+        Reminder: nothing here locks you in. We finalize everything on the call.
+      </p>
+    </form>
+  {% endif %}
+
+</div>
+{% endblock %}

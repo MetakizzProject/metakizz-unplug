@@ -1,0 +1,797 @@
+{% extends "base.html" %}
+{% set embed = true %}
+
+{% block title %}Sorteo MKOT 3.0 — Live{% endblock %}
+
+{% block content %}
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     STAGE — broadcast view for the live event
+     Layout phases:
+       1. open         → hero title + reel cycling + random toasts
+       2. closed       → same + "Let's Play!" button
+       3. winner       → hero hides, golden ticket DROPS into center,
+                          winner name reveals, confetti
+     ───────────────────────────────────────────────────────────── */
+  html, body { background: #000 !important; }
+
+  .stage {
+    background:
+      radial-gradient(ellipse at top, rgba(46,219,153,0.10), transparent 65%),
+      radial-gradient(ellipse at bottom, rgba(255,200,87,0.06), transparent 60%),
+      #000000;
+    min-height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+  .stage::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(46,219,153,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(46,219,153,0.04) 1px, transparent 1px);
+    background-size: 80px 80px;
+    pointer-events: none;
+    mask-image: radial-gradient(ellipse at center, black 25%, transparent 80%);
+  }
+
+  /* Reusable responsive reel height — used in keyframe pixel math too. */
+  :root {
+    --reel-h: clamp(110px, 18vh, 180px);
+    --hero-pad: clamp(16px, 3vw, 48px);
+  }
+
+  /* ── HERO TITLE (visible while window open / before winner) ── */
+  @keyframes glow-banner {
+    0%, 100% { text-shadow: 0 0 18px rgba(46,219,153,0.5), 0 0 36px rgba(46,219,153,0.25); }
+    50%      { text-shadow: 0 0 28px rgba(46,219,153,0.85), 0 0 64px rgba(46,219,153,0.45); }
+  }
+  .hero-title {
+    font-family: 'Unbounded', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(28px, 7vw, 88px);
+    line-height: 1.05;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #FFFFFF;
+    text-align: center;
+    animation: glow-banner 2.4s ease-in-out infinite;
+    max-width: 100%;
+    word-break: break-word;
+  }
+  .hero-title .accent {
+    background: linear-gradient(180deg, #2EDB99 0%, #27ba82 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero-eyebrow {
+    font-size: clamp(9px, 1.1vw, 13px);
+    letter-spacing: clamp(0.2em, 0.4vw, 0.5em);
+  }
+  .hero-subtitle {
+    font-size: clamp(11px, 1.5vw, 16px);
+    max-width: min(640px, 92vw);
+  }
+
+  /* ── SLOT REEL ── */
+  .reel-frame {
+    position: relative;
+    height: var(--reel-h);
+    overflow: hidden;
+    background:
+      linear-gradient(180deg, rgba(0,0,0,0.95) 0%, transparent 18%, transparent 82%, rgba(0,0,0,0.95) 100%),
+      linear-gradient(180deg, #050a07 0%, #0f1a13 100%);
+    border-top: 2px solid rgba(46,219,153,0.5);
+    border-bottom: 2px solid rgba(46,219,153,0.5);
+    box-shadow: inset 0 0 80px rgba(46,219,153,0.18), 0 0 60px rgba(46,219,153,0.18);
+  }
+  .reel-frame::before, .reel-frame::after {
+    content: ""; position: absolute; left: 0; right: 0;
+    height: clamp(28px, 6vh, 60px); pointer-events: none; z-index: 2;
+  }
+  .reel-frame::before { top: 0; background: linear-gradient(180deg, #000 5%, transparent 100%); }
+  .reel-frame::after  { bottom: 0; background: linear-gradient(0deg, #000 5%, transparent 100%); }
+  .reel-frame .selector {
+    position: absolute; left: 4%; right: 4%;
+    height: var(--reel-h); top: 0;
+    border-top: 1px solid rgba(46,219,153,0.3);
+    border-bottom: 1px solid rgba(46,219,153,0.3);
+    pointer-events: none; z-index: 3;
+  }
+  .reel-strip { display: flex; flex-direction: column; will-change: transform; }
+  .reel-item {
+    height: var(--reel-h); width: 100%; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Unbounded', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(22px, 4.6vw, 56px);
+    letter-spacing: 0.5px;
+    color: #FFFFFF; text-transform: uppercase;
+    white-space: nowrap; overflow: hidden;
+    padding: 0 clamp(16px, 4vw, 40px); line-height: 1.1;
+    text-shadow: 0 0 30px rgba(46,219,153,0.4);
+  }
+  .reel-item span { display: inline-block; max-width: 100%; white-space: nowrap; }
+  .reel-item.--winner {
+    color: #2EDB99;
+    text-shadow: 0 0 40px rgba(46,219,153,1), 0 0 80px rgba(46,219,153,0.5);
+  }
+
+  /* ── ACTION BUTTONS ── */
+  .stage-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: clamp(6px, 1vw, 12px);
+    padding: clamp(12px, 2vw, 18px) clamp(20px, 3.5vw, 36px);
+    border-radius: 999px;
+    font-family: 'Unbounded', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: clamp(13px, 1.4vw, 16px);
+    letter-spacing: clamp(1px, 0.2vw, 2px);
+    text-transform: uppercase;
+    cursor: pointer; border: none;
+    transition: transform 120ms, box-shadow 120ms;
+    min-width: clamp(160px, 22vw, 240px);
+    white-space: nowrap;
+  }
+  .stage-btn:hover { transform: translateY(-2px); }
+  .stage-btn:active { transform: translateY(0); }
+  .stage-btn-close {
+    background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+    color: #ffffff;
+    box-shadow: 0 8px 30px rgba(239, 68, 68, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  .stage-btn-close:hover { box-shadow: 0 12px 40px rgba(239, 68, 68, 0.55); }
+  .stage-btn-play {
+    background: linear-gradient(180deg, #FFC857 0%, #f59e0b 50%, #FFC857 100%);
+    background-size: 100% 200%;
+    color: #1a0f00;
+    box-shadow: 0 8px 40px rgba(255, 200, 87, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    animation: play-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes play-pulse {
+    0%, 100% { background-position: 0% 0%; box-shadow: 0 8px 40px rgba(255, 200, 87, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+    50%      { background-position: 0% 100%; box-shadow: 0 12px 60px rgba(255, 200, 87, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.6); }
+  }
+  /* Floating reset — fixed at bottom-center, always visible regardless of phase */
+  .reset-floater {
+    position: fixed;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    z-index: 60;
+  }
+  .stage-btn-reset {
+    background: rgba(0, 0, 0, 0.55);
+    color: rgba(156, 163, 175, 0.7);
+    font-size: 10px; letter-spacing: 0.2em;
+    padding: 6px 14px;
+    min-width: 0;
+    border: 1px solid rgba(156, 163, 175, 0.2);
+    border-radius: 999px;
+    backdrop-filter: blur(6px);
+    cursor: pointer;
+    font-family: 'Unbounded', system-ui, sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .stage-btn-reset:hover { color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
+
+  /* ── ACTIVITY TOASTS (random pop-ins, bottom-left) ── */
+  .toast-zone {
+    position: fixed;
+    left: clamp(8px, 2vw, 24px);
+    bottom: clamp(50px, 6vh, 80px); /* leave room for the reset floater */
+    z-index: 40;
+    display: flex; flex-direction: column-reverse; gap: 10px;
+    max-width: min(380px, calc(100vw - 32px));
+    pointer-events: none;
+  }
+  .toast {
+    display: flex; align-items: center; gap: 12px;
+    padding: clamp(10px, 1.4vw, 14px) clamp(14px, 1.8vw, 18px);
+    background: linear-gradient(180deg, rgba(13,20,16,0.95), rgba(8,12,10,0.95));
+    border: 1px solid rgba(46, 219, 153, 0.35);
+    border-radius: 14px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: clamp(11px, 1.1vw, 13px);
+    color: #d1fae5;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(46, 219, 153, 0.15);
+    transform: translateX(-120%);
+    opacity: 0;
+    animation: toast-in 0.5s cubic-bezier(.2,.9,.3,1.2) forwards,
+               toast-out 0.5s ease-in forwards 5.5s;
+    will-change: transform, opacity;
+  }
+  .toast.--gold { border-color: rgba(255, 200, 87, 0.4); color: #fde68a; }
+  .toast .toast-dot {
+    width: 8px; height: 8px; border-radius: 999px;
+    background: #2EDB99; box-shadow: 0 0 10px #2EDB99;
+    flex-shrink: 0;
+  }
+  .toast.--gold .toast-dot { background: #FFC857; box-shadow: 0 0 10px #FFC857; }
+  .toast .toast-msg { line-height: 1.35; }
+  .toast .toast-msg strong { color: #ffffff; font-weight: 700; }
+  .toast.--gold .toast-msg strong { color: #fff7d6; }
+  @keyframes toast-in {
+    from { transform: translateX(-120%); opacity: 0; }
+    to   { transform: translateX(0);     opacity: 1; }
+  }
+  @keyframes toast-out {
+    from { transform: translateX(0);     opacity: 1; }
+    to   { transform: translateX(-120%); opacity: 0; }
+  }
+
+  /* ── WINNER STAGE: golden ticket drops dramatically into center ── */
+  .winner-stage {
+    position: relative;
+    width: 100%;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0 16px;
+  }
+  .winner-ticket-wrap {
+    perspective: 1400px;
+    perspective-origin: 50% 30%;
+    width: 100%;
+    /* Adapt to viewport — the wrap caps so the ticket never busts the layout. */
+    max-width: min(880px, 92vw);
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+    isolation: isolate;
+  }
+  .winner-ticket {
+    position: relative;
+    z-index: 2;
+    display: block;
+    width: 100%;
+    max-width: min(880px, 92vw);
+    height: auto;
+    transform-origin: 50% 50%;
+    filter:
+      drop-shadow(0 0 80px rgba(255, 200, 87, 0.55))
+      drop-shadow(0 0 140px rgba(46, 219, 153, 0.25));
+    /* BASE STATE = end of entrance. */
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1.12);
+  }
+  /* Single grand entrance — combines floating descent + zoom-in punch.
+     Total: 4.6 s. Smooth easeOutQuint over the descent, then a small
+     overshoot at the end ("camera moves in"). Ends at scale 1.12 to
+     match the base state so removing the class doesn't snap back. */
+  @keyframes ticket-grand-entrance {
+    /* Off-screen above, small, gentle rotation */
+    0%   { opacity: 0; transform: translate3d(0, -130vh, 0) rotate(-6deg) scale(0.40); }
+    6%   { opacity: 1; }
+    /* Slow feather-like descent with gentle sway */
+    18%  { transform: translate3d(-32px, -100vh, 0) rotate(-3deg)  scale(0.50); }
+    32%  { transform: translate3d( 28px, -72vh,  0) rotate( 2.5deg) scale(0.62); }
+    46%  { transform: translate3d(-22px, -45vh,  0) rotate(-2deg)  scale(0.74); }
+    60%  { transform: translate3d( 16px, -22vh,  0) rotate( 1.5deg) scale(0.86); }
+    74%  { transform: translate3d( -8px,  -6vh,  0) rotate(-1deg)  scale(0.96); }
+    /* Lands at center */
+    82%  { transform: translate3d(0, 0, 0) rotate(0deg) scale(1.00); }
+    /* Zoom-in punch */
+    92%  { transform: translate3d(0, -6px, 0) rotate(0deg) scale(1.20); }
+    100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1.12); opacity: 1; }
+  }
+  /* Idle (infinite). Same scale 1.12 as base state so transitions are seamless. */
+  @keyframes ticket-victory {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1.12); }
+    50%      { transform: translate3d(0, -4px, 0) rotate(0.4deg) scale(1.125); }
+  }
+  .winner-ticket.--dropping {
+    animation: ticket-grand-entrance 4.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .winner-ticket.--victory {
+    animation: ticket-victory 4.5s ease-in-out infinite;
+  }
+  /* Land flash — sits BEHIND the ticket via z-index. */
+  .land-flash {
+    position: absolute; left: 50%; top: 50%;
+    width: 0; height: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,200,87,0.65) 0%, rgba(46,219,153,0.30) 35%, transparent 72%);
+    transform: translate(-50%, -50%);
+    opacity: 0; pointer-events: none;
+    z-index: 1; /* below the ticket */
+  }
+  .land-flash.--burst {
+    animation: land-burst 1.0s ease-out forwards;
+  }
+  @keyframes land-burst {
+    0%   { width: 60px;   height: 60px;   opacity: 0; }
+    18%  { opacity: 1; }
+    100% { width: 1400px; height: 1400px; opacity: 0; }
+  }
+
+  /* Winner text reveal (below the ticket) — fluid responsive sizing */
+  .winner-name {
+    font-family: 'Unbounded', system-ui, sans-serif;
+    font-weight: 900;
+    font-size: clamp(28px, 6vw, 72px);
+    line-height: 1.05;
+    color: #FFC857;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-shadow:
+      0 0 40px rgba(255, 200, 87, 1),
+      0 0 80px rgba(255, 200, 87, 0.5),
+      0 0 120px rgba(46, 219, 153, 0.4);
+    margin: clamp(18px, 3vh, 32px) 0 clamp(6px, 1vh, 12px) 0;
+    text-align: center;
+    max-width: 96vw;
+    word-break: break-word;
+    padding: 0 clamp(8px, 2vw, 20px);
+    opacity: 0;
+  }
+  .winner-line1, .winner-line2 {
+    font-family: 'Unbounded', system-ui, sans-serif;
+    font-weight: 700;
+    text-align: center;
+    opacity: 0;
+    max-width: 96vw;
+    padding: 0 clamp(8px, 2vw, 16px);
+  }
+  .winner-line1 {
+    font-size: clamp(16px, 3.2vw, 36px);
+    color: #FFFFFF;
+    letter-spacing: 1px;
+    margin-bottom: clamp(4px, 0.8vh, 10px);
+  }
+  .winner-line2 {
+    font-size: clamp(20px, 4.2vw, 52px);
+    background: linear-gradient(90deg, #2EDB99 0%, #FFC857 50%, #2EDB99 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: clamp(1px, 0.2vw, 2px);
+    text-transform: uppercase;
+  }
+  /* Reveal lines — start AFTER the entrance (4.6s) finishes. */
+  .winner-stage.--show .winner-name  { animation: reveal-name 0.9s cubic-bezier(.2,.9,.3,1.2) 4.7s forwards; }
+  .winner-stage.--show .winner-line1 { animation: reveal-line 0.7s cubic-bezier(.2,.9,.3,1.2) 5.3s forwards; }
+  .winner-stage.--show .winner-line2 { animation: reveal-line 0.7s cubic-bezier(.2,.9,.3,1.2) 5.9s forwards,
+                                                 shimmer 3s linear 5.9s infinite; }
+  /* If --instant is also set (page loaded post-spin), texts show immediately. */
+  .winner-stage.--instant .winner-name,
+  .winner-stage.--instant .winner-line1,
+  .winner-stage.--instant .winner-line2 { animation-delay: 0s !important; }
+  @keyframes reveal-name { 0% { opacity: 0; transform: scale(0.5); } 60% { transform: scale(1.08); } 100% { opacity: 1; transform: scale(1); } }
+  @keyframes reveal-line { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes shimmer { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+
+  /* Confetti */
+  .confetti-wrap { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 50; }
+  .confetti {
+    position: absolute; top: -20px;
+    width: 10px; height: 14px;
+    opacity: 0;
+    animation: fall 3.5s linear forwards;
+  }
+  @keyframes fall {
+    0%   { transform: translate3d(0,-40px,0) rotate(0deg); opacity: 1; }
+    100% { transform: translate3d(var(--dx,0px), 110vh, 0) rotate(720deg); opacity: 0.9; }
+  }
+</style>
+
+<div class="stage">
+
+  <div id="root" class="relative z-10 flex flex-col items-center justify-center min-h-screen w-full"
+       style="padding: clamp(24px, 4vh, 56px) clamp(12px, 3vw, 32px) clamp(60px, 6vh, 80px);">
+
+    <!-- ─── PHASE 1/2: HERO + REEL + BUTTONS ─── -->
+    <div id="hero-phase" class="w-full flex flex-col items-center">
+
+      <p class="hero-eyebrow uppercase text-brand-400 mb-4 font-mono"
+         style="margin-bottom: clamp(10px, 1.5vh, 18px);">
+        ✦ MKOT 3.0 · LIVE RAFFLE ✦
+      </p>
+      <h1 class="hero-title" style="margin-bottom: clamp(8px, 1.2vh, 16px);">
+        Win <span class="accent">Bali</span><br>
+        Immersive Experience
+      </h1>
+      <p class="hero-subtitle text-gray-400 text-center"
+         style="margin-bottom: clamp(20px, 4vh, 44px);">
+        One spot · €2,000 value · For everyone who reserved during the live.
+      </p>
+
+      <div class="w-full" style="max-width: min(880px, 95vw); margin-bottom: clamp(20px, 3.5vh, 36px);">
+        <div id="reel-frame" class="reel-frame rounded-2xl">
+          <div class="selector"></div>
+          <div id="reel" class="reel-strip">
+            <div class="reel-item"><span>—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="action-row" class="flex flex-wrap items-center justify-center"
+           style="gap: clamp(12px, 1.5vw, 18px);">
+        {% if not state.window_closed_at %}
+        <form method="POST" action="{{ url_for('admin.raffle_close') }}" id="close-form">
+          <button type="submit" class="stage-btn stage-btn-close">🔒 Close raffle</button>
+        </form>
+        {% endif %}
+
+        {% if state.window_closed_at and not winner %}
+        <button id="play-btn" class="stage-btn stage-btn-play">🎰 Let's Play!</button>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ─── PHASE 3: WINNER REVEAL ─── -->
+    <div id="winner-phase" class="winner-stage hidden w-full">
+      <div class="winner-ticket-wrap">
+        <div id="land-flash" class="land-flash"></div>
+        <img id="winner-ticket"
+             src="{{ url_for('static', filename='golden-ticket.png') }}"
+             alt="Golden Ticket · Bali Edition"
+             class="winner-ticket">
+      </div>
+      <div id="winner-name-el" class="winner-name">—</div>
+      <div class="winner-line1">you just won <span style="color:#FFC857;">€2,000</span></div>
+      <div class="winner-line2">you are going to bali 🌴</div>
+    </div>
+
+  </div>
+
+  <!-- Floating reset — ALWAYS visible, sits on top of everything except confetti -->
+  <form method="POST" action="{{ url_for('admin.raffle_reset') }}"
+        class="reset-floater"
+        onsubmit="return confirm('Reset the raffle? This clears the winner and reopens the window.');">
+    <button type="submit" class="stage-btn-reset">↻ reset raffle</button>
+  </form>
+
+  <!-- Activity toasts -->
+  <div id="toast-zone" class="toast-zone"></div>
+  <div id="confetti-wrap" class="confetti-wrap"></div>
+</div>
+
+<script>
+(function() {
+  const STATE_URL = "{{ url_for('admin.raffle_state_json') }}";
+  const SPIN_URL  = "{{ url_for('admin.raffle_spin') }}";
+
+  const reelEl       = document.getElementById('reel');
+  const heroPhase    = document.getElementById('hero-phase');
+  const winnerPhase  = document.getElementById('winner-phase');
+  const winnerNameEl = document.getElementById('winner-name-el');
+  const winnerTicket = document.getElementById('winner-ticket');
+  const landFlash    = document.getElementById('land-flash');
+  const playBtn      = document.getElementById('play-btn');
+  const toastZone    = document.getElementById('toast-zone');
+
+  const initialWinner = {{ ('"' ~ winner.name ~ ' ' ~ winner.surname ~ '"') if winner else 'null' }};
+  const initialClosed = {{ 'true' if state.window_closed_at else 'false' }};
+
+  let pool = [];          // current eligible names (full)
+  let firstNames = [];    // first names only (for toasts)
+  let activity = { last_payment_at: null, last_completion_at: null, in_progress_count: 0 };
+  let lastWinnerId = {{ winner.id if winner else 'null' }};
+  let isSpinning = false;
+  let idleInterval = null;
+  let toastTimer = null;
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  // ── Auto-fit name to width ──
+  function fitNameItem(itemEl) {
+    const span = itemEl.querySelector('span');
+    if (!span) return;
+    const containerW = itemEl.clientWidth - 64;
+    if (containerW <= 0) return;
+    let size = parseFloat(getComputedStyle(itemEl).fontSize) || 48;
+    const minSize = 18;
+    while (span.scrollWidth > containerW && size > minSize) {
+      size -= 2;
+      itemEl.style.fontSize = size + 'px';
+    }
+  }
+  function reelHtml(name, isWinner) {
+    const cls = isWinner ? 'reel-item --winner' : 'reel-item';
+    return '<div class="' + cls + '"><span>' + escapeHtml(name) + '</span></div>';
+  }
+
+  // ── Idle reel cycle ──
+  function setIdleReel() {
+    if (idleInterval) clearInterval(idleInterval);
+    if (!pool.length) {
+      reelEl.style.transform = 'translateY(0)';
+      reelEl.innerHTML = '<div class="reel-item"><span>—</span></div>';
+      return;
+    }
+    let idx = 0;
+    function tick() {
+      if (isSpinning) return;
+      reelEl.style.transform = 'translateY(0)';
+      reelEl.style.fontSize = '';
+      reelEl.innerHTML = reelHtml(pool[idx % pool.length], false);
+      const item = reelEl.firstElementChild;
+      if (item) {
+        item.style.fontSize = '';
+        requestAnimationFrame(function() { fitNameItem(item); });
+      }
+      idx++;
+    }
+    tick();
+    idleInterval = setInterval(tick, 2400);
+  }
+
+  // ── ACTIVITY TOASTS ──
+  // Pool of message templates. Some use real first names (when available),
+  // some are anonymized. Random selection + random interval (8-18s).
+  function pickFirstName() {
+    if (!firstNames.length) return null;
+    return firstNames[Math.floor(Math.random() * firstNames.length)];
+  }
+
+  function buildToastMessage() {
+    const name = pickFirstName();
+    const templates = [];
+
+    if (name) {
+      templates.push({ msg: '<strong>' + escapeHtml(name) + '</strong> just joined the raffle', tone: 'green', icon: '✦' });
+      templates.push({ msg: '<strong>' + escapeHtml(name) + '</strong> is officially in', tone: 'green', icon: '✓' });
+      templates.push({ msg: '<strong>' + escapeHtml(name) + '</strong> just locked in their spot', tone: 'gold', icon: '✦' });
+    }
+    templates.push({ msg: 'Someone is filling out their details right now', tone: 'green', icon: '📝' });
+    templates.push({ msg: 'New entry coming in...', tone: 'green', icon: '⚡' });
+    templates.push({ msg: 'Someone just paid their deposit', tone: 'gold', icon: '✦' });
+
+    if (activity.in_progress_count > 0) {
+      const n = activity.in_progress_count;
+      templates.push({
+        msg: n === 1
+          ? '<strong>1 person</strong> is completing the form right now'
+          : '<strong>' + n + ' people</strong> are completing the form right now',
+        tone: 'green', icon: '👀',
+      });
+    }
+
+    if (pool.length > 0) {
+      templates.push({
+        msg: '<strong>' + pool.length + '</strong> ' + (pool.length === 1 ? 'person is' : 'people are') + ' in the running',
+        tone: 'green', icon: '✦',
+      });
+    }
+
+    return templates[Math.floor(Math.random() * templates.length)];
+  }
+
+  function showToast() {
+    if (isSpinning || !winnerPhase.classList.contains('hidden') === false) {
+      // hidden = phase is hero; if winner showing we stop toasts
+    }
+    if (!winnerPhase.classList.contains('hidden')) return; // winner shown — stop toasts
+    if (isSpinning) return;
+
+    const m = buildToastMessage();
+    if (!m) return;
+
+    const el = document.createElement('div');
+    el.className = 'toast' + (m.tone === 'gold' ? ' --gold' : '');
+    el.innerHTML =
+      '<span class="toast-dot"></span>' +
+      '<span class="toast-msg">' +
+        '<span style="opacity:0.7;margin-right:6px;">' + escapeHtml(m.icon) + '</span>' +
+        m.msg +
+      '</span>';
+    toastZone.appendChild(el);
+
+    // Remove after slide-out animation finishes (~6s total)
+    setTimeout(function() { el.remove(); }, 6500);
+  }
+
+  function scheduleNextToast() {
+    if (toastTimer) clearTimeout(toastTimer);
+    // Random interval: 8 to 18 seconds
+    const wait = 8000 + Math.floor(Math.random() * 10000);
+    toastTimer = setTimeout(function() {
+      showToast();
+      scheduleNextToast();
+    }, wait);
+  }
+
+  // ── Spin: animate reel to winner, then trigger ticket drop ──
+  function spinAnimation(winnerName) {
+    if (isSpinning) return;
+    isSpinning = true;
+    if (idleInterval) clearInterval(idleInterval);
+    if (toastTimer) clearTimeout(toastTimer);
+
+    // Read the actual reel item height (responsive — comes from --reel-h CSS var)
+    const sampleItem = reelEl.querySelector('.reel-item');
+    const ITEM_H = sampleItem ? sampleItem.offsetHeight : 160;
+    const candidates = pool.length ? pool.slice() : [winnerName];
+    const TOTAL = 50;
+    const items = [];
+    for (let i = 0; i < TOTAL; i++) {
+      const opts = candidates.filter(function(n) { return n !== winnerName; });
+      const pick = opts.length ? opts[Math.floor(Math.random() * opts.length)] : candidates[i % candidates.length];
+      items.push(pick);
+    }
+    items.push(winnerName);
+
+    reelEl.innerHTML = items.map(function(n, i) {
+      return reelHtml(n, i === items.length - 1);
+    }).join('');
+    requestAnimationFrame(function() {
+      Array.prototype.forEach.call(reelEl.children, function(el) { fitNameItem(el); });
+    });
+
+    reelEl.style.transform = 'translateY(0)';
+    reelEl.style.transition = 'none';
+    void reelEl.offsetWidth;
+
+    const targetY = -(items.length - 1) * ITEM_H;
+    const SPIN_DURATION = 6800;
+
+    reelEl.style.filter = 'blur(1.4px)';
+    setTimeout(function() {
+      reelEl.style.transition = 'filter 0.6s ease-out';
+      reelEl.style.filter = 'blur(0)';
+    }, SPIN_DURATION * 0.55);
+
+    const anim = reelEl.animate(
+      [
+        { transform: 'translateY(0)' },
+        { transform: 'translateY(' + targetY + 'px)' },
+      ],
+      { duration: SPIN_DURATION, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' }
+    );
+
+    anim.onfinish = function() {
+      // Brief beat showing winner in reel (drama), then trigger ticket drop
+      setTimeout(function() { revealWinner(winnerName); }, 700);
+    };
+  }
+
+  // ── Winner reveal: hide hero, drop the ticket dramatically ──
+  function revealWinner(winnerName) {
+    heroPhase.classList.add('hidden');
+    winnerPhase.classList.remove('hidden');
+
+    winnerNameEl.textContent = winnerName;
+
+    // Reset and replay the entrance (single 4.6s animation: drop + zoom)
+    winnerTicket.classList.remove('--dropping', '--victory');
+    void winnerTicket.offsetWidth;
+    winnerTicket.classList.add('--dropping');
+
+    // Fire the land flash a bit BEFORE the very end (when the ticket arrives)
+    setTimeout(function() {
+      if (landFlash) {
+        landFlash.classList.remove('--burst');
+        void landFlash.offsetWidth;
+        landFlash.classList.add('--burst');
+      }
+      launchConfetti();
+    }, 4000); // ~ when ticket is reaching center
+
+    // After entrance ends → swap to victory idle (stays on screen, soft wiggle)
+    winnerTicket.addEventListener('animationend', function entranceDone(ev) {
+      if (ev.animationName !== 'ticket-grand-entrance') return;
+      winnerTicket.removeEventListener('animationend', entranceDone);
+      winnerTicket.classList.remove('--dropping');
+      winnerTicket.classList.add('--victory');
+    });
+
+    // CSS reveal of name + lines (delays defined in the stylesheet, fire after entrance)
+    winnerPhase.classList.add('--show');
+
+    isSpinning = false;
+  }
+
+  function launchConfetti() {
+    const wrap = document.getElementById('confetti-wrap');
+    const colors = ['#2EDB99', '#27ba82', '#FFC857', '#f59e0b', '#ffffff'];
+    for (let i = 0; i < 140; i++) {
+      const c = document.createElement('div');
+      c.className = 'confetti';
+      c.style.left = Math.random() * 100 + '%';
+      c.style.background = colors[Math.floor(Math.random() * colors.length)];
+      c.style.setProperty('--dx', (Math.random() * 280 - 140) + 'px');
+      c.style.animationDelay = (Math.random() * 0.8) + 's';
+      c.style.animationDuration = (3 + Math.random() * 2.5) + 's';
+      c.style.transform = 'rotate(' + (Math.random() * 360) + 'deg)';
+      wrap.appendChild(c);
+      setTimeout(function() { c.remove(); }, 6000);
+    }
+  }
+
+  // ── Polling — detect remote spin from /admin/reservations ──
+  async function poll() {
+    if (isSpinning) return;
+    try {
+      const resp = await fetch(STATE_URL, { cache: 'no-store' });
+      const data = await resp.json();
+      pool = (data.eligible || []).map(function(r) { return ((r.name || '') + ' ' + (r.surname || '')).trim(); });
+      firstNames = (data.eligible || []).map(function(r) {
+        const n = (r.name || '').trim();
+        if (!n) return null;
+        const sur = (r.surname || '').trim();
+        return sur ? (n + ' ' + sur.charAt(0) + '.') : n;
+      }).filter(Boolean);
+      activity = data.activity || { last_payment_at: null, last_completion_at: null, in_progress_count: 0 };
+
+      const isClosed = !!data.window_closed_at;
+      const winnerId = data.winner_id || (data.winner ? -1 : null);
+
+      // New winner appeared from another window → animate
+      if (data.winner && winnerId !== lastWinnerId) {
+        const fullName = ((data.winner.name || '') + ' ' + (data.winner.surname || '')).trim();
+        lastWinnerId = winnerId;
+        spinAnimation(fullName);
+        return;
+      }
+      // Window state changed → soft reload to refresh action buttons
+      if (isClosed !== initialClosed) {
+        window.location.reload();
+        return;
+      }
+    } catch (e) { console.warn('poll', e); }
+  }
+
+  // ── Spin button ──
+  if (playBtn) {
+    playBtn.addEventListener('click', async function() {
+      if (isSpinning) return;
+      playBtn.disabled = true;
+      playBtn.textContent = '… spinning …';
+      try {
+        const resp = await fetch(SPIN_URL, { method: 'POST' });
+        const data = await resp.json();
+        if (!data.ok || !data.winner) {
+          alert('No eligible entries for the raffle.');
+          playBtn.disabled = false;
+          playBtn.textContent = "🎰 Let's Play!";
+          return;
+        }
+        const fullName = ((data.winner.name || '') + ' ' + (data.winner.surname || '')).trim();
+        spinAnimation(fullName);
+      } catch (e) {
+        console.error(e);
+        alert('Error spinning the raffle.');
+        playBtn.disabled = false;
+        playBtn.textContent = "🎰 Let's Play!";
+      }
+    });
+  }
+
+  // ── Boot ──
+  fetch(STATE_URL, { cache: 'no-store' }).then(function(r) { return r.json(); }).then(function(data) {
+    pool = (data.eligible || []).map(function(r) { return ((r.name || '') + ' ' + (r.surname || '')).trim(); });
+    firstNames = (data.eligible || []).map(function(r) {
+      const n = (r.name || '').trim();
+      if (!n) return null;
+      const sur = (r.surname || '').trim();
+      return sur ? (n + ' ' + sur.charAt(0) + '.') : n;
+    }).filter(Boolean);
+    activity = data.activity || { last_payment_at: null, last_completion_at: null, in_progress_count: 0 };
+    setIdleReel();
+
+    // If page loaded with a winner already (after refresh), jump straight to the reveal — no entrance animation.
+    if (initialWinner) {
+      heroPhase.classList.add('hidden');
+      winnerPhase.classList.remove('hidden');
+      winnerNameEl.textContent = initialWinner;
+      // Skip the entrance, go straight to victory idle
+      winnerTicket.classList.add('--victory');
+      // For the static reveal we want texts visible without delays
+      winnerPhase.classList.add('--show', '--instant');
+    } else {
+      // Start the random toast pop-ins
+      scheduleNextToast();
+    }
+  }).catch(function() { setIdleReel(); });
+
+  setInterval(poll, 1500);
+})();
+</script>
+{% endblock %}

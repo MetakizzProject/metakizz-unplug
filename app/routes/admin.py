@@ -10,7 +10,7 @@ from flask import (
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
-from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent
+from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent, Reservation, RaffleState
 from app.services.temperature import bucket_from_event_set
 from app.mailer import (
     send_welcome_email,
@@ -1194,6 +1194,7 @@ def _admin_layout_context():
         "admin_routes": [
             "overview", "live", "emails", "security", "reach",
             "leads", "leads_insights", "ghosts", "network",
+            "reservations", "raffle",
         ],
         "pending_review_count": PendingReferral.query.filter_by(status="pending").count(),
     }
@@ -5065,3 +5066,238 @@ def leads_debug():
 def logout():
     session.pop("is_admin", None)
     return redirect(url_for("home.index"))
+
+
+# ─── MKOT 3.0 Raffle (live screen-share tool) ─────────────────────
+
+def _get_raffle_state():
+    """Return the singleton RaffleState row, creating it on demand."""
+    state = RaffleState.query.get(1)
+    if state is None:
+        state = RaffleState(id=1)
+        db.session.add(state)
+        db.session.commit()
+    return state
+
+
+def _eligible_reservations(state):
+    """Reservations that count for the raffle.
+
+    Eligibility:
+      - paid (paid_at IS NOT NULL)
+      - form completed (form_completed_at IS NOT NULL)
+      - if window is closed, form must have completed BEFORE the close timestamp
+    """
+    q = Reservation.query.filter(
+        Reservation.paid_at.isnot(None),
+        Reservation.form_completed_at.isnot(None),
+    )
+    if state.window_closed_at is not None:
+        q = q.filter(Reservation.form_completed_at <= state.window_closed_at)
+    return q.order_by(Reservation.form_completed_at.desc()).all()
+
+
+@admin_bp.route("/reservations")
+def reservations():
+    """Admin control room for the MKOT 3.0 live event.
+
+    Shows every Reservation row (paid + form-completed + pending), with raffle
+    controls (close window, spin, reset) and a link to open the public stage
+    view in a new tab.
+    """
+    state = _get_raffle_state()
+    eligible = _eligible_reservations(state)
+    all_rows = (
+        Reservation.query
+        .order_by(Reservation.paid_at.desc().nullslast(), Reservation.created_at.desc())
+        .all()
+    )
+    paid_total = Reservation.query.filter(Reservation.paid_at.isnot(None)).count()
+    completed_total = Reservation.query.filter(
+        Reservation.paid_at.isnot(None),
+        Reservation.form_completed_at.isnot(None),
+    ).count()
+    pending_form = paid_total - completed_total
+    return render_template(
+        "admin_reservations.html",
+        page_title="Reservas",
+        active_section="reservations",
+        rows=all_rows,
+        eligible_count=len(eligible),
+        paid_total=paid_total,
+        completed_total=completed_total,
+        pending_form=pending_form,
+        state=state,
+        winner=state.winner if state.winner_reservation_id else None,
+        **_admin_layout_context(),
+    )
+
+
+@admin_bp.route("/reservations.json")
+def reservations_json():
+    """Live polling endpoint for the /admin/reservations page."""
+    from flask import jsonify
+    state = _get_raffle_state()
+    rows = (
+        Reservation.query
+        .order_by(Reservation.paid_at.desc().nullslast(), Reservation.created_at.desc())
+        .all()
+    )
+    eligible = _eligible_reservations(state)
+    return jsonify({
+        "window_closed_at": state.window_closed_at.isoformat() if state.window_closed_at else None,
+        "winner_id": state.winner_reservation_id,
+        "winner": (
+            {"name": state.winner.name or "", "surname": state.winner.surname or ""}
+            if state.winner_reservation_id and state.winner else None
+        ),
+        "eligible_count": len(eligible),
+        "paid_total": sum(1 for r in rows if r.paid_at),
+        "completed_total": sum(1 for r in rows if r.paid_at and r.form_completed_at),
+        "rows": [
+            {
+                "id": r.id,
+                "paid_at": r.paid_at.isoformat() if r.paid_at else None,
+                "form_completed_at": r.form_completed_at.isoformat() if r.form_completed_at else None,
+                "email": r.email,
+                "name": r.name or "",
+                "surname": r.surname or "",
+                "program_choice": r.program_choice or "",
+                "modality_choice": r.modality_choice or "",
+                "payment_plan": r.payment_plan or "",
+                "clarity": r.clarity or "",
+                "notes": r.notes or "",
+                "amount_cents": r.amount_cents or 0,
+                "stripe_session_id": r.stripe_session_id,
+                "ambassador_id": r.ambassador_id,
+            }
+            for r in rows
+        ],
+    })
+
+
+@admin_bp.route("/raffle")
+def raffle():
+    state = _get_raffle_state()
+    eligible = _eligible_reservations(state)
+    winner = state.winner if state.winner_reservation_id else None
+    return render_template(
+        "admin_raffle.html",
+        state=state,
+        eligible=eligible,
+        eligible_count=len(eligible),
+        winner=winner,
+    )
+
+
+@admin_bp.route("/raffle/state.json")
+def raffle_state_json():
+    """Polled by the raffle page to refresh the entrant list and live ticker."""
+    from flask import jsonify
+    state = _get_raffle_state()
+    eligible = _eligible_reservations(state)
+
+    # Live activity signals for the stage ticker.
+    last_payment = (
+        Reservation.query
+        .filter(Reservation.paid_at.isnot(None))
+        .order_by(Reservation.paid_at.desc())
+        .first()
+    )
+    last_completion = (
+        Reservation.query
+        .filter(Reservation.form_completed_at.isnot(None))
+        .order_by(Reservation.form_completed_at.desc())
+        .first()
+    )
+    # "Filling out the form right now" = paid but no form yet, in the last 30 min.
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=30)
+    in_progress = Reservation.query.filter(
+        Reservation.paid_at.isnot(None),
+        Reservation.form_completed_at.is_(None),
+        Reservation.paid_at >= cutoff,
+    ).count()
+
+    return jsonify({
+        "window_closed_at": state.window_closed_at.isoformat() if state.window_closed_at else None,
+        "winner_id": state.winner_reservation_id,
+        "eligible_count": len(eligible),
+        "eligible": [
+            {
+                "id": r.id,
+                "name": r.name or "",
+                "surname": r.surname or "",
+                "form_completed_at": r.form_completed_at.isoformat() if r.form_completed_at else None,
+            }
+            for r in eligible
+        ],
+        "winner": (
+            {
+                "id": state.winner.id,
+                "name": state.winner.name or "",
+                "surname": state.winner.surname or "",
+            }
+            if state.winner_reservation_id and state.winner else None
+        ),
+        "activity": {
+            "last_payment_at": last_payment.paid_at.isoformat() if last_payment and last_payment.paid_at else None,
+            "last_completion_at": last_completion.form_completed_at.isoformat() if last_completion and last_completion.form_completed_at else None,
+            "in_progress_count": in_progress,
+        },
+    })
+
+
+@admin_bp.route("/raffle/close", methods=["POST"])
+def raffle_close():
+    state = _get_raffle_state()
+    if state.window_closed_at is None:
+        state.window_closed_at = datetime.now(timezone.utc)
+        state.closed_by_admin = "admin"
+        db.session.commit()
+    return redirect(url_for("admin.raffle"))
+
+
+@admin_bp.route("/raffle/spin", methods=["POST"])
+def raffle_spin():
+    """Pick a random winner from current eligibles. Idempotent: once a
+    winner is set, returns the same one."""
+    from flask import jsonify
+    import random
+    state = _get_raffle_state()
+    if state.winner_reservation_id:
+        # Already spun — return the existing winner.
+        w = state.winner
+        return jsonify({
+            "ok": True, "already_spun": True,
+            "winner": {"id": w.id, "name": w.name or "", "surname": w.surname or ""},
+        })
+
+    eligible = _eligible_reservations(state)
+    if not eligible:
+        return jsonify({"ok": False, "error": "no eligible reservations"}), 400
+
+    winner = random.choice(eligible)
+    state.winner_reservation_id = winner.id
+    state.spun_at = datetime.now(timezone.utc)
+    # If the window wasn't closed yet, close it now (spinning implies cutoff).
+    if state.window_closed_at is None:
+        state.window_closed_at = state.spun_at
+        state.closed_by_admin = "admin (spin)"
+    db.session.commit()
+    return jsonify({
+        "ok": True, "already_spun": False,
+        "winner": {"id": winner.id, "name": winner.name or "", "surname": winner.surname or ""},
+    })
+
+
+@admin_bp.route("/raffle/reset", methods=["POST"])
+def raffle_reset():
+    """Reset the raffle window AND winner. Use with care — for testing or
+    for running multiple raffles in the same session."""
+    state = _get_raffle_state()
+    state.window_closed_at = None
+    state.winner_reservation_id = None
+    state.spun_at = None
+    state.closed_by_admin = None
+    db.session.commit()
+    return redirect(url_for("admin.raffle"))
