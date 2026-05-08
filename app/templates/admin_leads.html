@@ -415,7 +415,7 @@
         </a>
       {% endfor %}
 
-      {% if funnel_visited and (funnel_visited[1] or funnel_visited[2]) %}
+      {% if funnel_visited and (funnel_visited[1] or funnel_visited[2] or funnel_visited.get(3, 0)) %}
       <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(46,219,153,0.12);
                   font-family:'Share Tech Mono',monospace; font-size:10px;
                   color:#9CA3AF; letter-spacing:0.08em;">
@@ -423,6 +423,8 @@
         <span style="color:#FFC857; margin-left:6px;">C1 · {{ funnel_visited[1] }}</span>
         <span style="color:#6B7280; margin:0 4px;">·</span>
         <span style="color:#FFC857;">C2 · {{ funnel_visited[2] }}</span>
+        <span style="color:#6B7280; margin:0 4px;">·</span>
+        <span style="color:#FFC857;">C3 · {{ funnel_visited.get(3, 0) }}</span>
         <span style="color:#6B7280; margin-left:8px; font-size:9px;">(opened the page, didn't actually press play)</span>
       </div>
       {% endif %}
@@ -549,6 +551,10 @@
           <label class="checkbox-pill {% if f_class_2 %}checked{% endif %}">
             <input type="checkbox" name="class_2" value="1" {% if f_class_2 %}checked{% endif %} onchange="this.form.submit()">
             Class 2
+          </label>
+          <label class="checkbox-pill {% if f_class_3 %}checked{% endif %}">
+            <input type="checkbox" name="class_3" value="1" {% if f_class_3 %}checked{% endif %} onchange="this.form.submit()">
+            Class 3
           </label>
           <label class="checkbox-pill {% if f_webinar %}checked{% endif %}" style="--accent: #DC2626;">
             <input type="checkbox" name="webinar" value="1" {% if f_webinar %}checked{% endif %} onchange="this.form.submit()">

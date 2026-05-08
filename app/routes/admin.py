@@ -194,7 +194,9 @@ _FUNNEL_STAGES_FOR_BAR = [
     ("Finished Class 1",  "#FFC857", "class1_min95"),
     ("Started Class 2",   "#FFC857", "class2_min25"),
     ("Finished Class 2",  "#F97316", "class2_min95"),
-    ("Joined Webinar",    "#DC2626", "webinar"),
+    ("Joined Live",       "#DC2626", "webinar"),
+    ("Started Class 3",   "#DC2626", "class3_min25"),
+    ("Finished Class 3",  "#A78BFA", "class3_min95"),
     ("Purchased",         "#A78BFA", "customer"),
 ]
 
@@ -222,9 +224,11 @@ def _compute_launch_funnel(total_leads):
         class_visited_event_types,
     )
 
-    # Pull every event type we care about in ONE query.
+    # Pull every event type we care about in ONE query. Class 3 is the
+    # live-replay (Bunny Stream upload after the Zoom session) and now
+    # part of the conversion path.
     funnel_event_keys = set()
-    for cn in (1, 2):
+    for cn in (1, 2, 3):
         funnel_event_keys.update(class_started_event_types(cn))
         funnel_event_keys.update(class_completed_event_types(cn))
         funnel_event_keys.update(class_visited_event_types(cn))
@@ -249,10 +253,13 @@ def _compute_launch_funnel(total_leads):
 
     started_1 = _union(class_started_event_types(1))
     started_2 = _union(class_started_event_types(2))
+    started_3 = _union(class_started_event_types(3))
     finished_1 = _union(class_completed_event_types(1))
     finished_2 = _union(class_completed_event_types(2))
+    finished_3 = _union(class_completed_event_types(3))
     visited_1 = _union(class_visited_event_types(1)) - started_1
     visited_2 = _union(class_visited_event_types(2)) - started_2
+    visited_3 = _union(class_visited_event_types(3)) - started_3
 
     counts = {
         "registered":   total_leads,
@@ -260,6 +267,8 @@ def _compute_launch_funnel(total_leads):
         "class1_min95": len(finished_1),
         "class2_min25": len(started_2),
         "class2_min95": len(finished_2),
+        "class3_min25": len(started_3),
+        "class3_min95": len(finished_3),
         "webinar":      len(by_event.get("webinar_joined", set())),
         "customer":     len(by_event.get("purchase_completed", set())),
     }
@@ -279,7 +288,7 @@ def _compute_launch_funnel(total_leads):
 
     return {
         "steps": funnel_steps,
-        "visited": {1: len(visited_1), 2: len(visited_2)},
+        "visited": {1: len(visited_1), 2: len(visited_2), 3: len(visited_3)},
     }
 
 
@@ -366,6 +375,7 @@ def _compute_ghost_summary():
           "event_count":    int,
           "class1_max":     int (0..100),
           "class2_max":     int (0..100),
+          "class3_max":     int (0..100),
           "webinar_joined": bool,
           "event_types":    set[str],
           "bucket_key":     "cold"|"cool"|"warm"|"hot"|"burning"|"customer",
@@ -432,6 +442,7 @@ def _compute_ghost_summary():
             "event_count": 0,
             "class1_max": 0,
             "class2_max": 0,
+            "class3_max": 0,
             "event_types": set(),
             "utm_source": None,
             "utm_medium": None,
@@ -447,9 +458,19 @@ def _compute_ghost_summary():
             s["first_seen"] = ts
         if ts and (s["last_seen"] is None or ts > s["last_seen"]):
             s["last_seen"] = ts
-        if cn in (1, 2):
+        # class_number column may be NULL on legacy rows — fall back to
+        # parsing the event_type prefix (class1_/class2_/class3_).
+        cn_eff = cn
+        if cn_eff not in (1, 2, 3):
+            ev = et or ""
+            if ev.startswith("class") and len(ev) >= 6:
+                try:
+                    cn_eff = int(ev[5])
+                except ValueError:
+                    cn_eff = None
+        if cn_eff in (1, 2, 3):
             p = _pct_from_event(et, pct)
-            key = f"class{cn}_max"
+            key = f"class{cn_eff}_max"
             if p > s[key]:
                 s[key] = p
         # Latest non-null UTM/ref/page_url wins (events ordered ASC by created_at)
@@ -1264,9 +1285,9 @@ def _admin_layout_context():
         # Routes whose nav-link is enabled in the sidebar. Missing keys
         # render as href="#" (admin_base.html fallback).
         "admin_routes": [
-            "overview", "live", "emails", "security", "reach",
-            "leads", "leads_insights", "ghosts", "network",
-            "reservations", "raffle",
+            "overview", "live", "emails", "class_views",
+            "security", "reach", "leads", "leads_insights",
+            "ghosts", "network", "reservations", "raffle",
         ],
         "pending_review_count": PendingReferral.query.filter_by(status="pending").count(),
     }
@@ -3881,6 +3902,8 @@ def plf_status():
         "class1_progress_75", "class1_progress_95", "class1_completed",
         "class2_viewed", "class2_progress_25", "class2_progress_50",
         "class2_progress_75", "class2_progress_95", "class2_completed",
+        "class3_viewed", "class3_progress_25", "class3_progress_50",
+        "class3_progress_75", "class3_progress_95", "class3_completed",
         "webinar_link_clicked", "webinar_joined",
         "purchase_completed",
     ]
@@ -4457,6 +4480,7 @@ def leads():
     has_phone  = request.args.get("has_phone") == "1"
     class_1    = request.args.get("class_1") == "1"
     class_2    = request.args.get("class_2") == "1"
+    class_3    = request.args.get("class_3") == "1"
     webinar_joined_filter = request.args.get("webinar") == "1"
     sort_mode  = (request.args.get("sort") or "").strip().lower()  # "" | "temp" | "temp_asc"
     page       = max(1, request.args.get("page", default=1, type=int))
@@ -4525,6 +4549,8 @@ def leads():
         base = _add_class_filter(base, 1)
     if class_2:
         base = _add_class_filter(base, 2)
+    if class_3:
+        base = _add_class_filter(base, 3)
 
     # Webinar filter: leads who actually joined the live (webinar_joined event).
     if webinar_joined_filter:
@@ -4786,7 +4812,7 @@ def leads():
         # Filter values to repopulate the UI
         f_q=q, f_source=source, f_origin=origin, f_tag=tag_filter,
         f_temp=temp_bucket, f_has_phone=has_phone,
-        f_class_1=class_1, f_class_2=class_2,
+        f_class_1=class_1, f_class_2=class_2, f_class_3=class_3,
         f_webinar=webinar_joined_filter,
         f_sort=sort_mode,
         relevant_tags=sorted(RELEVANT_LEAD_TAGS),
@@ -4819,6 +4845,7 @@ def leads_ghosts():
     temp_bucket= (request.args.get("temp") or "").strip().lower()
     class_1    = request.args.get("class_1") == "1"
     class_2    = request.args.get("class_2") == "1"
+    class_3    = request.args.get("class_3") == "1"
     webinar    = request.args.get("webinar") == "1"
     sort_mode  = (request.args.get("sort") or "").strip().lower()
     page       = max(1, request.args.get("page", default=1, type=int))
@@ -4835,6 +4862,8 @@ def leads_ghosts():
         ghosts = [g for g in ghosts if g["class1_max"] >= 25]
     if class_2:
         ghosts = [g for g in ghosts if g["class2_max"] >= 25]
+    if class_3:
+        ghosts = [g for g in ghosts if g.get("class3_max", 0) >= 25]
     if webinar:
         ghosts = [g for g in ghosts if g["webinar_joined"]]
 
@@ -4845,6 +4874,7 @@ def leads_ghosts():
         "total":       len(all_ghosts),
         "class1":      sum(1 for g in all_ghosts if g["class1_max"] >= 25),
         "class2":      sum(1 for g in all_ghosts if g["class2_max"] >= 25),
+        "class3":      sum(1 for g in all_ghosts if g.get("class3_max", 0) >= 25),
         "webinar":     sum(1 for g in all_ghosts if g["webinar_joined"]),
     }
 
@@ -4881,6 +4911,7 @@ def leads_ghosts():
     if temp_bucket: active_chips.append({"label": f"temp: {temp_bucket}", "url": _without("temp")})
     if class_1:     active_chips.append({"label": "watched C1", "url": _without("class_1")})
     if class_2:     active_chips.append({"label": "watched C2", "url": _without("class_2")})
+    if class_3:     active_chips.append({"label": "watched C3", "url": _without("class_3")})
     if webinar:     active_chips.append({"label": "joined webinar", "url": _without("webinar")})
     if sort_mode == "temp":
         active_chips.append({"label": "sort: 🔥 hottest first", "url": _without("sort")})
@@ -4902,7 +4933,7 @@ def leads_ghosts():
         page=page,
         pages=pages,
         per_page=per_page,
-        f_q=q, f_temp=temp_bucket, f_class_1=class_1, f_class_2=class_2,
+        f_q=q, f_temp=temp_bucket, f_class_1=class_1, f_class_2=class_2, f_class_3=class_3,
         f_webinar=webinar, f_sort=sort_mode,
         active_chips=active_chips,
         clear_all_url=url_for("admin.leads_ghosts"),
