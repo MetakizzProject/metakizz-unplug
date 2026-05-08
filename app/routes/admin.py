@@ -32,6 +32,7 @@ from app.mailer import (
     send_class1_rewatch_reminder_email,
     send_class2_rewatch_reminder_email,
     send_class3_rewatch_reminder_email,
+    send_reservation_first50_email,
     _send as _mailer_send,  # low-level Resend POST, used by /admin/broadcast
     # legacy:
     send_first_referral_email,
@@ -2889,6 +2890,17 @@ def test_email():
             elif email_type == "class3_rewatch_reminder":
                 fake.referral_count = 0
                 success = send_class3_rewatch_reminder_email(fake, app_url)
+
+            elif email_type == "reservation_first50":
+                # Reservation-based template — build a fake Reservation row.
+                class _FakeRes:
+                    pass
+                fr = _FakeRes()
+                fr.email = to_email
+                fr.name = fake.name
+                fr.amount_cents = 10000  # 100€ for preview
+                fr.ambassador = None
+                success = send_reservation_first50_email(fr)
 
             else:
                 flash(f"Unknown email type: {email_type}", "error")
@@ -5853,6 +5865,21 @@ def preview_reservation_email():
     sample_amount = request.args.get("amount", "100")
     return render_template(
         "emails/reservation_confirmed.html",
+        first_name=sample_first_name,
+        email=sample_email,
+        amount_eur=sample_amount,
+    )
+
+
+@admin_bp.route("/email-preview/reservation-first50")
+def preview_reservation_first50_email():
+    """Outreach email for paid reservations we haven't reached on WhatsApp.
+    Frames the buyer as 'first 50' and asks them to start a WA chat with us."""
+    sample_first_name = request.args.get("name", "Maria")
+    sample_email = request.args.get("email", "maria@example.com")
+    sample_amount = request.args.get("amount", "100")
+    return render_template(
+        "emails/reservation_first50.html",
         first_name=sample_first_name,
         email=sample_email,
         amount_eur=sample_amount,

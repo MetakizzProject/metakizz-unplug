@@ -239,6 +239,19 @@
                     <span class="text-xs text-gray-500">manual</span>
                 </div>
             </button>
+
+            <button type="submit" name="type" value="reservation_first50"
+                class="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-3 rounded-lg transition text-left">
+                <div class="flex items-center justify-between">
+                    <span>19. <strong class="text-brand-400">First 50 — paid outreach</strong> · WhatsApp CTA + finalize admission</span>
+                    <span class="text-xs text-gray-500">manual</span>
+                </div>
+            </button>
+
+            <a href="{{ url_for('admin.preview_reservation_first50_email') }}" target="_blank"
+                class="block w-full bg-gray-900 hover:bg-gray-800 text-gray-300 text-xs font-mono px-4 py-2 rounded-lg transition text-center border border-gray-700">
+                ↗ Preview "First 50 outreach" in browser
+            </a>
         </div>
 
     </form>

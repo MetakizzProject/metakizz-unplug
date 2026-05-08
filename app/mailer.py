@@ -277,6 +277,42 @@ def send_reservation_confirmed(reservation):
     )
 
 
+def send_reservation_first50_email(reservation):
+    """Outreach email for paid Reservations we haven't reached on WhatsApp.
+    Frames the buyer as 'first 50 to commit' and asks them to start a
+    WhatsApp chat with us so we can finalize admission together.
+    """
+    if not reservation or not reservation.email:
+        return False
+
+    ambassador = reservation.ambassador
+    if ambassador is not None and is_unsubscribed(ambassador):
+        return False
+
+    first_name = "there"
+    if reservation.name and reservation.name.strip():
+        first_name = reservation.name.strip().split()[0]
+    elif ambassador is not None and ambassador.name and ambassador.name.strip():
+        first_name = ambassador.name.strip().split()[0]
+
+    amount_eur = "{:.0f}".format((reservation.amount_cents or 10000) / 100)
+
+    html = render_template(
+        "emails/reservation_first50.html",
+        first_name=first_name,
+        email=reservation.email,
+        amount_eur=amount_eur,
+    )
+
+    return _send(
+        reservation.email,
+        "You're in the first 50 — let's talk",
+        html,
+        template_key="reservation_first50",
+        ambassador=ambassador,
+    )
+
+
 # ─── EMAIL 1: WELCOME ────────────────────────────────────────────
 
 def send_welcome_email(ambassador, app_url):
