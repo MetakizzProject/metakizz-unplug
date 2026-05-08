@@ -61,16 +61,17 @@ def _safe(fn, default, *args, **kwargs):
 # ════════════════════════════════════════════════════════════════════
 
 # Funnel events used by the SQL-aggregation classification helpers.
-# Launch is 2 classes + 1 live webinar — Class 3 doesn't exist as content.
+# Launch is 2 classes + 1 live webinar + Class 3 = the live replay (Bunny
+# Stream upload after the live; tracked identically to class 1/2).
 _FUNNEL_EVENT_KEYS = [
     "purchase_completed",
     "webinar_joined",
-    "class1_completed", "class2_completed",
-    "class1_progress_95", "class2_progress_95",
-    "class1_progress_75", "class2_progress_75",
-    "class1_progress_50", "class2_progress_50",
-    "class1_progress_25", "class2_progress_25",
-    "class1_viewed", "class2_viewed",
+    "class1_completed", "class2_completed", "class3_completed",
+    "class1_progress_95", "class2_progress_95", "class3_progress_95",
+    "class1_progress_75", "class2_progress_75", "class3_progress_75",
+    "class1_progress_50", "class2_progress_50", "class3_progress_50",
+    "class1_progress_25", "class2_progress_25", "class3_progress_25",
+    "class1_viewed", "class2_viewed", "class3_viewed",
 ]
 
 
@@ -86,47 +87,112 @@ def _emails_in_temp_bucket(bucket: str) -> set:
     apply the temperature filter globally instead of just on the
     current page slice.
 
+    Three data sources combined per email:
+      1. LeadEvent rows with email set → email→event_types
+      2. LeadEvent rows with email NULL but ambassador_id set (the Zoom
+         guests rematched by name) → look up the ambassador's email and
+         attribute the events to that
+      3. Reservation rows with paid_at IS NOT NULL → has_paid_reservation
+         flag promotes the bucket to ≥burning
+
     Returns empty set on error (so a failing query becomes "no matches"
     rather than 500-ing the whole page).
     """
-    from app.models import LeadEvent
+    from app.models import LeadEvent, Reservation
     try:
-        rows = (
+        # 1. Email-keyed events (Lovable-tracked class views, most cases)
+        email_rows = (
             db.session.query(LeadEvent.email, LeadEvent.event_type)
             .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
+            .filter(LeadEvent.email.isnot(None))
             .distinct()
             .all()
         )
+        # 2. Events linked only by ambassador_id (Zoom guests rematched
+        #    by name — no email captured by Zoom). Join Ambassador to
+        #    get the canonical email.
+        amb_rows = (
+            db.session.query(Ambassador.email, LeadEvent.event_type)
+            .join(LeadEvent, LeadEvent.ambassador_id == Ambassador.id)
+            .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
+            .filter(or_(LeadEvent.email.is_(None), LeadEvent.email == ""))
+            .filter(Ambassador.email.isnot(None))
+            .distinct()
+            .all()
+        )
+        # 3. Paid reservations (each paid email auto-promotes to burning)
+        paid_emails = {
+            (em or "").lower() for (em,) in
+            db.session.query(Reservation.email)
+            .filter(Reservation.paid_at.isnot(None))
+            .all() if em
+        }
     except Exception:
         logger.exception("emails_in_temp_bucket query failed")
         return set()
 
     by_email = defaultdict(set)
-    for em, et in rows:
+    for em, et in email_rows:
+        if em:
+            by_email[em.lower()].add(et)
+    for em, et in amb_rows:
         if em:
             by_email[em.lower()].add(et)
 
-    return {em for em, evts in by_email.items() if _email_to_bucket(evts) == bucket}
+    # Make sure every paid email is at least represented (so burning bucket
+    # picks them up even when they have no class events).
+    for em in paid_emails:
+        if em not in by_email:
+            by_email[em] = set()
+
+    return {
+        em for em, evts in by_email.items()
+        if _email_to_bucket(evts, has_paid_reservation=(em in paid_emails)) == bucket
+    }
 
 
 def _quick_temp_dist_sql():
     """Approximate temperature distribution via SQL aggregation.
 
-    Uses the launch-day-friendly _email_to_bucket() classification (any
-    class_completed → burning). Returns dict {bucket_key: count}.
+    Aggregates events from three sources (email-keyed, ambassador-keyed,
+    and paid reservations) so the bucket counts include guests rematched
+    by name and customers with payment intent. Returns dict {bucket_key: count}.
     """
-    from app.models import LeadEvent, Ambassador
+    from app.models import LeadEvent, Ambassador, Reservation
 
-    rows = (
+    email_rows = (
         db.session.query(LeadEvent.email, LeadEvent.event_type)
         .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
+        .filter(LeadEvent.email.isnot(None))
         .distinct()
         .all()
     )
+    amb_rows = (
+        db.session.query(Ambassador.email, LeadEvent.event_type)
+        .join(LeadEvent, LeadEvent.ambassador_id == Ambassador.id)
+        .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
+        .filter(or_(LeadEvent.email.is_(None), LeadEvent.email == ""))
+        .filter(Ambassador.email.isnot(None))
+        .distinct()
+        .all()
+    )
+    paid_emails = {
+        (em or "").lower() for (em,) in
+        db.session.query(Reservation.email)
+        .filter(Reservation.paid_at.isnot(None))
+        .all() if em
+    }
+
     by_email = defaultdict(set)
-    for em, et in rows:
+    for em, et in email_rows:
         if em:
             by_email[em.lower()].add(et)
+    for em, et in amb_rows:
+        if em:
+            by_email[em.lower()].add(et)
+    for em in paid_emails:
+        if em not in by_email:
+            by_email[em] = set()
 
     total_reachable = (
         Ambassador.query.filter(Ambassador.unsubscribed_at.is_(None)).count()
@@ -134,7 +200,7 @@ def _quick_temp_dist_sql():
 
     counts = {"customer": 0, "burning": 0, "hot": 0, "warm": 0, "cool": 0, "cold": 0}
     for em, evts in by_email.items():
-        bucket = _email_to_bucket(evts)
+        bucket = _email_to_bucket(evts, has_paid_reservation=(em in paid_emails))
         if bucket in counts:
             counts[bucket] += 1
 
