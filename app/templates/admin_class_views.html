@@ -108,11 +108,71 @@
     {% endfor %}
     </div>
 
-    {# Combined attendees table — across all 3 classes #}
+    {# ── FILTERS for the unified table ── #}
+    <div class="rounded-xl border border-gray-700 bg-black/40 p-4 mb-4">
+        <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-blue-300 mb-3">▌ Filter the attendees table below</p>
+
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span class="text-[11px] text-gray-500 font-mono-term tracking-wider uppercase mr-2">Class:</span>
+            {% for n in [None, 1, 2, 3] %}
+                {% set qs = request.args.to_dict() %}
+                {% set _ = qs.pop('page', None) %}
+                {% if n is none %}{% set _ = qs.pop('class', None) %}{% else %}{% set _ = qs.update({'class': n}) %}{% endif %}
+                {% set is_active = (n == f_class) or (n is none and not f_class) %}
+                <a href="?{{ qs|urlencode }}"
+                   class="font-mono-term text-[10px] tracking-wider uppercase px-3 py-1.5 rounded {% if is_active %}bg-brand-400 text-black font-bold{% else %}border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400{% endif %}">
+                    {% if n is none %}All classes{% else %}Class {{ n }}{% endif %}
+                </a>
+            {% endfor %}
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span class="text-[11px] text-gray-500 font-mono-term tracking-wider uppercase mr-2">Bucket:</span>
+            {% for key, label in [
+                (None, 'All buckets'),
+                ('returner', 'Came back'),
+                ('sleeper', "Didn't return"),
+                ('rewatch_only', 'First time this weekend'),
+                ('first_only', 'Launch only'),
+            ] %}
+                {% set qs = request.args.to_dict() %}
+                {% set _ = qs.pop('page', None) %}
+                {% if key is none %}{% set _ = qs.pop('bucket', None) %}{% else %}{% set _ = qs.update({'bucket': key}) %}{% endif %}
+                {% set is_active = (key == f_bucket) or (key is none and not f_bucket) %}
+                <a href="?{{ qs|urlencode }}"
+                   class="font-mono-term text-[10px] tracking-wider uppercase px-3 py-1.5 rounded {% if is_active %}bg-brand-400 text-black font-bold{% else %}border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400{% endif %}">
+                    {{ label }}
+                </a>
+            {% endfor %}
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-[11px] text-gray-500 font-mono-term tracking-wider uppercase mr-2">Min progress:</span>
+            {% for n in [0, 25, 50, 75, 95] %}
+                {% set qs = request.args.to_dict() %}
+                {% set _ = qs.pop('page', None) %}
+                {% if n == 0 %}{% set _ = qs.pop('min_pct', None) %}{% else %}{% set _ = qs.update({'min_pct': n}) %}{% endif %}
+                {% set is_active = (n == f_min_pct) or (n == 0 and not f_min_pct) %}
+                <a href="?{{ qs|urlencode }}"
+                   class="font-mono-term text-[10px] tracking-wider uppercase px-3 py-1.5 rounded {% if is_active %}bg-brand-400 text-black font-bold{% else %}border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400{% endif %}">
+                    {% if n == 0 %}Any{% else %}≥{{ n }}%{% endif %}
+                </a>
+            {% endfor %}
+
+            {% if f_class or f_bucket or f_min_pct %}
+                <a href="{{ url_for('admin.class_views') }}"
+                   class="ml-auto font-mono-term text-[10px] tracking-wider uppercase text-red-400 hover:text-red-300 px-3 py-1.5">
+                    × Clear filters
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Combined attendees table — across all 3 classes (filtered) #}
     <div class="rounded-xl border border-gray-700 bg-gray-900/40 overflow-hidden">
         <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-            <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-white">▌ Attendees · sorted by bucket then recent activity</p>
-            <span class="text-xs text-gray-500">{{ classes|sum(attribute='total_unique') }} rows across 3 classes</span>
+            <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-white">▌ Attendees{% if f_class %} · only Class {{ f_class }}{% endif %}{% if f_bucket %} · {{ f_bucket }}{% endif %}</p>
+            <span class="text-xs text-gray-500">{{ filtered_rows|length }} {% if f_class or f_bucket or f_min_pct %}match{{ '' if filtered_rows|length == 1 else 'es' }}{% else %}total rows across 3 classes{% endif %}</span>
         </div>
         <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -127,8 +187,8 @@
                 </tr>
             </thead>
             <tbody>
-                {% for c in classes %}
-                    {% for r in c.rows %}
+                {% if filtered_rows %}
+                {% for c, r in filtered_rows %}
                     <tr class="border-b border-gray-800 hover:bg-gray-800/40">
                         <td class="px-4 py-2.5">
                             <span class="font-mono-term text-[10px] tracking-wider uppercase text-brand-400">{{ c.label }}</span>
@@ -178,8 +238,10 @@
                             {{ r.first_view_at.strftime('%m-%d %H:%M') }} → {{ r.last_view_at.strftime('%m-%d %H:%M') }}
                         </td>
                     </tr>
-                    {% endfor %}
                 {% endfor %}
+                {% else %}
+                    <tr><td colspan="6" class="text-center text-gray-500 py-12 italic">No attendees match the current filters.</td></tr>
+                {% endif %}
             </tbody>
         </table>
         </div>

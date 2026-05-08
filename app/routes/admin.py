@@ -4553,11 +4553,18 @@ def leads():
         base = _add_class_filter(base, 3)
 
     # Webinar filter: leads who actually joined the live (webinar_joined event).
+    # Match by EITHER email OR ambassador_id — the Zoom import wrote
+    # ambassador_id directly when matching by name and left email empty
+    # (Zoom guests have no email captured), so an email-only join misses
+    # them. The OR catches both pathways.
     if webinar_joined_filter:
         sub = (
-            db.session.query(LeadEvent.email)
-            .filter(func.lower(LeadEvent.email) == func.lower(Ambassador.email))
+            db.session.query(LeadEvent.id)
             .filter(LeadEvent.event_type == "webinar_joined")
+            .filter(or_(
+                LeadEvent.ambassador_id == Ambassador.id,
+                func.lower(LeadEvent.email) == func.lower(Ambassador.email),
+            ))
             .exists()
         )
         base = base.filter(sub)
@@ -5729,11 +5736,34 @@ def class_views():
 
     Pulls every class{N}_viewed/completed/progress_* LeadEvent, segments
     each ambassador as: never-viewed | first-view-only | returner |
-    rewatch-only (rare). Surfaces the "sleepers" set (first-view but no
+    rewatch-only (rare). Surfaces the "didn't return" set (first-view but no
     rewatch yet) — that's the audience for the rewatch reminder email.
+
+    Filters via query string:
+      ?class=1|2|3   — restrict the unified table to one class only
+      ?bucket=returner|sleeper|rewatch_only|first_only  — restrict by bucket
+      ?min_pct=25|50|75|95   — only rows with at least this max progress
     """
     cutoff = _rewatch_cutoff()
     cutoff_iso = current_app.config.get("REWATCH_WINDOW_OPENS_AT")
+
+    # Filter inputs
+    f_class = (request.args.get("class") or "").strip()
+    try:
+        f_class = int(f_class) if f_class else None
+        if f_class not in (1, 2, 3):
+            f_class = None
+    except (TypeError, ValueError):
+        f_class = None
+    f_bucket = (request.args.get("bucket") or "").strip().lower()
+    if f_bucket not in ("returner", "sleeper", "rewatch_only", "first_only"):
+        f_bucket = ""
+    try:
+        f_min_pct = int(request.args.get("min_pct") or 0)
+    except (TypeError, ValueError):
+        f_min_pct = 0
+    if f_min_pct not in (0, 25, 50, 75, 95):
+        f_min_pct = 0
 
     # All class engagement events in one scan (≤10k rows in practice).
     class_event_types = [
@@ -5854,11 +5884,28 @@ def class_views():
             "rows": rows,
         })
 
+    # Apply filters to the unified row list (only used for the table at
+    # the bottom — the per-class panel KPIs always show unfiltered totals).
+    filtered_rows = []
+    for cls in classes:
+        if f_class is not None and cls["n"] != f_class:
+            continue
+        for r in cls["rows"]:
+            if f_bucket and r["bucket"] != f_bucket:
+                continue
+            if f_min_pct and r["max_pct"] < f_min_pct:
+                continue
+            filtered_rows.append((cls, r))
+
     return render_template(
         "admin_class_views.html",
         page_title="Class Views",
-        active_section="emails",
+        active_section="class_views",
         classes=classes,
+        filtered_rows=filtered_rows,
+        f_class=f_class,
+        f_bucket=f_bucket,
+        f_min_pct=f_min_pct,
         cutoff_iso=cutoff_iso,
         cutoff_dt=cutoff,
         cutoff_set=cutoff is not None,
