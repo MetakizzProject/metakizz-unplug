@@ -116,25 +116,69 @@ def main():
     ap.add_argument("--auto", action="store_true",
                     help="Draft into every chat sequentially without pausing. "
                          "Browser stays open so you can attach the audio + send manually.")
+    ap.add_argument("--connect-cdp", default=None,
+                    help="Attach to an existing Chrome at this CDP URL (e.g. "
+                         "http://localhost:9222) instead of launching a fresh Chromium. "
+                         "Lets the script drive your normal Chrome's WhatsApp Web tab.")
     args = ap.parse_args()
 
     os.makedirs(USER_DATA_DIR, exist_ok=True)
     print(f"\n📂 Browser profile : {USER_DATA_DIR}")
     print(f"🌐 Admin base      : {APP_BASE}\n")
 
+    def cleanup(ctx_obj, cdp):
+        """Close our Chromium, or disconnect from user's Chrome if CDP-attached."""
+        if cdp is not None:
+            try:
+                cdp.close()
+            except Exception:
+                pass
+        else:
+            try:
+                ctx_obj.close()
+            except Exception:
+                pass
+
     with sync_playwright() as pw:
-        ctx = pw.chromium.launch_persistent_context(
-            USER_DATA_DIR,
-            headless=False,
-            viewport={"width": 1280, "height": 820},
-            args=["--disable-blink-features=AutomationControlled"],
-        )
-        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        cdp_browser = None
+        if args.connect_cdp:
+            print(f"➜ Connecting to Chrome at {args.connect_cdp}...")
+            try:
+                cdp_browser = pw.chromium.connect_over_cdp(args.connect_cdp)
+            except Exception as e:
+                print(f"   ⚠️  Couldn't connect: {e}")
+                print(f"   Make sure Chrome is running with --remote-debugging-port=9222")
+                sys.exit(1)
+            ctx = cdp_browser.contexts[0] if cdp_browser.contexts else cdp_browser.new_context()
+            print("   ✓ Connected.\n")
+        else:
+            ctx = pw.chromium.launch_persistent_context(
+                USER_DATA_DIR,
+                headless=False,
+                viewport={"width": 1280, "height": 820},
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+
+        # Use a dedicated tab for fetching admin JSON (don't disturb other tabs).
+        admin_page = ctx.new_page()
 
         print("➜ Fetching paid reservations from admin...")
-        rows = fetch_paid_contacts(page)
+        rows = fetch_paid_contacts(admin_page)
         contacts = filter_paid(rows)
         print(f"   ✓ {len(contacts)} paid contacts with phone.\n")
+        admin_page.close()
+
+        # Find the WhatsApp Web tab (or open one) — this is where drafts go.
+        page = None
+        for p in ctx.pages:
+            try:
+                if "web.whatsapp.com" in (p.url or ""):
+                    page = p
+                    break
+            except Exception:
+                continue
+        if page is None:
+            page = ctx.new_page()
 
         if args.start_from > 1:
             contacts = contacts[args.start_from - 1:]
@@ -143,18 +187,27 @@ def main():
             for i, c in enumerate(contacts, args.start_from):
                 print(f"  [{i:>3}] {c['name']:<25}  +{c['phone']:<14}  {c['email']}")
                 print(f"         → {build_msg(c['name'])}")
-            ctx.close()
+            cleanup(ctx, cdp_browser)
             return
 
         if not contacts:
             print("Nothing to do.")
-            ctx.close()
+            cleanup(ctx, cdp_browser)
             return
 
         total = args.start_from + len(contacts) - 1
 
-        print("➜ Opening WhatsApp Web...")
-        page.goto("https://web.whatsapp.com/")
+        print("➜ Preparing WhatsApp Web tab...")
+        try:
+            current_url = page.url or ""
+        except Exception:
+            current_url = ""
+        if "web.whatsapp.com" not in current_url:
+            page.goto("https://web.whatsapp.com/")
+        else:
+            page.bring_to_front()
+            print("   ✓ Reusing existing WA Web tab.")
+
         try:
             page.wait_for_selector(
                 'canvas[aria-label*="QR"], canvas[aria-label*="Scan"], div[contenteditable="true"]',
@@ -162,7 +215,7 @@ def main():
             )
         except PWTimeout:
             print("   ⚠️  WA Web didn't respond. Try again later.")
-            ctx.close()
+            cleanup(ctx, cdp_browser)
             return
 
         if page.locator('canvas[aria-label*="QR"], canvas[aria-label*="Scan"]').count() > 0:
@@ -173,7 +226,7 @@ def main():
                 print("   ✅ Logged in.")
             except PWTimeout:
                 print("   ⚠️  QR not scanned in time. Aborting.")
-                ctx.close()
+                cleanup(ctx, cdp_browser)
                 return
         else:
             print("   ✅ Already logged in.")
@@ -224,10 +277,9 @@ def main():
 
         print("\n✅ All drafts ready.")
         if args.auto:
-            print("   The Chromium window stays open. Click each chat in the left")
-            print("   sidebar (you'll see 'Draft: Hi...' in each), drop the audio")
-            print("   file in, send. When you're done, close the Chromium window")
-            print("   or hit Ctrl+C in this terminal.")
+            print("   The browser stays open. Click each chat in the left sidebar")
+            print("   (you'll see 'Draft: Hi...' in each), drop the audio file in,")
+            print("   send. When you're done, close it manually or hit Ctrl+C here.")
             try:
                 while True:
                     time.sleep(3600)
@@ -235,7 +287,7 @@ def main():
                 pass
         else:
             input("Press ENTER to close the browser...")
-        ctx.close()
+        cleanup(ctx, cdp_browser)
 
 
 if __name__ == "__main__":
