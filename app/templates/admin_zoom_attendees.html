@@ -1,0 +1,152 @@
+{% extends "admin_base.html" %}
+
+{% block admin_content %}
+<div class="px-4 lg:px-8 pt-6 pb-12 max-w-7xl">
+    <div class="flex items-center justify-between mb-3 font-mono-term text-[10px] tracking-[0.25em] uppercase">
+        <span class="text-blue-400/80"><span class="text-blue-400">▌</span> METAKIZZ // ZOOM.ATTENDEES</span>
+        <a href="{{ url_for('admin.emails') }}" class="text-gray-500 hover:text-white">← back to emails</a>
+    </div>
+    <h1 class="text-2xl font-display font-bold mb-1">Zoom Attendees · engagement breakdown</h1>
+    <p class="text-sm text-gray-400 mb-6">
+        {{ total }} unique attendees imported · {{ matched }} matched to ambassadors · {{ ghosts }} ghost leads.
+    </p>
+
+    {% if total == 0 %}
+    <div class="p-8 rounded-xl border border-yellow-500/40 bg-yellow-900/10 text-center">
+        <p class="text-yellow-300 font-mono-term tracking-wider uppercase text-sm">▌ No attendees imported yet</p>
+        <p class="text-gray-400 text-sm mt-2">
+            Go back to <a href="{{ url_for('admin.emails') }}" class="text-brand-400 underline">/admin/emails</a>
+            and import via API or paste-CSV first.
+        </p>
+    </div>
+    {% else %}
+
+    {# ── Engagement buckets ── #}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
+        <div class="p-4 rounded-lg border border-brand-400/40 bg-black/60">
+            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-brand-400">▌ Top fans · 45 min+</p>
+            <p class="font-orbitron font-black text-3xl text-brand-400 mt-1" style="text-shadow:0 0 12px rgba(46,219,153,0.5);">{{ top_fans|length }}</p>
+            <p class="text-[11px] text-gray-500 mt-1">stayed the whole way</p>
+        </div>
+        <div class="p-4 rounded-lg border border-yellow-500/40 bg-black/60">
+            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-yellow-400">▌ Tibios · 10-44 min</p>
+            <p class="font-orbitron font-black text-3xl text-yellow-400 mt-1" style="text-shadow:0 0 12px rgba(255,200,87,0.45);">{{ tibios|length }}</p>
+            <p class="text-[11px] text-gray-500 mt-1">engaged but left early</p>
+        </div>
+        <div class="p-4 rounded-lg border border-red-500/40 bg-black/60">
+            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-red-400">▌ Pasaron · &lt;10 min</p>
+            <p class="font-orbitron font-black text-3xl text-red-400 mt-1" style="text-shadow:0 0 12px rgba(239,68,68,0.45);">{{ pasaron|length }}</p>
+            <p class="text-[11px] text-gray-500 mt-1">joined to peek</p>
+        </div>
+        <div class="p-4 rounded-lg border border-gray-600 bg-black/60">
+            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-gray-400">▌ Unknown duration</p>
+            <p class="font-orbitron font-black text-3xl text-gray-400 mt-1">{{ unknown|length }}</p>
+            <p class="text-[11px] text-gray-500 mt-1">paste-only or no data</p>
+        </div>
+    </div>
+
+    {# ── Country + Device strips ── #}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <div class="p-4 rounded-lg border border-gray-700 bg-gray-900/40">
+            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-blue-300 mb-2">▌ Top countries</p>
+            {% if country_top %}
+                <ul class="space-y-1">
+                {% for country, count in country_top %}
+                    <li class="flex items-center justify-between text-sm">
+                        <span class="text-white">{{ country }}</span>
+                        <span class="font-mono text-brand-400">{{ count }}</span>
+                    </li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <p class="text-xs text-gray-500">No country data (paste-CSV import has no location info — use the API path next time).</p>
+            {% endif %}
+        </div>
+        <div class="p-4 rounded-lg border border-gray-700 bg-gray-900/40">
+            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-blue-300 mb-2">▌ Devices used</p>
+            {% if device_top %}
+                <ul class="space-y-1">
+                {% for device, count in device_top %}
+                    <li class="flex items-center justify-between text-sm">
+                        <span class="text-white">{{ device }}</span>
+                        <span class="font-mono text-brand-400">{{ count }}</span>
+                    </li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <p class="text-xs text-gray-500">No device data (only available via API path).</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── Full table sorted by duration desc ── #}
+    <div class="rounded-xl border border-gray-700 bg-gray-900/40 overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-white">▌ Attendees · sorted by engagement</p>
+            <span class="text-xs text-gray-500">{{ total }} total</span>
+        </div>
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-black/60 border-b border-gray-700 text-[10px] font-mono-term tracking-wider uppercase text-gray-400">
+                <tr>
+                    <th class="px-4 py-2 text-left">Name / Email</th>
+                    <th class="px-4 py-2 text-left">Type</th>
+                    <th class="px-4 py-2 text-right">Duration</th>
+                    <th class="px-4 py-2 text-left">Country</th>
+                    <th class="px-4 py-2 text-left">Device</th>
+                    <th class="px-4 py-2 text-left">Joined → Left</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr class="border-b border-gray-800 hover:bg-gray-800/40">
+                    <td class="px-4 py-2.5">
+                        {% if r.ambassador_id and amb_lookup.get(r.ambassador_id) %}
+                            {% set a = amb_lookup[r.ambassador_id] %}
+                            <a href="{{ url_for('admin.ambassador_detail', ambassador_id=a.id) }}" class="text-white hover:text-brand-400 font-semibold">{{ a.name }}</a>
+                            <div class="text-[11px] text-gray-500">{{ r.email }}</div>
+                        {% else %}
+                            <span class="text-gray-300">{{ r.email }}</span>
+                            <div class="text-[10px] text-gray-600 italic">ghost lead — not registered</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2.5">
+                        {% if r.ambassador_id %}
+                            <span class="font-mono-term text-[9px] tracking-wider uppercase text-brand-400 bg-brand-900/20 border border-brand-500/30 px-2 py-0.5 rounded">ambassador</span>
+                        {% else %}
+                            <span class="font-mono-term text-[9px] tracking-wider uppercase text-gray-500 bg-gray-800 border border-gray-700 px-2 py-0.5 rounded">ghost</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2.5 text-right">
+                        {% if r.webinar_duration_min %}
+                            {% if r.webinar_duration_min >= 45 %}
+                                <span class="font-mono text-brand-400 font-bold">{{ r.webinar_duration_min }} min</span>
+                            {% elif r.webinar_duration_min >= 10 %}
+                                <span class="font-mono text-yellow-400">{{ r.webinar_duration_min }} min</span>
+                            {% else %}
+                                <span class="font-mono text-red-400">{{ r.webinar_duration_min }} min</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-gray-600">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2.5 text-gray-300 text-xs">{{ r.webinar_country or '—' }}</td>
+                    <td class="px-4 py-2.5 text-gray-400 text-xs">{{ r.webinar_device or '—' }}</td>
+                    <td class="px-4 py-2.5 text-gray-500 text-[11px] font-mono">
+                        {% if r.webinar_joined_at %}
+                            {{ r.webinar_joined_at.strftime('%H:%M') }}
+                            {% if r.webinar_left_at %} → {{ r.webinar_left_at.strftime('%H:%M') }}{% endif %}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}

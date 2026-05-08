@@ -143,6 +143,23 @@ def _ensure_unsubscribe_columns(db):
                 conn.execute(text("ALTER TABLE reservations ADD COLUMN payment_plan VARCHAR(20)"))
                 logger.info("added column reservations.payment_plan")
 
+        # Webinar attendance enrichment columns on lead_events. Populated by
+        # /admin/zoom/import-participants — sums duration across rejoins,
+        # captures country / device / first-join / last-leave from the Zoom
+        # Reports API. Only meaningful for event_type='webinar_joined' rows.
+        if "lead_events" in inspector.get_table_names():
+            le_cols = {c["name"] for c in inspector.get_columns("lead_events")}
+            for col_name, col_type in [
+                ("webinar_duration_min", "INTEGER"),
+                ("webinar_country",      "VARCHAR(80)"),
+                ("webinar_device",       "VARCHAR(40)"),
+                ("webinar_joined_at",    "TIMESTAMP"),
+                ("webinar_left_at",      "TIMESTAMP"),
+            ]:
+                if col_name not in le_cols:
+                    conn.execute(text(f"ALTER TABLE lead_events ADD COLUMN {col_name} {col_type}"))
+                    logger.info("added column lead_events.%s", col_name)
+
         # Backfill tokens for any rows that don't have one yet (existing ambassadors).
         rows = conn.execute(text("SELECT id FROM ambassadors WHERE unsubscribe_token IS NULL")).fetchall()
         for row in rows:

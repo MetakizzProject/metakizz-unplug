@@ -5488,16 +5488,106 @@ def raffle_reset():
 #      using Server-to-Server OAuth credentials (ZOOM_* env vars).
 #      One-click, idempotent.
 
+@admin_bp.route("/zoom/attendees")
+def zoom_attendees():
+    """Engagement breakdown for the most recent webinar import.
+
+    Buckets:
+      - Top fans:    duration_min >= 45  (engaged the whole way through)
+      - Tibios:      10 <= duration_min < 45
+      - Pasaron:     duration_min < 10   (joined to peek)
+      - Unknown:     duration_min IS NULL (paste path or no data)
+
+    Also splits matched ambassadors vs ghost leads, and shows the top
+    countries / devices observed.
+    """
+    rows = (
+        LeadEvent.query
+        .filter(LeadEvent.event_type == "webinar_joined")
+        .order_by(LeadEvent.webinar_duration_min.desc().nullslast(),
+                  LeadEvent.created_at.desc())
+        .all()
+    )
+
+    top_fans = [r for r in rows if (r.webinar_duration_min or 0) >= 45]
+    tibios = [r for r in rows if 10 <= (r.webinar_duration_min or 0) < 45]
+    pasaron = [r for r in rows if 0 < (r.webinar_duration_min or 0) < 10]
+    unknown = [r for r in rows if not r.webinar_duration_min]
+
+    matched = sum(1 for r in rows if r.ambassador_id)
+    ghosts = sum(1 for r in rows if not r.ambassador_id)
+
+    # Country histogram (top 10).
+    from collections import Counter
+    country_count = Counter(r.webinar_country for r in rows if r.webinar_country)
+    device_count = Counter(r.webinar_device for r in rows if r.webinar_device)
+
+    # Resolve ambassador info for matched rows so the table can show name.
+    amb_ids = [r.ambassador_id for r in rows if r.ambassador_id]
+    amb_lookup = {}
+    if amb_ids:
+        for a in Ambassador.query.filter(Ambassador.id.in_(amb_ids)).all():
+            amb_lookup[a.id] = a
+
+    return render_template(
+        "admin_zoom_attendees.html",
+        page_title="Zoom Attendees",
+        active_section="emails",
+        rows=rows,
+        top_fans=top_fans,
+        tibios=tibios,
+        pasaron=pasaron,
+        unknown=unknown,
+        matched=matched,
+        ghosts=ghosts,
+        country_top=country_count.most_common(10),
+        device_top=device_count.most_common(),
+        total=len(rows),
+        amb_lookup=amb_lookup,
+        **_admin_layout_context(),
+    )
+
+
 @admin_bp.route("/zoom/import-participants", methods=["POST"])
 def import_zoom_participants():
+    """Import webinar attendees as `webinar_joined` LeadEvents.
+
+    Two source paths:
+      • API (meeting_id) — pulls full participant records from Zoom Reports.
+        Captures duration + country + device + join/leave timestamps.
+      • Paste — regex-extracts emails from any pasted text (CSV exports etc.).
+        Only fills email + match-to-ambassador; rich fields stay NULL.
+
+    For the API path, multiple rows per email are coalesced into one event:
+      - duration_min = sum of all session durations (rejoins counted)
+      - webinar_joined_at = earliest join_time
+      - webinar_left_at = latest leave_time
+      - country/device = first non-empty value seen
+
+    Idempotent: emails that already have a webinar_joined event are skipped
+    (so re-running the import after fixing a missing email doesn't duplicate).
+    """
     import re
+    import json
     from app.services import zoom as zoom_svc
 
     raw = (request.form.get("emails", "") or "").strip()
     meeting_id = (request.form.get("meeting_id", "") or "").strip()
 
-    emails = []
+    # Per-email aggregated record (only the API path fills the rich fields).
+    # email -> { duration_min, country, device, joined_at, left_at, raw }
+    records = {}
     source_label = ""
+
+    def _parse_iso(s):
+        if not s:
+            return None
+        try:
+            # Zoom returns "2026-05-07T19:01:23Z"
+            from datetime import datetime as _dt
+            return _dt.fromisoformat(s.replace("Z", "+00:00"))
+        except Exception:
+            return None
 
     if meeting_id:
         try:
@@ -5506,23 +5596,65 @@ def import_zoom_participants():
             logger.exception("zoom api fetch failed")
             flash(f"Zoom API error: {e}", "error")
             return redirect(url_for("admin.emails"))
+
         for p in participants:
             em = (p.get("user_email") or "").strip().lower()
-            if em and "@" in em:
-                emails.append(em)
+            if not em or "@" not in em:
+                continue
+            duration_sec = int(p.get("duration") or 0)
+            join_t = _parse_iso(p.get("join_time"))
+            leave_t = _parse_iso(p.get("leave_time"))
+            # Zoom's `location` is a free string like "Madrid"; sometimes
+            # empty. We coalesce city/country if present.
+            country = (p.get("location") or "").strip() or None
+            device = (p.get("device") or "").strip() or None
+
+            rec = records.get(em)
+            if rec is None:
+                rec = {
+                    "duration_sec": 0,
+                    "country": None,
+                    "device": None,
+                    "joined_at": None,
+                    "left_at": None,
+                    "raw_sessions": [],
+                }
+                records[em] = rec
+            rec["duration_sec"] += duration_sec
+            if country and not rec["country"]:
+                rec["country"] = country[:80]
+            if device and not rec["device"]:
+                rec["device"] = device[:40]
+            if join_t and (rec["joined_at"] is None or join_t < rec["joined_at"]):
+                rec["joined_at"] = join_t
+            if leave_t and (rec["left_at"] is None or leave_t > rec["left_at"]):
+                rec["left_at"] = leave_t
+            # Keep one trimmed copy per session for the audit JSON.
+            rec["raw_sessions"].append({
+                "name": p.get("name"),
+                "user_email": em,
+                "join_time": p.get("join_time"),
+                "leave_time": p.get("leave_time"),
+                "duration": duration_sec,
+                "device": device,
+                "location": country,
+            })
         source_label = f"API (meeting {meeting_id})"
+
     elif raw:
-        # Tolerant parser: extract anything that looks like an email from the
-        # pasted blob — works whether they paste raw CSV, a list of lines, etc.
+        # Tolerant parser: extract anything that looks like an email.
         pattern = re.compile(r"[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}")
-        emails = pattern.findall(raw.lower())
+        for em in pattern.findall(raw.lower()):
+            records.setdefault(em, {
+                "duration_sec": 0, "country": None, "device": None,
+                "joined_at": None, "left_at": None, "raw_sessions": [],
+            })
         source_label = "pasted list"
     else:
         flash("Either paste participant emails or enter the meeting ID.", "error")
         return redirect(url_for("admin.emails"))
 
-    emails = list({e for e in emails if e})  # dedup
-    if not emails:
+    if not records:
         flash("No valid emails found in the input.", "error")
         return redirect(url_for("admin.emails"))
 
@@ -5545,22 +5677,37 @@ def import_zoom_participants():
 
     new_events = 0
     matched = 0
-    for em in emails:
+    for em, rec in records.items():
         if em in existing:
             continue
         amb_id = amb_lookup.get(em)
         if amb_id:
             matched += 1
+        duration_min = (rec["duration_sec"] // 60) if rec["duration_sec"] else None
+        # Truncate the raw audit JSON to ~4KB to stay safely under the 5KB
+        # comment in the column. Most webinars produce <1KB per attendee.
+        extra_json = None
+        if rec["raw_sessions"]:
+            try:
+                extra_json = json.dumps(rec["raw_sessions"])[:4000]
+            except Exception:
+                extra_json = None
         db.session.add(LeadEvent(
             ambassador_id=amb_id,
             email=em,
             event_type="webinar_joined",
+            webinar_duration_min=duration_min,
+            webinar_country=rec["country"],
+            webinar_device=rec["device"],
+            webinar_joined_at=rec["joined_at"],
+            webinar_left_at=rec["left_at"],
+            extra=extra_json,
             created_at=now,
         ))
         new_events += 1
     db.session.commit()
 
-    skipped = len(emails) - new_events
+    skipped = len(records) - new_events
     flash(
         f"Imported {new_events} new webinar_joined events from {source_label}. "
         f"{matched} matched to ambassadors, {new_events - matched} ghost leads. "

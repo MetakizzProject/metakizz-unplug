@@ -303,6 +303,15 @@ class LeadEvent(db.Model):
     gclid = db.Column(db.String(200), nullable=True)
     ttclid = db.Column(db.String(200), nullable=True)
 
+    # Webinar attendance fields (populated by /admin/zoom/import-participants).
+    # Only relevant for event_type='webinar_joined' rows; NULL otherwise.
+    # webinar_duration_min sums multiple sessions if the participant rejoined.
+    webinar_duration_min = db.Column(db.Integer, nullable=True, index=True)
+    webinar_country = db.Column(db.String(80), nullable=True, index=True)
+    webinar_device = db.Column(db.String(40), nullable=True)
+    webinar_joined_at = db.Column(db.DateTime, nullable=True)
+    webinar_left_at = db.Column(db.DateTime, nullable=True)
+
     # Raw JSON payload for debugging / future fields. Truncated to 5KB.
     extra = db.Column(db.Text, nullable=True)
 
