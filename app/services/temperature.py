@@ -206,6 +206,63 @@ def compute_max_pct_per_class(lead_events) -> Dict[int, int]:
     return out
 
 
+def _compute_recency_bonus(lead_events, ambassador, email_events):
+    """Returns (bonus_pts, reason_str, last_activity_at) for the recency
+    boost on a lead's heat score.
+
+    Looks at the most recent timestamp across:
+    - Any LeadEvent (class views, webinar_joined, etc.)
+    - Ambassador.last_dashboard_visit_at
+    - Most recent EmailEvent of type 'opened' or 'clicked' (passive but
+      still a recency signal — they at least looked at the inbox)
+
+    Bonus tiers:
+      < 24h → +30 pts, "active in last 24h"
+      < 72h → +15 pts, "active in last 3 days"
+      < 7d  →  +5 pts, "active this week"
+      else  → 0
+
+    The bonus is ADDITIVE, not multiplicative — a stale burning lead
+    (score 150) still ranks above a recent cold lead (30 + 30 = 60).
+    But two leads with similar base scores get reordered by recency,
+    which is what the action queue needs.
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    def _aware(dt):
+        if dt is None:
+            return None
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+    candidates = []
+    for e in lead_events or []:
+        ts = _aware(getattr(e, "created_at", None))
+        if ts:
+            candidates.append(ts)
+    dash = _aware(getattr(ambassador, "last_dashboard_visit_at", None))
+    if dash:
+        candidates.append(dash)
+    for ev in email_events or []:
+        if getattr(ev, "event_type", None) in ("opened", "clicked"):
+            ts = _aware(getattr(ev, "created_at", None))
+            if ts:
+                candidates.append(ts)
+
+    if not candidates:
+        return (0, None, None)
+
+    last_activity = max(candidates)
+    delta_hours = (now - last_activity).total_seconds() / 3600.0
+    if delta_hours < 24:
+        return (30, "active in last 24h", last_activity)
+    if delta_hours < 72:
+        return (15, "active in last 3 days", last_activity)
+    if delta_hours < 24 * 7:
+        return (5, "active this week", last_activity)
+    return (0, None, last_activity)
+
+
 def compute_views_per_class(lead_events) -> Dict[int, int]:
     """Counts distinct `class{N}_viewed` LeadEvent rows per class.
     Each row is one play session — rewatches naturally bump the count
@@ -359,6 +416,18 @@ def compute_temperature(
         score += TEMP_WEIGHTS["past_masterclass"]
         signals.append("attended past masterclass")
 
+    # ── Recency bonus ── (additive, surfaces fresh activity at top of queue)
+    # A lead who watched class 2 today is more actionable than one who
+    # finished classes 3 weeks ago. Bonus boosts to-do queue ordering
+    # without disturbing the bucket assignment (event-presence based).
+    recency_pts, recency_reason, last_activity_at = _compute_recency_bonus(
+        lead_events, ambassador, email_events,
+    )
+    if recency_pts:
+        score += recency_pts
+        if recency_reason:
+            signals.append(recency_reason)
+
     # ── Bucket ── (event-presence classification, see bucket_from_event_set)
     # Score is preserved for sorting within a bucket, but bucket assignment
     # uses the same classifier as the temperature filter so the filter and
@@ -379,6 +448,8 @@ def compute_temperature(
         "views_per_class": compute_views_per_class(lead_events),
         "webinar_duration_min": webinar_duration_min,
         "has_paid_reservation": has_paid_reservation,
+        "recency_bonus": recency_pts,
+        "last_activity_at": last_activity_at,
     }
 
 
@@ -611,45 +682,99 @@ def temp_label_to_key(label: str) -> str:
 def build_whatsapp_message(ambassador, temp_result, app_lang: str = "en") -> str:
     """Build a contextual WhatsApp message based on what the lead has done.
 
+    Order of preference (from highest-intent signal to fallback):
+      1. Paid reservation → close-the-loop (no pitch, just service)
+      2. Long live attendance (60+m / 30+m) → emotional anchor
+      3. Class 3 (replay) completed/in-progress → distinct from 1/2
+      4. Multiple classes completed → progress-recognition
+      5. 2+ classes started → engagement check-in
+      6. 1 class started → "what stopped you" prompt
+      7. Past-masterclass tag → reactivation
+      8. Generic check-in
+
     Returns the message text only (URL-encoded by the caller).
     """
     first_name = (ambassador.name or "there").split()[0]
     signals = temp_result.get("signals", [])
     max_pct = temp_result.get("max_pct", {})
+    has_paid = temp_result.get("has_paid_reservation", False)
+    webinar_dur = temp_result.get("webinar_duration_min")
 
     classes_watched = [cn for cn, pct in max_pct.items() if pct >= 25]
     completed = [cn for cn, pct in max_pct.items() if pct >= 95]
 
+    # 1. Paid customer — close the loop, not pitch.
+    if has_paid:
+        return (
+            f"Hola {first_name}, gracias por reservar tu spot en MKOT 3.0. "
+            f"Solo quería preguntarte: ¿necesitas algo de mí antes de empezar? "
+            f"Si tienes 5 min, te llamo y aclaramos lo que sea. "
+            f"Sin presión — solo asegurarme de que tienes todo claro."
+        )
+
+    # 2. Long live attendance — strong emotional anchor.
+    if webinar_dur and webinar_dur >= 60:
+        return (
+            f"Hola {first_name}, te vi en la live hasta el final ({webinar_dur} min). "
+            f"Me hizo ilusión. ¿Qué te llevaste? ¿Hay algo que no te haya quedado claro "
+            f"o que te frene de reservar tu spot? Sin presión, solo curiosidad."
+        )
+    if webinar_dur and webinar_dur >= 30:
+        return (
+            f"Hola {first_name}, vi que estuviste en la live un buen rato ({webinar_dur} min). "
+            f"¿Qué te pareció? Cualquier duda que te haya quedado, te respondo."
+        )
+
+    # 3. Class 3 (replay) — distinct narrative from class 1/2.
+    if max_pct.get(3, 0) >= 95:
+        return (
+            f"Hola {first_name}, vi que terminaste el replay de la masterclass. "
+            f"¿Qué te pareció? ¿Cuál fue tu momento favorito? "
+            f"Si tienes alguna duda, te la respondo encantado."
+        )
+    if max_pct.get(3, 0) >= 50:
+        return (
+            f"Hola {first_name}, vi que has empezado a ver el replay de la masterclass. "
+            f"¿Cómo va? ¿Hay algo que no te haya quedado claro?"
+        )
+
+    # 4. Multiple classes completed — progress recognition.
     if completed:
-        body = (
+        return (
             f"Hey {first_name} — saw you watched class "
             f"{', '.join(str(c) for c in completed)} all the way through, "
             f"that's a lot of focus. Curious what stood out and what you're "
             f"trying to figure out with your kizz right now?"
         )
-    elif len(classes_watched) >= 2:
-        body = (
+
+    # 5. 2+ classes started — engagement check-in.
+    if len(classes_watched) >= 2:
+        return (
             f"Hey {first_name} — saw you've already started "
             f"classes {', '.join(str(c) for c in classes_watched)}. "
             f"Wanted to check in: how's it landing? Any specific bit you'd want "
             f"us to go deeper on?"
         )
-    elif classes_watched:
-        body = (
+
+    # 6. Single class started — "what stopped you" prompt.
+    if classes_watched:
+        return (
             f"Hey {first_name} — saw you started class {classes_watched[0]}, "
             f"that's a good first move. Anything stopping you from finishing it? "
             f"Happy to help if it's a question of timing or content."
         )
-    elif "attended past masterclass" in signals:
-        body = (
+
+    # 7. Past-masterclass tag — reactivation.
+    if "attended past masterclass" in signals:
+        return (
             f"Hey {first_name} — you joined our masterclass back in March, "
             f"and we just kicked off Hacking the Urbankizz Code. "
             f"Wanted to make sure you saw the new classes are live."
         )
-    else:
-        body = (
-            f"Hey {first_name} — Jesus & Anni from MetaKizz here. "
-            f"Just checking in to see how you're doing with the launch content "
-            f"and if there's anything we can help with."
-        )
-    return body
+
+    # 8. Generic fallback.
+    return (
+        f"Hey {first_name} — Jesus & Anni from MetaKizz here. "
+        f"Just checking in to see how you're doing with the launch content "
+        f"and if there's anything we can help with."
+    )

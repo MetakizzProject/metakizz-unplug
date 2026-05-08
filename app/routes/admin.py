@@ -1344,7 +1344,7 @@ def _admin_layout_context():
         # Routes whose nav-link is enabled in the sidebar. Missing keys
         # render as href="#" (admin_base.html fallback).
         "admin_routes": [
-            "overview", "live", "emails", "class_views",
+            "overview", "live", "queue", "emails", "class_views",
             "security", "reach", "leads", "leads_insights",
             "ghosts", "network", "reservations", "raffle",
         ],
@@ -5049,6 +5049,223 @@ def unmark_contacted(ambassador_id):
     a.last_outreach_channel = None
     db.session.commit()
     return redirect(request.referrer or url_for("admin.leads"))
+
+
+def _why_now(amb, t):
+    """One-line 'why this lead is in the queue right now' summary.
+
+    Precedence matches build_whatsapp_message branches so the reason
+    aligns with the message that will be drafted. Returns a short string
+    rendered inline on the queue row.
+    """
+    has_paid = t.get("has_paid_reservation")
+    webinar_dur = t.get("webinar_duration_min")
+    max_pct = t.get("max_pct", {})
+    recency_bonus = t.get("recency_bonus", 0)
+    if has_paid:
+        return "Paid €100 — close the loop on form / answer questions"
+    if webinar_dur and webinar_dur >= 60:
+        return f"Stayed {webinar_dur}m in live — peak emotional intent"
+    if webinar_dur and webinar_dur >= 30:
+        return f"Watched {webinar_dur}m of live — strong intent, no commit yet"
+    completed = [cn for cn, pct in max_pct.items() if pct >= 95]
+    if completed:
+        return f"Finished class {' + '.join(str(c) for c in completed)} — ready"
+    if max_pct.get(3, 0) >= 50:
+        return "Watching class 3 (replay) — currently engaged"
+    started = [cn for cn, pct in max_pct.items() if pct >= 50]
+    if started:
+        return f"Started class {' + '.join(str(c) for c in started)} (≥50%)"
+    if recency_bonus >= 30:
+        return "Active in last 24h — momentum window"
+    return "High base score — long-term engaged"
+
+
+@admin_bp.route("/queue")
+def queue():
+    """Today's Action Queue — curated top-N ranked by action_score.
+
+    Surfaces who to contact next, hides anyone marked contacted in the
+    last 7 days, computes a "why now" reason per row. Designed for a
+    solo founder doing 50-80 personal outreaches per day.
+
+    Query params:
+        ?limit=80         — max rows (default 80)
+        ?include_warm=1   — include warm bucket (default: only burning+hot+customer)
+    """
+    from app.services.temperature import (
+        compute_temperature, fetch_signals_bulk,
+        bulk_webinar_durations, bulk_paid_reservations,
+        build_whatsapp_message,
+    )
+    try:
+        limit = int(request.args.get("limit") or 80)
+    except (TypeError, ValueError):
+        limit = 80
+    limit = max(10, min(200, limit))
+    include_warm = request.args.get("include_warm") == "1"
+
+    # Eligible: opted-in AND (never contacted OR contacted >7d ago).
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    candidates = (
+        Ambassador.query
+        .filter(Ambassador.unsubscribed_at.is_(None))
+        .filter(or_(
+            Ambassador.last_outreach_at.is_(None),
+            Ambassador.last_outreach_at < seven_days_ago,
+        ))
+        .all()
+    )
+
+    if not candidates:
+        return render_template(
+            "admin_queue.html",
+            page_title="Action Queue",
+            active_section="queue",
+            rows=[],
+            limit=limit,
+            include_warm=include_warm,
+            total_eligible=0,
+            **_admin_layout_context(),
+        )
+
+    # Bulk fetches (same pattern as /admin/leads).
+    cand_ids = [a.id for a in candidates]
+    lead_evts_by_id, email_evts_by_id = (
+        fetch_signals_bulk(cand_ids, max_ids=None) if cand_ids else ({}, {})
+    )
+    ref_counts = _get_referral_counts()
+    dur_by_amb, dur_by_em = bulk_webinar_durations(candidates)
+    paid_amb_ids, paid_emails = bulk_paid_reservations(candidates)
+
+    # Score each candidate; only keep burning/hot/customer (and warm if asked).
+    scored = []
+    target_buckets = ("burning", "hot", "customer")
+    if include_warm:
+        target_buckets = target_buckets + ("warm",)
+    for a in candidates:
+        em_lower = (a.email or "").lower()
+        webinar_dur = dur_by_amb.get(a.id) or (dur_by_em.get(em_lower) if em_lower else None)
+        has_paid = (a.id in paid_amb_ids) or (em_lower and em_lower in paid_emails)
+        t = compute_temperature(
+            a,
+            lead_events=lead_evts_by_id.get(a.id, []),
+            email_events=email_evts_by_id.get(a.id, []),
+            referral_count=ref_counts.get(a.id, 0),
+            webinar_duration_min=webinar_dur,
+            has_paid_reservation=has_paid,
+        )
+        if t["bucket_key"] not in target_buckets:
+            continue
+        scored.append((a, t))
+
+    # Sort by action_score (which already includes recency bonus). Tie-break
+    # by last_activity_at desc so the freshest active leads bubble first.
+    def _sort_key(at):
+        a, t = at
+        last = t.get("last_activity_at")
+        last_ts = last.timestamp() if last else 0
+        return (-t["score"], -last_ts)
+    scored.sort(key=_sort_key)
+    top = scored[:limit]
+
+    # Build display rows with WA URL + why-now + recency string.
+    from urllib.parse import quote
+    now_ts = datetime.now(timezone.utc)
+    def _ago(dt):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        s = int((now_ts - dt).total_seconds())
+        if s < 60:
+            return "just now"
+        if s < 3600:
+            return f"{s // 60}m ago"
+        if s < 86400:
+            return f"{s // 3600}h ago"
+        return f"{s // 86400}d ago"
+
+    rows = []
+    for a, t in top:
+        msg = build_whatsapp_message(a, t)
+        wa_url = (
+            f"https://wa.me/{a.phone_number.replace('+', '')}?text={quote(msg)}"
+            if a.phone_number else None
+        )
+        rows.append({
+            "amb": a,
+            "t": t,
+            "why_now": _why_now(a, t),
+            "wa_url": wa_url,
+            "wa_msg": msg,
+            "active_ago": _ago(t.get("last_activity_at")),
+        })
+
+    return render_template(
+        "admin_queue.html",
+        page_title="Action Queue",
+        active_section="queue",
+        rows=rows,
+        limit=limit,
+        include_warm=include_warm,
+        total_eligible=len(scored),
+        **_admin_layout_context(),
+    )
+
+
+@admin_bp.route("/leads/<int:ambassador_id>/open-wa", methods=["POST"])
+def open_wa(ambassador_id):
+    """One-click contextual WhatsApp opener.
+
+    JSON-friendly: returns 200 with {ok:true, wa_url, message_preview}.
+    The browser-side JS opens the wa_url in a new tab AND records the
+    contact in one user click. The DOM is reloaded by the caller.
+
+    Marks contacted with channel=whatsapp and stores the drafted message
+    in last_outreach_notes (truncated to 1KB) for audit.
+    """
+    from flask import jsonify
+    from app.services.temperature import (
+        compute_temperature, fetch_signals_bulk,
+        bulk_webinar_durations, bulk_paid_reservations,
+        build_whatsapp_message,
+    )
+    from urllib.parse import quote
+    a = Ambassador.query.get_or_404(ambassador_id)
+    if not a.phone_number:
+        return jsonify({"ok": False, "error": "no_phone"}), 400
+
+    # Recompute temperature for the freshest contextual message.
+    lead_evts, email_evts = fetch_signals_bulk([a.id], max_ids=None)
+    ref_count = _get_referral_counts().get(a.id, 0)
+    dur_by_amb, dur_by_em = bulk_webinar_durations([a])
+    paid_amb_ids, paid_emails = bulk_paid_reservations([a])
+    em_lower = (a.email or "").lower()
+    webinar_dur = dur_by_amb.get(a.id) or (dur_by_em.get(em_lower) if em_lower else None)
+    has_paid = (a.id in paid_amb_ids) or (em_lower and em_lower in paid_emails)
+    t = compute_temperature(
+        a,
+        lead_events=lead_evts.get(a.id, []),
+        email_events=email_evts.get(a.id, []),
+        referral_count=ref_count,
+        webinar_duration_min=webinar_dur,
+        has_paid_reservation=has_paid,
+    )
+    msg = build_whatsapp_message(a, t)
+    wa_url = f"https://wa.me/{a.phone_number.replace('+', '')}?text={quote(msg)}"
+
+    # Mark contacted (truncate notes to ~1KB to stay safely under TEXT limits).
+    a.last_outreach_at = datetime.now(timezone.utc)
+    a.last_outreach_channel = "whatsapp"
+    a.last_outreach_notes = msg[:1000]
+    db.session.commit()
+
+    return jsonify({
+        "ok": True,
+        "wa_url": wa_url,
+        "message_preview": msg[:200],
+    })
 
 
 @admin_bp.route("/leads/ghosts")

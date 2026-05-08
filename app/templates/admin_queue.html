@@ -1,0 +1,255 @@
+{% extends "admin_base.html" %}
+
+{% block admin_content %}
+<style>
+.queue-card {
+    background: rgba(13, 20, 16, 0.6);
+    border: 1px solid rgba(46, 219, 153, 0.2);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    transition: border-color 120ms;
+}
+.queue-card:hover { border-color: rgba(46, 219, 153, 0.5); }
+.queue-card.bucket-burning { border-color: rgba(220, 38, 38, 0.4); }
+.queue-card.bucket-customer { border-color: rgba(167, 139, 250, 0.5); }
+.queue-card.bucket-hot { border-color: rgba(249, 115, 22, 0.4); }
+
+.queue-row-1 {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+.queue-row-1 .name {
+    font-family: 'Unbounded', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: #FFFFFF;
+}
+.queue-row-1 .meta {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: #9CA3AF;
+}
+.queue-row-1 .recency {
+    background: rgba(255, 200, 87, 0.12);
+    color: #FFC857;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 0.5px;
+}
+.queue-row-1 .recency-fresh { background: rgba(46,219,153,0.18); color: #2EDB99; }
+
+.queue-row-1 .badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 0.5px;
+    color: #fff;
+}
+
+.queue-signals {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: #C9CFD4;
+    margin-bottom: 6px;
+    line-height: 1.5;
+}
+.queue-why {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: #FFC857;
+    margin-bottom: 10px;
+    font-style: italic;
+}
+.queue-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.qa-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform 100ms, background 100ms;
+}
+.qa-btn:hover { transform: translateY(-1px); }
+.qa-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.qa-wa {
+    background: #25D366;
+    border-color: #25D366;
+    color: #000;
+    font-weight: bold;
+}
+.qa-wa:hover { background: #1ea857; }
+.qa-detail {
+    background: transparent;
+    border-color: rgba(46, 219, 153, 0.4);
+    color: #2EDB99;
+}
+.qa-skip {
+    background: transparent;
+    border-color: rgba(156, 163, 175, 0.3);
+    color: #9CA3AF;
+}
+.qa-skip:hover { color: #fff; border-color: rgba(156, 163, 175, 0.6); }
+.contacted-tag {
+    background: rgba(46,219,153,0.18);
+    color: #2EDB99;
+    border: 1px solid rgba(46,219,153,0.4);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+}
+
+.queue-stats {
+    display: flex;
+    gap: 24px;
+    margin: 16px 0 24px 0;
+    padding: 14px 18px;
+    background: rgba(13, 20, 16, 0.5);
+    border: 1px solid rgba(46, 219, 153, 0.2);
+    border-radius: 10px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: #9CA3AF;
+    flex-wrap: wrap;
+}
+.queue-stats strong { color: #2EDB99; font-size: 14px; }
+</style>
+
+<div class="px-4 lg:px-8 pt-6 pb-12 max-w-5xl">
+    <div class="flex items-center justify-between mb-3 font-mono-term text-[10px] tracking-[0.25em] uppercase">
+        <span class="text-brand-400/80"><span class="text-brand-400">▌</span> METAKIZZ // ACTION.QUEUE</span>
+        <a href="{{ url_for('admin.leads') }}" class="text-gray-500 hover:text-white">↗ Full leads list</a>
+    </div>
+    <h1 class="text-2xl font-display font-bold mb-1">📋 Today's Action Queue</h1>
+    <p class="text-sm text-gray-400 mb-3">
+        Top {{ rows|length }} of {{ total_eligible }} actionable leads — ranked by recency-weighted heat score, hides anyone contacted in the last 7 days.
+        {% if include_warm %}<span class="text-yellow-400">Including warm bucket.</span>{% endif %}
+    </p>
+
+    <div class="queue-stats">
+        <span>📦 In queue: <strong>{{ rows|length }}</strong></span>
+        <span>🎯 Total eligible: <strong>{{ total_eligible }}</strong></span>
+        <span>⏱ Pace target: <strong>50-80/day</strong></span>
+        {% if not include_warm %}
+        <a href="?limit={{ limit }}&include_warm=1" style="margin-left:auto;color:#FFC857;text-decoration:underline;">+ include warm</a>
+        {% else %}
+        <a href="?limit={{ limit }}" style="margin-left:auto;color:#9CA3AF;text-decoration:underline;">- exclude warm</a>
+        {% endif %}
+    </div>
+
+    {% if not rows %}
+    <div class="p-8 rounded-xl border border-yellow-500/40 bg-yellow-900/10 text-center">
+        <p class="text-yellow-300 font-mono-term tracking-wider uppercase text-sm">▌ Queue empty</p>
+        <p class="text-gray-400 text-sm mt-2">
+            Either you've contacted everyone in the last 7 days, or there are no burning/hot leads matching the filter.
+            Try <a href="?include_warm=1" class="text-brand-400 underline">including warm</a> or check back tomorrow.
+        </p>
+    </div>
+    {% endif %}
+
+    {% for row in rows %}
+        {% set amb = row.amb %}
+        {% set t = row.t %}
+        <div class="queue-card bucket-{{ t.bucket_key }}" id="row-{{ amb.id }}">
+            <div class="queue-row-1">
+                <span class="name">{{ amb.name or amb.email }}</span>
+                {% if amb.phone_number %}
+                    <span class="meta">📱 {{ amb.phone_number }}</span>
+                {% else %}
+                    <span class="meta" style="color:#DC2626;">📵 no phone</span>
+                {% endif %}
+                {% if row.active_ago %}
+                    {% set fresh = row.active_ago.endswith('m ago') or row.active_ago == 'just now' or (row.active_ago.endswith('h ago') and row.active_ago[:-5]|int < 24) %}
+                    <span class="recency {{ 'recency-fresh' if fresh }}">{{ row.active_ago }}</span>
+                {% endif %}
+                <span class="badge" style="background:{{ t.color }};">{{ t.bucket }} · {{ t.score }}</span>
+                {% if amb.last_outreach_at %}
+                    <span class="contacted-tag">✓ contacted (cool-off)</span>
+                {% endif %}
+            </div>
+            <div class="queue-signals">
+                {{ t.signals[:5]|join(' · ') if t.signals else 'no signals yet' }}
+            </div>
+            <div class="queue-why">
+                💡 {{ row.why_now }}
+            </div>
+            <div class="queue-actions">
+                {% if amb.phone_number %}
+                    <button class="qa-btn qa-wa" onclick="markAndOpenWA({{ amb.id }}, this)">💬 Open WhatsApp + mark</button>
+                {% else %}
+                    <button class="qa-btn qa-wa" disabled>💬 No phone</button>
+                {% endif %}
+                <a href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}" class="qa-btn qa-detail" target="_blank">→ Detail</a>
+                <button class="qa-btn qa-skip" onclick="skipRow({{ amb.id }})">↷ Skip for today</button>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+
+<script>
+async function markAndOpenWA(ambId, btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ opening...';
+
+    try {
+        const res = await fetch(`/admin/leads/${ambId}/open-wa`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        });
+        const data = await res.json();
+        if (!data.ok || !data.wa_url) {
+            btn.disabled = false;
+            btn.textContent = '⚠ ' + (data.error || 'failed');
+            return;
+        }
+        // Open WhatsApp in a new tab AND remove the row from the queue.
+        window.open(data.wa_url, '_blank');
+        const row = document.getElementById('row-' + ambId);
+        if (row) {
+            row.style.transition = 'opacity 300ms';
+            row.style.opacity = '0.3';
+            setTimeout(() => row.remove(), 400);
+        }
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '⚠ error';
+        console.error(e);
+    }
+}
+
+async function skipRow(ambId) {
+    // "Skip" = mark as contacted via channel=skip so it disappears from
+    // the queue for 7 days. The user can unmark from the lead detail
+    // page if they change their mind.
+    const fd = new FormData();
+    fd.append('channel', 'sms');  // Reuse SMS channel as a stand-in for "skipped"
+    fd.append('note', '[skipped from queue]');
+    await fetch(`/admin/leads/${ambId}/mark-contacted`, {method: 'POST', body: fd});
+    const row = document.getElementById('row-' + ambId);
+    if (row) {
+        row.style.transition = 'opacity 200ms';
+        row.style.opacity = '0';
+        setTimeout(() => row.remove(), 250);
+    }
+}
+</script>
+{% endblock %}
