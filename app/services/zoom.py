@@ -125,15 +125,75 @@ def _fetch_participants_endpoint(token, endpoint, meeting_id):
             return out, None
 
 
+def list_past_instances(meeting_id):
+    """Returns a list of dicts describing every past instance of a recurring
+    or repeat-started meeting: [{ uuid, start_time }, ...]. Empty list if
+    the meeting has no recorded past instances or the call fails (caller
+    will fall back to single-shot fetch).
+    """
+    try:
+        token = _get_access_token()
+    except Exception:
+        return []
+    r = http_requests.get(
+        f"{ZOOM_API_BASE}/past_meetings/{meeting_id}/instances",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=15,
+    )
+    if r.status_code != 200:
+        return []
+    return r.json().get("meetings") or []
+
+
+def _double_url_encode(uuid):
+    """Zoom UUIDs that start with `/` or contain `//` MUST be double-URL-encoded
+    when used as a path segment. We always double-encode for safety; safe values
+    pass through unchanged after the second decode."""
+    from urllib.parse import quote
+    return quote(quote(uuid, safe=""), safe="")
+
+
 def fetch_meeting_participants(meeting_id):
     """Pull participants for a finished session.
 
-    Tries `/report/meetings/{id}/participants` first; if Zoom returns 404 or
-    code 3001 (meeting not found), falls back to the webinars endpoint —
-    same payload shape but for accounts using the Zoom Webinars add-on.
-    Surfaces Zoom's actual error reason on failure.
+    Strategy:
+      1. List past instances of the meeting. Recurring meetings or meetings
+         started multiple times in one day produce one instance per session.
+         Each instance has a unique UUID with its own participant report.
+      2. If 2+ instances exist, fetch participants for EACH and concatenate.
+         The downstream importer dedups by email and sums durations across
+         sessions, which is the right behavior whether the same person
+         attended one instance or several.
+      3. If only 1 instance (or the list call fails), fall back to the
+         numeric meeting_id which Zoom resolves to the latest instance.
+      4. Final fallback: try the same call against /report/webinars/ in case
+         this is a Zoom Webinar (different product, same payload shape).
     """
     token = _get_access_token()
+
+    instances = list_past_instances(meeting_id)
+    if len(instances) >= 2:
+        merged = []
+        for inst in instances:
+            uuid = inst.get("uuid")
+            if not uuid:
+                continue
+            encoded = _double_url_encode(uuid)
+            out, err = _fetch_participants_endpoint(token, "meetings", encoded)
+            if err is None:
+                merged.extend(out)
+            else:
+                logger.warning(
+                    "zoom: instance %s skipped (%s code=%s msg=%s)",
+                    uuid, err["status"], err.get("code"), err.get("message"),
+                )
+        if merged:
+            logger.info(
+                "zoom: merged %d participant rows from %d instances of meeting %s",
+                len(merged), len(instances), meeting_id,
+            )
+            return merged
+        # Fall through to single-shot below if every per-UUID call failed.
 
     out, err = _fetch_participants_endpoint(token, "meetings", meeting_id)
     if err is None:
