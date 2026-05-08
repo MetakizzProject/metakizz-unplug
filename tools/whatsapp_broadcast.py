@@ -59,7 +59,7 @@ def first_name(s: str) -> str:
 
 
 def build_msg(name: str) -> str:
-    return f"Hi {first_name(name)}! I left you an important audio 👇🏼"
+    return f"Hey {first_name(name)}, how are you doing today?"
 
 
 def fetch_paid_contacts(page):

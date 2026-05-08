@@ -278,12 +278,12 @@
             </td>
             <td class="px-4 py-3 text-right whitespace-nowrap">
               {% if r.ambassador and r.ambassador.phone_number %}
-                {% set wa_msg = 'Hi ' ~ (r.name or 'there') ~ '! I left you an important audio 👇🏼' %}
+                {% set wa_msg = 'Hey ' ~ (r.name or 'there') ~ ', how are you doing today?' %}
                 <a href="https://wa.me/{{ r.ambassador.phone_number|replace('+','')|replace(' ','') }}?text={{ wa_msg|urlencode }}"
                    target="_blank" rel="noopener"
                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white transition mr-1 text-xs font-mono uppercase tracking-wider whitespace-nowrap"
-                   title="Open WhatsApp with audio intro for {{ r.ambassador.phone_number }}">
-                  💬 Audio
+                   title="Open WhatsApp with intro for {{ r.ambassador.phone_number }}">
+                  💬 WA
                 </a>
               {% else %}
                 <span class="inline-flex items-center justify-center w-7 h-7 text-gray-700 text-xs cursor-not-allowed mr-1"
@@ -435,7 +435,7 @@
           + '<td class="px-4 py-3 text-[10px] text-gray-600 font-mono">' + escapeHtml((r.stripe_session_id || '').substring(0, 14)) + '…</td>'
           + '<td class="px-4 py-3 text-right whitespace-nowrap">'
             + (r.phone
-                ? '<a href="https://wa.me/' + encodeURIComponent(r.phone.replace(/^\+/, '').replace(/\s/g, '')) + '?text=' + encodeURIComponent('Hi ' + (r.name || 'there') + '! I left you an important audio 👇🏼') + '" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white transition mr-1 text-xs font-mono uppercase tracking-wider whitespace-nowrap" title="Open WhatsApp with audio intro for ' + escapeHtml(r.phone) + '">💬 Audio</a>'
+                ? '<a href="https://wa.me/' + encodeURIComponent(r.phone.replace(/^\+/, '').replace(/\s/g, '')) + '?text=' + encodeURIComponent('Hey ' + (r.name || 'there') + ', how are you doing today?') + '" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white transition mr-1 text-xs font-mono uppercase tracking-wider whitespace-nowrap" title="Open WhatsApp with intro for ' + escapeHtml(r.phone) + '">💬 WA</a>'
                 : '<span class="inline-flex items-center justify-center w-7 h-7 text-gray-700 text-xs cursor-not-allowed mr-1" title="No phone on file">·</span>'
               )
             + '<form method="POST" action="/admin/reservations/' + r.id + '/delete" style="display:inline;" '
