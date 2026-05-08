@@ -63,7 +63,27 @@ def _get_access_token():
         headers={"Authorization": f"Basic {auth}"},
         timeout=15,
     )
-    r.raise_for_status()
+    if r.status_code != 200:
+        # Surface Zoom's actual error reason — they put the diagnosis in
+        # the JSON body, not the HTTP status. Common bodies:
+        #   {"reason":"Invalid client_id or client_secret","error":"invalid_client"}
+        #   {"reason":"Account does not exist","error":"invalid_request"}
+        #   {"reason":"Account does not enabled the OAuth app type","error":"invalid_request"}
+        try:
+            body = r.json()
+            reason = body.get("reason") or body.get("error_description") or body.get("error") or r.text[:200]
+        except Exception:
+            reason = (r.text or "")[:200]
+        # Also report which char-length account_id we're sending so a hidden
+        # whitespace/newline shows up as a length mismatch.
+        diag = (
+            f"Zoom OAuth {r.status_code}: {reason} "
+            f"[account_id len={len(c['account_id'])}, "
+            f"client_id len={len(c['client_id'])}, "
+            f"client_secret len={len(c['client_secret'])}]"
+        )
+        logger.error(diag)
+        raise RuntimeError(diag)
     data = r.json()
     _token_cache["access_token"] = data["access_token"]
     _token_cache["expires_at"] = now + int(data.get("expires_in", 3600))
