@@ -180,6 +180,9 @@
       <button data-filter="all" class="filter-btn active text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
         All
       </button>
+      <button data-filter="paid" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+        Paid
+      </button>
       <button data-filter="eligible" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
         Eligible (raffle)
       </button>
@@ -224,6 +227,7 @@
           <tr data-row-id="{{ r.id }}"
               data-eligible="{{ '1' if (r.paid_at and r.form_completed_at and (not state.window_closed_at or r.form_completed_at <= state.window_closed_at)) else '0' }}"
               data-pending="{{ '1' if (r.paid_at and not r.form_completed_at) else '0' }}"
+              data-paid="{{ '1' if r.paid_at else '0' }}"
               data-doubts="{{ '1' if r.clarity == 'doubts' else '0' }}"
               data-program="{{ r.program_choice or '' }}"
               data-modality="{{ r.modality_choice or '' }}"
@@ -274,12 +278,12 @@
             </td>
             <td class="px-4 py-3 text-right whitespace-nowrap">
               {% if r.ambassador and r.ambassador.phone_number %}
-                {% set wa_msg = 'Hi ' ~ (r.name or '') ~ '! Following up on your MKOT 3.0 reservation.' %}
+                {% set wa_msg = 'Hi ' ~ (r.name or 'there') ~ '! I left you an important audio 👇🏼' %}
                 <a href="https://wa.me/{{ r.ambassador.phone_number|replace('+','')|replace(' ','') }}?text={{ wa_msg|urlencode }}"
                    target="_blank" rel="noopener"
-                   class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white transition mr-1"
-                   title="WhatsApp {{ r.ambassador.phone_number }}">
-                  💬
+                   class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white transition mr-1 text-xs font-mono uppercase tracking-wider whitespace-nowrap"
+                   title="Open WhatsApp with audio intro for {{ r.ambassador.phone_number }}">
+                  💬 Audio
                 </a>
               {% else %}
                 <span class="inline-flex items-center justify-center w-7 h-7 text-gray-700 text-xs cursor-not-allowed mr-1"
@@ -361,6 +365,7 @@
   function rowMatchesFilter(row) {
     const f = currentFilter;
     if (f === 'all')         return true;
+    if (f === 'paid')        return row.dataset.paid === '1';
     if (f === 'eligible')    return row.dataset.eligible === '1';
     if (f === 'pending')     return row.dataset.pending === '1';
     if (f === 'doubts')      return row.dataset.doubts === '1';
@@ -413,6 +418,7 @@
         return '<tr data-row-id="' + r.id + '" '
           + 'data-eligible="' + (isEligible ? '1' : '0') + '" '
           + 'data-pending="' + (isPending ? '1' : '0') + '" '
+          + 'data-paid="' + (r.paid_at ? '1' : '0') + '" '
           + 'data-doubts="' + (isDoubts ? '1' : '0') + '" '
           + 'data-program="' + escapeHtml(r.program_choice || '') + '" '
           + 'data-modality="' + escapeHtml(r.modality_choice || '') + '" '
@@ -429,7 +435,7 @@
           + '<td class="px-4 py-3 text-[10px] text-gray-600 font-mono">' + escapeHtml((r.stripe_session_id || '').substring(0, 14)) + '…</td>'
           + '<td class="px-4 py-3 text-right whitespace-nowrap">'
             + (r.phone
-                ? '<a href="https://wa.me/' + encodeURIComponent(r.phone.replace(/^\+/, '').replace(/\s/g, '')) + '?text=' + encodeURIComponent('Hi ' + (r.name || '') + '! Following up on your MKOT 3.0 reservation.') + '" target="_blank" rel="noopener" class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white transition mr-1" title="WhatsApp ' + escapeHtml(r.phone) + '">💬</a>'
+                ? '<a href="https://wa.me/' + encodeURIComponent(r.phone.replace(/^\+/, '').replace(/\s/g, '')) + '?text=' + encodeURIComponent('Hi ' + (r.name || 'there') + '! I left you an important audio 👇🏼') + '" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white transition mr-1 text-xs font-mono uppercase tracking-wider whitespace-nowrap" title="Open WhatsApp with audio intro for ' + escapeHtml(r.phone) + '">💬 Audio</a>'
                 : '<span class="inline-flex items-center justify-center w-7 h-7 text-gray-700 text-xs cursor-not-allowed mr-1" title="No phone on file">·</span>'
               )
             + '<form method="POST" action="/admin/reservations/' + r.id + '/delete" style="display:inline;" '
