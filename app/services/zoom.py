@@ -90,13 +90,11 @@ def _get_access_token():
     return _token_cache["access_token"]
 
 
-def fetch_meeting_participants(meeting_id):
-    """Returns a list of dicts. Keys typically include:
-      - name, user_email, join_time, leave_time, duration, status
-    Empty list if the meeting hasn't ended or has no participants yet
-    (the report endpoint only returns data after the meeting closes).
+def _fetch_participants_endpoint(token, endpoint, meeting_id):
+    """Pull paginated participants from a /report/{kind}/{id}/participants
+    endpoint. Returns (list_of_participants, error_or_None).
+    Raises RuntimeError only on hard auth failures.
     """
-    token = _get_access_token()
     out = []
     next_token = None
     while True:
@@ -104,20 +102,60 @@ def fetch_meeting_participants(meeting_id):
         if next_token:
             params["next_page_token"] = next_token
         r = http_requests.get(
-            f"{ZOOM_API_BASE}/report/meetings/{meeting_id}/participants",
+            f"{ZOOM_API_BASE}/report/{endpoint}/{meeting_id}/participants",
             headers={"Authorization": f"Bearer {token}"},
             params=params,
             timeout=30,
         )
-        if r.status_code == 404:
-            raise RuntimeError(
-                f"Zoom meeting {meeting_id} not found, or report not ready yet "
-                "(reports populate a few minutes after the meeting ends)."
-            )
-        r.raise_for_status()
+        if r.status_code != 200:
+            try:
+                body = r.json()
+            except Exception:
+                body = {"raw": (r.text or "")[:200]}
+            return out, {
+                "status": r.status_code,
+                "code": body.get("code"),
+                "message": body.get("message") or body.get("reason") or body.get("raw"),
+                "endpoint": endpoint,
+            }
         data = r.json()
         out.extend(data.get("participants") or [])
         next_token = data.get("next_page_token")
         if not next_token:
-            break
-    return out
+            return out, None
+
+
+def fetch_meeting_participants(meeting_id):
+    """Pull participants for a finished session.
+
+    Tries `/report/meetings/{id}/participants` first; if Zoom returns 404 or
+    code 3001 (meeting not found), falls back to the webinars endpoint —
+    same payload shape but for accounts using the Zoom Webinars add-on.
+    Surfaces Zoom's actual error reason on failure.
+    """
+    token = _get_access_token()
+
+    out, err = _fetch_participants_endpoint(token, "meetings", meeting_id)
+    if err is None:
+        return out
+
+    # Common case worth retrying as webinar: 404 or 400 with "not found" code.
+    # If meetings 400'd because this is actually a Zoom Webinar (a different
+    # product/endpoint), the webinars endpoint will succeed.
+    if err["status"] in (400, 404):
+        out2, err2 = _fetch_participants_endpoint(token, "webinars", meeting_id)
+        if err2 is None:
+            logger.info("zoom: meeting %s resolved via /report/webinars/", meeting_id)
+            return out2
+        # If the webinar attempt failed for a *different* reason than
+        # "not found", surface that one — it's likely the more useful one.
+        if err2["status"] not in (400, 404):
+            err = err2
+
+    raise RuntimeError(
+        f"Zoom Reports API {err['status']}: "
+        f"code={err.get('code')} · {err.get('message')} "
+        f"(tried /report/meetings/{meeting_id}/participants"
+        + (", then /report/webinars/" + meeting_id + "/participants" if err["status"] in (400, 404) else "")
+        + ")"
+    )
