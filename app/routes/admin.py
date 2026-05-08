@@ -5548,6 +5548,56 @@ def zoom_attendees():
     )
 
 
+@admin_bp.route("/zoom/debug")
+def zoom_debug():
+    """Diagnostic: shows what Zoom returns for past_meetings + each instance.
+    Use when the import returns the wrong participant count to figure out
+    if the meeting has multiple instances and which UUID has the real data.
+    """
+    from app.services import zoom as zoom_svc
+    from flask import jsonify
+
+    meeting_id = (request.args.get("meeting_id") or "82504511534").strip()
+    if not meeting_id:
+        return jsonify({"error": "pass ?meeting_id=..."})
+
+    try:
+        instances = zoom_svc.list_past_instances(meeting_id)
+    except Exception as e:
+        return jsonify({"error": f"list_past_instances failed: {e}"})
+
+    instance_summaries = []
+    if instances:
+        token = zoom_svc._get_access_token()
+        for inst in instances:
+            uuid = inst.get("uuid")
+            start = inst.get("start_time")
+            if not uuid:
+                continue
+            encoded = zoom_svc._double_url_encode(uuid)
+            participants, err = zoom_svc._fetch_participants_endpoint(token, "meetings", encoded)
+            instance_summaries.append({
+                "uuid": uuid,
+                "start_time": start,
+                "participant_count": len(participants),
+                "first_3_emails": [p.get("user_email") for p in participants[:3]],
+                "error": err,
+            })
+
+    # Also try the single-shot numeric ID for comparison
+    token = zoom_svc._get_access_token()
+    direct, direct_err = zoom_svc._fetch_participants_endpoint(token, "meetings", meeting_id)
+
+    return jsonify({
+        "meeting_id_queried": meeting_id,
+        "instances_found": len(instances),
+        "instances": instance_summaries,
+        "direct_call_count": len(direct),
+        "direct_call_first_3_emails": [p.get("user_email") for p in direct[:3]],
+        "direct_call_error": direct_err,
+    })
+
+
 @admin_bp.route("/zoom/import-participants", methods=["POST"])
 def import_zoom_participants():
     """Import webinar attendees as `webinar_joined` LeadEvents.
