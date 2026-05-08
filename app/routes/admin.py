@@ -5106,13 +5106,24 @@ def queue():
     include_warm = request.args.get("include_warm") == "1"
 
     # Eligible: opted-in AND (never contacted OR contacted >7d ago).
+    # Excludes existing community members — they're already inside the
+    # paid community, can't be sold to via this funnel. A community
+    # member is anyone imported from Circle (source='community' OR
+    # circle_member_id set) OR who self-declared "yes" in the GHL form.
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    yes_values = ("yes", "sí", "si", "true", "1", "y")
     candidates = (
         Ambassador.query
         .filter(Ambassador.unsubscribed_at.is_(None))
         .filter(or_(
             Ambassador.last_outreach_at.is_(None),
             Ambassador.last_outreach_at < seven_days_ago,
+        ))
+        .filter(or_(Ambassador.source.is_(None), Ambassador.source != "community"))
+        .filter(Ambassador.circle_member_id.is_(None))
+        .filter(or_(
+            Ambassador.is_community_member.is_(None),
+            func.lower(func.trim(Ambassador.is_community_member)).notin_(yes_values),
         ))
         .all()
     )

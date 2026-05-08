@@ -141,7 +141,7 @@
     </div>
     <h1 class="text-2xl font-display font-bold mb-1">📋 Today's Action Queue</h1>
     <p class="text-sm text-gray-400 mb-3">
-        Top {{ rows|length }} of {{ total_eligible }} actionable leads — ranked by recency-weighted heat score, hides anyone contacted in the last 7 days.
+        Top {{ rows|length }} of {{ total_eligible }} actionable leads — ranked by recency-weighted heat score, hides anyone contacted in the last 7 days <span class="text-brand-400">and existing community members</span>.
         {% if include_warm %}<span class="text-yellow-400">Including warm bucket.</span>{% endif %}
     </p>
 
