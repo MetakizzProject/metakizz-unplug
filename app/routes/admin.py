@@ -5647,21 +5647,33 @@ def import_zoom_participants():
             flash(f"Zoom API error: {e}", "error")
             return redirect(url_for("admin.emails"))
 
+        # KEY DESIGN: Zoom Meetings (vs Webinars) often return user_email=""
+        # for guest joiners (people who clicked the link without being logged
+        # in to a Zoom account). We MUST keep those rows — name is still a
+        # useful identifier and we capture full engagement metrics for them.
+        # The dedup key is email-when-present, else "name:" + normalized name.
         for p in participants:
             em = (p.get("user_email") or "").strip().lower()
-            if not em or "@" not in em:
+            name = (p.get("name") or "").strip()
+            # Skip rows that have neither — these are noise (Zoom occasionally
+            # emits sentinel rows for waiting-room timeouts etc.).
+            if not em and not name:
                 continue
+            if em and "@" not in em:
+                em = ""  # treat malformed emails as missing
+            key = em if em else "name:" + name.lower()
+
             duration_sec = int(p.get("duration") or 0)
             join_t = _parse_iso(p.get("join_time"))
             leave_t = _parse_iso(p.get("leave_time"))
-            # Zoom's `location` is a free string like "Madrid"; sometimes
-            # empty. We coalesce city/country if present.
             country = (p.get("location") or "").strip() or None
             device = (p.get("device") or "").strip() or None
 
-            rec = records.get(em)
+            rec = records.get(key)
             if rec is None:
                 rec = {
+                    "email": em or None,
+                    "name": name or None,
                     "duration_sec": 0,
                     "country": None,
                     "device": None,
@@ -5669,7 +5681,12 @@ def import_zoom_participants():
                     "left_at": None,
                     "raw_sessions": [],
                 }
-                records[em] = rec
+                records[key] = rec
+            # Keep first non-empty name/email if multiple sessions disagree.
+            if not rec["name"] and name:
+                rec["name"] = name
+            if not rec["email"] and em:
+                rec["email"] = em
             rec["duration_sec"] += duration_sec
             if country and not rec["country"]:
                 rec["country"] = country[:80]
@@ -5679,9 +5696,8 @@ def import_zoom_participants():
                 rec["joined_at"] = join_t
             if leave_t and (rec["left_at"] is None or leave_t > rec["left_at"]):
                 rec["left_at"] = leave_t
-            # Keep one trimmed copy per session for the audit JSON.
             rec["raw_sessions"].append({
-                "name": p.get("name"),
+                "name": name,
                 "user_email": em,
                 "join_time": p.get("join_time"),
                 "leave_time": p.get("leave_time"),
@@ -5696,6 +5712,7 @@ def import_zoom_participants():
         pattern = re.compile(r"[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}")
         for em in pattern.findall(raw.lower()):
             records.setdefault(em, {
+                "email": em, "name": None,
                 "duration_sec": 0, "country": None, "device": None,
                 "joined_at": None, "left_at": None, "raw_sessions": [],
             })
@@ -5710,29 +5727,64 @@ def import_zoom_participants():
 
     now = datetime.now(timezone.utc)
 
-    # Skip emails that already have a webinar_joined event (idempotent re-imports).
-    existing = {
+    # Idempotency keys: emails that already have webinar_joined, AND
+    # name-only events (we stored those without email last time around).
+    existing_emails = {
         em.lower() for (em,) in
         db.session.query(LeadEvent.email)
         .filter(LeadEvent.event_type == "webinar_joined")
+        .filter(LeadEvent.email.isnot(None))
         .all() if em
     }
+    existing_names = {
+        (n or "").strip().lower() for (n,) in
+        db.session.query(LeadEvent.webinar_name)
+        .filter(LeadEvent.event_type == "webinar_joined")
+        .filter(LeadEvent.email.is_(None))
+        .filter(LeadEvent.webinar_name.isnot(None))
+        .all() if n
+    }
 
-    # Build email → ambassador_id lookup once.
-    amb_lookup = {
+    # Email-keyed and name-keyed ambassador lookups for matching.
+    amb_by_email = {
         (em or "").lower(): aid for (aid, em) in
         db.session.query(Ambassador.id, Ambassador.email).all()
         if em
     }
+    # Group ambassadors by lowercased name; only use the lookup when a name
+    # has exactly ONE ambassador (avoids false positives on common names).
+    name_groups = {}
+    for aid, n in db.session.query(Ambassador.id, Ambassador.name).all():
+        if not n:
+            continue
+        k = n.strip().lower()
+        name_groups.setdefault(k, []).append(aid)
+    amb_by_name_unique = {k: ids[0] for k, ids in name_groups.items() if len(ids) == 1}
 
     new_events = 0
-    matched = 0
-    for em, rec in records.items():
-        if em in existing:
+    matched_by_email = 0
+    matched_by_name = 0
+    skipped = 0
+    for key, rec in records.items():
+        em = (rec.get("email") or "").lower()
+        name = (rec.get("name") or "").strip()
+        name_key = name.lower()
+
+        if em and em in existing_emails:
+            skipped += 1
             continue
-        amb_id = amb_lookup.get(em)
-        if amb_id:
-            matched += 1
+        if not em and name_key and name_key in existing_names:
+            skipped += 1
+            continue
+
+        amb_id = None
+        if em and em in amb_by_email:
+            amb_id = amb_by_email[em]
+            matched_by_email += 1
+        elif name_key and name_key in amb_by_name_unique:
+            amb_id = amb_by_name_unique[name_key]
+            matched_by_name += 1
+
         duration_min = (rec["duration_sec"] // 60) if rec["duration_sec"] else None
         # Truncate the raw audit JSON to ~4KB to stay safely under the 5KB
         # comment in the column. Most webinars produce <1KB per attendee.
@@ -5744,24 +5796,29 @@ def import_zoom_participants():
                 extra_json = None
         db.session.add(LeadEvent(
             ambassador_id=amb_id,
-            email=em,
+            email=em or None,
             event_type="webinar_joined",
             webinar_duration_min=duration_min,
             webinar_country=rec["country"],
             webinar_device=rec["device"],
             webinar_joined_at=rec["joined_at"],
             webinar_left_at=rec["left_at"],
+            webinar_name=name[:120] if name else None,
             extra=extra_json,
             created_at=now,
         ))
         new_events += 1
     db.session.commit()
 
-    skipped = len(records) - new_events
+    matched = matched_by_email + matched_by_name
+    no_email_count = sum(1 for r in records.values() if not r.get("email"))
     flash(
-        f"Imported {new_events} new webinar_joined events from {source_label}. "
-        f"{matched} matched to ambassadors, {new_events - matched} ghost leads. "
-        f"{skipped} already had the event (skipped).",
+        f"Imported {new_events} unique attendees from {source_label}. "
+        f"{matched_by_email} matched by email, "
+        f"{matched_by_name} matched by name, "
+        f"{new_events - matched} unmatched (ghost). "
+        f"{no_email_count} had no email captured (Zoom guest joiners). "
+        f"{skipped} already imported (skipped).",
         "success",
     )
     return redirect(url_for("admin.emails"))

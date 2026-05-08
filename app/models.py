@@ -311,6 +311,10 @@ class LeadEvent(db.Model):
     webinar_device = db.Column(db.String(40), nullable=True)
     webinar_joined_at = db.Column(db.DateTime, nullable=True)
     webinar_left_at = db.Column(db.DateTime, nullable=True)
+    # Display name from Zoom — important for guest joiners who don't have
+    # an email captured. Used as the only identifier in that case, and as
+    # the matching key against Ambassador.name for indirect linking.
+    webinar_name = db.Column(db.String(120), nullable=True)
 
     # Raw JSON payload for debugging / future fields. Truncated to 5KB.
     extra = db.Column(db.Text, nullable=True)

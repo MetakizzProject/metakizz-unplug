@@ -155,6 +155,7 @@ def _ensure_unsubscribe_columns(db):
                 ("webinar_device",       "VARCHAR(40)"),
                 ("webinar_joined_at",    "TIMESTAMP"),
                 ("webinar_left_at",      "TIMESTAMP"),
+                ("webinar_name",         "VARCHAR(120)"),
             ]:
                 if col_name not in le_cols:
                     conn.execute(text(f"ALTER TABLE lead_events ADD COLUMN {col_name} {col_type}"))

@@ -104,10 +104,16 @@
                         {% if r.ambassador_id and amb_lookup.get(r.ambassador_id) %}
                             {% set a = amb_lookup[r.ambassador_id] %}
                             <a href="{{ url_for('admin.ambassador_detail', ambassador_id=a.id) }}" class="text-white hover:text-brand-400 font-semibold">{{ a.name }}</a>
-                            <div class="text-[11px] text-gray-500">{{ r.email }}</div>
-                        {% else %}
+                            <div class="text-[11px] text-gray-500">
+                                {{ r.email or r.webinar_name or '—' }}
+                                {% if not r.email %}<span class="text-yellow-500/70 ml-1">· name-matched</span>{% endif %}
+                            </div>
+                        {% elif r.email %}
                             <span class="text-gray-300">{{ r.email }}</span>
-                            <div class="text-[10px] text-gray-600 italic">ghost lead — not registered</div>
+                            <div class="text-[10px] text-gray-600 italic">ghost lead — email not in DB</div>
+                        {% else %}
+                            <span class="text-gray-300">{{ r.webinar_name or '—' }}</span>
+                            <div class="text-[10px] text-gray-600 italic">ghost lead — Zoom guest (no email)</div>
                         {% endif %}
                     </td>
                     <td class="px-4 py-2.5">
