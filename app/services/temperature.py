@@ -29,9 +29,18 @@ TEMP_WEIGHTS = {
     "class_95_or_complete":  45,
     # Past content — they already invested attention with us once.
     "past_masterclass":      20,
-    # Live webinar — highest non-purchase intent. Showing up live for an
-    # hour requires real commitment; this should dominate the score.
-    "webinar_attended":      80,
+    # Live webinar attendance — tiered by duration_min when available.
+    # Someone who stayed 60+ min is far hotter than someone who joined
+    # for 2 min; previous binary +80 didn't discriminate.
+    "webinar_attended_brief":  15,   # < 10 min · clicked join, bounced
+    "webinar_attended_short":  40,   # 10-30 min · gave us part of an evening
+    "webinar_attended_long":   70,   # 30-60 min · most of the live
+    "webinar_attended_full":  100,   # 60+ min · sat through the whole thing
+    "webinar_attended_unknown": 60,  # joined but no duration captured (CSV path)
+    # Reservation paid — proof of purchase intent for MKOT 3.0.
+    # Sits between "burning intent" and "customer" — these people put
+    # €100 down. Auto-promotes their bucket to at least burning.
+    "reservation_paid":      120,
     # Purchase — auto-bucket → Customer regardless of score.
     "purchase_completed":    150,
 }
@@ -109,7 +118,7 @@ def class_visited_event_types(class_n: int):
     return [f"class{class_n}_viewed"]
 
 
-def bucket_from_event_set(event_types) -> str:
+def bucket_from_event_set(event_types, has_paid_reservation: bool = False) -> str:
     """Classify a lead's temperature bucket from the SET of event_types
     they have. Launch-day-friendly: any class_completed promotes to
     burning (used to require 2+). Used by:
@@ -118,20 +127,27 @@ def bucket_from_event_set(event_types) -> str:
       - Per-row badge in compute_temperature()
 
     Returns one of: cold | cool | warm | hot | burning | customer.
+
+    `has_paid_reservation` is an out-of-band signal (joined from the
+    Reservation table by email). When True, bumps the bucket to at
+    least "burning" — putting €100 down is a stronger commitment than
+    any class progress.
     """
     evts = event_types if isinstance(event_types, set) else set(event_types or [])
     if "purchase_completed" in evts:
         return "customer"
+    if has_paid_reservation:
+        return "burning"
     if "webinar_joined" in evts:
         return "burning"
-    if any(f"class{n}_completed" in evts for n in (1, 2)):
+    if any(f"class{n}_completed" in evts for n in (1, 2, 3)):
         return "burning"
-    if any(f"class{n}_progress_{p}" in evts for n in (1, 2) for p in (75, 95)):
+    if any(f"class{n}_progress_{p}" in evts for n in (1, 2, 3) for p in (75, 95)):
         return "hot"
-    if any(f"class{n}_progress_50" in evts for n in (1, 2)):
+    if any(f"class{n}_progress_50" in evts for n in (1, 2, 3)):
         return "warm"
     if any(f"class{n}_progress_25" in evts or f"class{n}_viewed" in evts
-           for n in (1, 2)):
+           for n in (1, 2, 3)):
         return "cool"
     return "cold"
 
@@ -163,20 +179,51 @@ def _pct_from_event(event_type: str, pct_field: Optional[int]) -> int:
 
 def compute_max_pct_per_class(lead_events) -> Dict[int, int]:
     """Walk an iterable of LeadEvent rows for one ambassador and return
-    {1: 0..100, 2: 0..100} with the max % achieved per class.
+    {1: 0..100, 2: 0..100, 3: 0..100} with the max % achieved per class.
 
-    Launch is 2 classes + 1 live webinar — Class 3 doesn't exist as
-    content. Webinar attendance is tracked separately via the
-    `webinar_joined` event in compute_temperature.
+    Class 3 is the live-masterclass replay (uploaded to Bunny Stream
+    after the live). Same event taxonomy as 1 and 2.
     """
-    out = {1: 0, 2: 0}
+    out = {1: 0, 2: 0, 3: 0}
     for e in lead_events:
         cn = e.class_number
-        if cn not in (1, 2):
-            continue
+        if cn not in (1, 2, 3):
+            # class_number column may be NULL on legacy rows — fall back
+            # to parsing the event_type prefix.
+            ev = e.event_type or ""
+            if ev.startswith("class") and len(ev) >= 6:
+                try:
+                    cn = int(ev[5])
+                except ValueError:
+                    continue
+            else:
+                continue
+            if cn not in (1, 2, 3):
+                continue
         pct = _pct_from_event(e.event_type or "", e.pct)
         if pct > out[cn]:
             out[cn] = pct
+    return out
+
+
+def compute_views_per_class(lead_events) -> Dict[int, int]:
+    """Counts distinct `class{N}_viewed` LeadEvent rows per class.
+    Each row is one play session — rewatches naturally bump the count
+    because the importer doesn't dedup on (email, event_type).
+    """
+    out = {1: 0, 2: 0, 3: 0}
+    for e in lead_events:
+        ev = e.event_type or ""
+        if not ev.endswith("_viewed"):
+            continue
+        if not ev.startswith("class"):
+            continue
+        try:
+            cn = int(ev[5])
+        except (IndexError, ValueError):
+            continue
+        if cn in out:
+            out[cn] += 1
     return out
 
 
@@ -185,6 +232,8 @@ def compute_temperature(
     lead_events: Optional[List[Any]] = None,
     email_events: Optional[List[Any]] = None,
     referral_count: Optional[int] = None,
+    webinar_duration_min: Optional[int] = None,
+    has_paid_reservation: bool = False,
 ) -> Dict[str, Any]:
     """Score a single ambassador using all available signals.
 
@@ -264,10 +313,40 @@ def compute_temperature(
             score += TEMP_WEIGHTS["class_25"]
             signals.append(f"watched {pct}% of class {cn}")
 
-    # ── Webinar attendance (future-proof) ──
-    if any(e.event_type == "webinar_joined" for e in lead_events):
-        score += TEMP_WEIGHTS["webinar_attended"]
-        signals.append("attended webinar")
+    # ── Webinar attendance (tiered by duration_min) ──
+    # Caller can pre-resolve duration via bulk_webinar_durations() to
+    # avoid an extra query per row. If left None, fall back to the
+    # webinar_duration_min on the latest webinar_joined LeadEvent in
+    # `lead_events` (which is what /admin/leads already pre-fetches).
+    joined_webinar = any(e.event_type == "webinar_joined" for e in lead_events)
+    if webinar_duration_min is None and joined_webinar:
+        # Try to read it from the lead_events we already have.
+        for e in lead_events:
+            if e.event_type == "webinar_joined" and getattr(e, "webinar_duration_min", None):
+                webinar_duration_min = e.webinar_duration_min
+                break
+    if webinar_duration_min is not None and webinar_duration_min > 0:
+        if webinar_duration_min >= 60:
+            score += TEMP_WEIGHTS["webinar_attended_full"]
+            signals.append(f"attended live ({webinar_duration_min}m)")
+        elif webinar_duration_min >= 30:
+            score += TEMP_WEIGHTS["webinar_attended_long"]
+            signals.append(f"attended live ({webinar_duration_min}m)")
+        elif webinar_duration_min >= 10:
+            score += TEMP_WEIGHTS["webinar_attended_short"]
+            signals.append(f"attended live ({webinar_duration_min}m)")
+        else:
+            score += TEMP_WEIGHTS["webinar_attended_brief"]
+            signals.append(f"attended live ({webinar_duration_min}m, brief)")
+    elif joined_webinar:
+        # No duration captured — keep the binary signal.
+        score += TEMP_WEIGHTS["webinar_attended_unknown"]
+        signals.append("attended live")
+
+    # ── Reservation paid (€100 deposit for MKOT 3.0) ──
+    if has_paid_reservation:
+        score += TEMP_WEIGHTS["reservation_paid"]
+        signals.append("paid €100 reservation")
 
     # ── Purchase ──
     if any(e.event_type == "purchase_completed" for e in lead_events):
@@ -283,8 +362,11 @@ def compute_temperature(
     # ── Bucket ── (event-presence classification, see bucket_from_event_set)
     # Score is preserved for sorting within a bucket, but bucket assignment
     # uses the same classifier as the temperature filter so the filter and
-    # the per-row badge always agree.
-    bucket_key = bucket_from_event_set({e.event_type for e in lead_events})
+    # the per-row badge always agree. Reservation paid promotes to burning.
+    bucket_key = bucket_from_event_set(
+        {e.event_type for e in lead_events},
+        has_paid_reservation=has_paid_reservation,
+    )
     bucket, color = BUCKET_LABELS[bucket_key]
 
     return {
@@ -294,7 +376,60 @@ def compute_temperature(
         "color": color,
         "signals": signals,
         "max_pct": max_pct,
+        "views_per_class": compute_views_per_class(lead_events),
+        "webinar_duration_min": webinar_duration_min,
+        "has_paid_reservation": has_paid_reservation,
     }
+
+
+def bulk_webinar_durations(emails) -> Dict[str, int]:
+    """One SQL: returns {email_lower: webinar_duration_min} for each email
+    that has a webinar_joined LeadEvent with a captured duration.
+
+    Caller passes a list of ambassador emails (any case). Output keys are
+    always lowercased. Use to avoid N+1 when scoring many leads at once.
+    """
+    from app.models import LeadEvent
+    from sqlalchemy import func
+    if not emails:
+        return {}
+    emails_lower = [e.lower() for e in emails if e]
+    if not emails_lower:
+        return {}
+    rows = (
+        LeadEvent.query
+        .filter(LeadEvent.event_type == "webinar_joined")
+        .filter(LeadEvent.webinar_duration_min.isnot(None))
+        .filter(func.lower(LeadEvent.email).in_(emails_lower))
+        .all()
+    )
+    out = {}
+    for r in rows:
+        em = (r.email or "").lower()
+        if em and (em not in out or (r.webinar_duration_min or 0) > out[em]):
+            out[em] = r.webinar_duration_min
+    return out
+
+
+def bulk_paid_reservations(emails) -> set:
+    """One SQL: returns set of lowercased emails that have at least one
+    Reservation row with paid_at IS NOT NULL.
+    """
+    from app.models import Reservation
+    from sqlalchemy import func
+    if not emails:
+        return set()
+    emails_lower = [e.lower() for e in emails if e]
+    if not emails_lower:
+        return set()
+    rows = (
+        Reservation.query
+        .filter(func.lower(Reservation.email).in_(emails_lower))
+        .filter(Reservation.paid_at.isnot(None))
+        .with_entities(Reservation.email)
+        .all()
+    )
+    return {(r.email or "").lower() for r in rows if r.email}
 
 
 def fetch_signals_bulk(ambassador_ids, max_ids: int = 500):

@@ -9,7 +9,7 @@
     <h1 class="text-2xl font-display font-bold mb-1">Class views &amp; rewatches</h1>
     <p class="text-sm text-gray-400 mb-3">
         Per-class engagement broken down by the rewatch window.
-        Sleepers are who watched during launch but haven't returned this weekend — the audience for the rewatch reminder.
+        <strong class="text-yellow-400">"Didn't return"</strong> = watched a class during the original launch but hasn't come back during the weekend re-open. That's the audience for the rewatch reminder email.
     </p>
 
     {% if cutoff_set %}
@@ -33,24 +33,24 @@
                 <span class="text-xs text-gray-500">{{ c.total_unique }} unique</span>
             </div>
             <div class="grid grid-cols-3 gap-2 mb-4">
-                <div class="text-center bg-brand-900/20 border border-brand-500/30 rounded p-2">
+                <div class="text-center bg-brand-900/20 border border-brand-500/30 rounded p-2" title="Watched during launch AND came back this weekend">
                     <p class="font-orbitron font-black text-2xl text-brand-400" style="text-shadow:0 0 10px rgba(46,219,153,0.4);">{{ c.returners }}</p>
-                    <p class="text-[9px] text-gray-500 font-mono-term tracking-wider uppercase mt-1">returners</p>
+                    <p class="text-[9px] text-gray-500 font-mono-term tracking-wider uppercase mt-1">came back</p>
                 </div>
-                <div class="text-center bg-yellow-900/20 border border-yellow-500/30 rounded p-2">
+                <div class="text-center bg-yellow-900/20 border border-yellow-500/30 rounded p-2" title="Watched during launch but hasn't come back this weekend — target for rewatch reminder">
                     <p class="font-orbitron font-black text-2xl text-yellow-400" style="text-shadow:0 0 10px rgba(255,200,87,0.4);">{{ c.sleepers }}</p>
-                    <p class="text-[9px] text-gray-500 font-mono-term tracking-wider uppercase mt-1">sleepers</p>
+                    <p class="text-[9px] text-gray-500 font-mono-term tracking-wider uppercase mt-1">didn't return</p>
                 </div>
-                <div class="text-center bg-blue-900/20 border border-blue-500/30 rounded p-2">
+                <div class="text-center bg-blue-900/20 border border-blue-500/30 rounded p-2" title="First time watching during the weekend re-open (didn't watch during the launch)">
                     <p class="font-orbitron font-black text-2xl text-blue-400" style="text-shadow:0 0 10px rgba(96,165,250,0.4);">{{ c.rewatch_only }}</p>
-                    <p class="text-[9px] text-gray-500 font-mono-term tracking-wider uppercase mt-1">new viewers</p>
+                    <p class="text-[9px] text-gray-500 font-mono-term tracking-wider uppercase mt-1">first time this weekend</p>
                 </div>
             </div>
             {# Send rewatch reminder to sleepers #}
             {% if c.sleepers > 0 and cutoff_set %}
             <button type="button" onclick="document.getElementById('cv-confirm-{{ c.n }}').classList.remove('hidden')"
                     class="w-full font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-yellow-400 hover:bg-yellow-300 px-3 py-2.5 rounded font-bold transition">
-                ▶ Rewatch reminder to {{ c.sleepers }} sleepers
+                ▶ Rewatch reminder to {{ c.sleepers }} who didn't return
             </button>
 
             {# Confirmation modal — same shape as /admin/emails canary modal #}
@@ -144,13 +144,13 @@
                         </td>
                         <td class="px-4 py-2.5">
                             {% if r.bucket == 'returner' %}
-                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-brand-400 bg-brand-900/20 border border-brand-500/30 px-2 py-0.5 rounded">returner</span>
+                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-brand-400 bg-brand-900/20 border border-brand-500/30 px-2 py-0.5 rounded">came back</span>
                             {% elif r.bucket == 'sleeper' %}
-                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-yellow-400 bg-yellow-900/20 border border-yellow-500/30 px-2 py-0.5 rounded">sleeper</span>
+                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-yellow-400 bg-yellow-900/20 border border-yellow-500/30 px-2 py-0.5 rounded">didn't return</span>
                             {% elif r.bucket == 'rewatch_only' %}
-                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-blue-400 bg-blue-900/20 border border-blue-500/30 px-2 py-0.5 rounded">new viewer</span>
+                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-blue-400 bg-blue-900/20 border border-blue-500/30 px-2 py-0.5 rounded">first time this weekend</span>
                             {% else %}
-                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-gray-500 bg-gray-800 border border-gray-700 px-2 py-0.5 rounded">first only</span>
+                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-gray-500 bg-gray-800 border border-gray-700 px-2 py-0.5 rounded">launch only</span>
                             {% endif %}
                             {% if r.completed %}
                                 <span class="ml-1 font-mono-term text-[9px] tracking-wider uppercase text-brand-300">✓ done</span>

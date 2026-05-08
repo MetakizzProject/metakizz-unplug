@@ -4356,13 +4356,21 @@ def leads_insights():
     cand_lead_evts, cand_email_evts = (
         fetch_signals_bulk(cand_ids, max_ids=None) if cand_ids else ({}, {})
     )
+    # Bulk webinar duration + reservation paid for candidates.
+    from app.services.temperature import bulk_webinar_durations as _bulk_dur, bulk_paid_reservations as _bulk_paid
+    cand_emails = [a.email for a in candidate_ambs if a.email]
+    cand_dur = _bulk_dur(cand_emails)
+    cand_paid = _bulk_paid(cand_emails)
     scored_candidates = []
     for a in candidate_ambs:
+        em_lower = (a.email or "").lower()
         t = compute_temperature(
             a,
             lead_events=cand_lead_evts.get(a.id, []),
             email_events=cand_email_evts.get(a.id, []),
             referral_count=ref_counts.get(a.id, 0),
+            webinar_duration_min=cand_dur.get(em_lower),
+            has_paid_reservation=em_lower in cand_paid,
         )
         scored_candidates.append((a, t))
 
@@ -4628,13 +4636,24 @@ def leads():
         fetch_signals_bulk(page_ids, max_ids=None) if page_ids else ({}, {})
     )
 
+    # Bulk-resolve webinar duration and paid-reservation status for the
+    # page in two single queries — rather than 50 sub-queries from inside
+    # compute_temperature. Keyed by lowercased email.
+    from app.services.temperature import bulk_webinar_durations, bulk_paid_reservations
+    page_emails = [a.email for a in page_amb if a.email]
+    webinar_dur_by_email = bulk_webinar_durations(page_emails)
+    paid_emails = bulk_paid_reservations(page_emails)
+
     rows_with_temp = []
     for a in page_amb:
+        em_lower = (a.email or "").lower()
         t = compute_temperature(
             a,
             lead_events=lead_evts_by_id.get(a.id, []),
             email_events=email_evts_by_id.get(a.id, []),
             referral_count=ref_counts.get(a.id, 0),
+            webinar_duration_min=webinar_dur_by_email.get(em_lower),
+            has_paid_reservation=em_lower in paid_emails,
         )
         t["source_info"] = classify_source(a)
         rows_with_temp.append((a, t))
@@ -5814,6 +5833,102 @@ def class_views():
         cutoff_set=cutoff is not None,
         **_admin_layout_context(),
     )
+
+
+@admin_bp.route("/zoom/rematch-ghosts", methods=["POST"])
+def zoom_rematch_ghosts():
+    """Second-pass fuzzy match: link Zoom ghost attendees (LeadEvent rows
+    with event_type='webinar_joined' and ambassador_id IS NULL) to engaged
+    ambassadors via UNIQUE name-token matching.
+
+    Engaged = has any referral, any LeadEvent, or dashboard_visit_count>0.
+    A "unique token" is one (>=4 chars, not in STOP_TOKENS) that appears in
+    exactly one engaged ambassador's name. If the ghost's webinar_name
+    contains any unique token, we link to that single ambassador.
+
+    Conservative on purpose: ambiguous tokens (e.g. "Maria") never link.
+    Idempotent: only processes rows where ambassador_id IS NULL.
+    """
+    import re
+
+    # Common Spanish/Portuguese surnames + dance-scene first names that
+    # are too frequent to reliably disambiguate with a single token.
+    STOP_TOKENS = {
+        "silva", "santos", "rodriguez", "garcia", "lopez", "martinez",
+        "fernandez", "gonzalez", "perez", "sanchez", "ramirez", "torres",
+        "ruiz", "diaz", "morales", "ortiz", "gomez", "hernandez", "alvarez",
+        "moreno", "jimenez", "romero", "munoz", "alonso", "delgado",
+        "castro", "martin", "navarro", "ortega", "iglesias", "medina",
+        "garrido", "marquez", "molina", "pena", "vega", "soto", "calvo",
+        "vargas", "blanco", "suarez", "carrasco", "guerrero", "caballero",
+        "nieto", "pascual", "herrera", "duran",
+        "maria", "anna", "anna_", "carlos", "david", "jose", "juan",
+        "pedro", "anna", "ana", "laura", "sofia", "lucia", "marta",
+        "nuria", "patricia", "diana", "elena", "irene", "iphone",
+        "android", "user", "guest", "anonymous",
+    }
+
+    def tokenize(name):
+        if not name:
+            return []
+        # Split on non-letter chars; lowercase; strip accents-loose.
+        tokens = re.findall(r"[a-zA-ZÀ-ÿ]+", name.lower())
+        return [t for t in tokens if len(t) >= 4 and t not in STOP_TOKENS]
+
+    # Engaged ambassadors pool. Use a broad definition — the uniqueness
+    # check is what protects against false positives.
+    engaged = (
+        Ambassador.query
+        .outerjoin(Referral, Referral.ambassador_id == Ambassador.id)
+        .outerjoin(LeadEvent, func.lower(LeadEvent.email) == func.lower(Ambassador.email))
+        .filter(or_(
+            Ambassador.dashboard_visit_count > 0,
+            Referral.id.isnot(None),
+            LeadEvent.id.isnot(None),
+        ))
+        .filter(Ambassador.unsubscribed_at.is_(None))
+        .distinct()
+        .all()
+    )
+
+    # Build {token: [amb_id, ...]} then keep only unique-token mappings.
+    token_groups = {}
+    for amb in engaged:
+        seen_tokens = set()  # one ambassador contributes each token once
+        for tok in tokenize(amb.name):
+            if tok in seen_tokens:
+                continue
+            seen_tokens.add(tok)
+            token_groups.setdefault(tok, set()).add(amb.id)
+    unique_tokens = {t: next(iter(ids)) for t, ids in token_groups.items() if len(ids) == 1}
+
+    # Iterate ghost rows.
+    ghosts = (
+        LeadEvent.query
+        .filter(LeadEvent.event_type == "webinar_joined")
+        .filter(LeadEvent.ambassador_id.is_(None))
+        .filter(LeadEvent.webinar_name.isnot(None))
+        .all()
+    )
+
+    matched_count = 0
+    for ghost in ghosts:
+        for tok in tokenize(ghost.webinar_name):
+            amb_id = unique_tokens.get(tok)
+            if amb_id:
+                ghost.ambassador_id = amb_id
+                matched_count += 1
+                break
+
+    db.session.commit()
+
+    remaining = len(ghosts) - matched_count
+    flash(
+        f"Re-matched {matched_count} of {len(ghosts)} Zoom ghost attendees to engaged ambassadors via unique-token. "
+        f"{remaining} still ghost (no matching unique token in any engaged ambassador's name).",
+        "success",
+    )
+    return redirect(url_for("admin.zoom_attendees"))
 
 
 @admin_bp.route("/zoom/debug")

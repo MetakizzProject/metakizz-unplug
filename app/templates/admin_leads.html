@@ -465,6 +465,28 @@
   {% endif %}
 
   <!-- ────────────────────────────────────────────────────────────
+       OUTREACH-READY QUICK PRESET
+       Combines temperature + has_phone + sort=temp into one click.
+       ──────────────────────────────────────────────────────────── -->
+  <div style="margin: 10px 0 18px 0;">
+    <a href="{{ url_for('admin.leads') }}?temp=burning&has_phone=1&sort=temp"
+       style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: linear-gradient(180deg, #DC2626 0%, #991B1B 100%); color: #FFFFFF; font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; text-decoration: none; box-shadow: 0 0 18px rgba(220, 38, 38, 0.35);"
+       title="Show only the burning bucket with phone numbers, sorted hottest first">
+      🔥 Outreach ready
+    </a>
+    <a href="{{ url_for('admin.leads') }}?temp=burning&sort=temp"
+       style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: rgba(255, 200, 87, 0.15); border: 1px solid rgba(255, 200, 87, 0.35); color: #FFC857; font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; text-decoration: none; margin-left: 8px;"
+       title="Burning bucket including those without a phone (use email instead)">
+      🔥 Burning · all
+    </a>
+    <a href="{{ url_for('admin.leads') }}?webinar=1&sort=temp"
+       style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: rgba(46, 219, 153, 0.12); border: 1px solid rgba(46, 219, 153, 0.35); color: #2EDB99; font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; text-decoration: none; margin-left: 8px;"
+       title="Live attendees, sorted by score">
+      🎤 Live attendees
+    </a>
+  </div>
+
+  <!-- ────────────────────────────────────────────────────────────
        TEMPERATURE DISTRIBUTION (clickable filters)
        ──────────────────────────────────────────────────────────── -->
   <div class="section-label">▌ Temperature · click to filter</div>
@@ -582,11 +604,11 @@
     <table class="leads-table">
       <thead>
         <tr>
-          <th style="width:22%;">Lead</th>
-          <th style="width:8%;">Source</th>
-          <th style="width:10%;">Origin</th>
-          <th style="width:12%;">Tags</th>
-          <th style="width:13%;">
+          <th style="width:20%;">Lead</th>
+          <th style="width:7%;">Source</th>
+          <th style="width:9%;">Origin</th>
+          <th style="width:10%;">Tags</th>
+          <th style="width:12%;">
             {%- set qs = request.args.to_dict() -%}
             {%- set _ = qs.pop('page', None) -%}
             {%- if f_sort == 'temp' -%}
@@ -606,9 +628,11 @@
               Temperature <span style="opacity:0.7; font-size:11px;">{{ arrow }}</span>
             </a>
           </th>
-          <th style="width:13%;">Classes</th>
-          <th style="width:8%;">Country</th>
-          <th style="width:14%;">Actions</th>
+          <th style="width:14%;">Classes</th>
+          <th style="width:6%;" title="Live webinar duration">Live</th>
+          <th style="width:5%;" title="Paid €100 reservation">€</th>
+          <th style="width:6%;">Country</th>
+          <th style="width:11%;">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -656,18 +680,42 @@
               {% endif %}
             </td>
             <td>
-              {% for cn in [1, 2] %}
+              {% for cn in [1, 2, 3] %}
                 {% set pct = t.max_pct[cn] %}
+                {% set views = t.views_per_class[cn] if t.views_per_class else 0 %}
                 {% if pct >= 95 %}
-                  <span class="class-progress" style="background:rgba(46,219,153,0.25); color:#2EDB99;">C{{ cn }} ✓</span>
+                  <span class="class-progress" style="background:rgba(46,219,153,0.25); color:#2EDB99;" title="watched {{ views }}× · {{ pct }}%">C{{ cn }} ✓{% if views > 1 %}<span style="color:#FFC857; font-size:9px; margin-left:2px;">×{{ views }}</span>{% endif %}</span>
                 {% elif pct >= 50 %}
-                  <span class="class-progress" style="background:rgba(255,200,87,0.18); color:#FFC857;">C{{ cn }} {{ pct }}%</span>
+                  <span class="class-progress" style="background:rgba(255,200,87,0.18); color:#FFC857;" title="{{ views }}× watched">C{{ cn }} {{ pct }}%{% if views > 1 %}<span style="font-size:9px;"> ×{{ views }}</span>{% endif %}</span>
                 {% elif pct >= 25 %}
-                  <span class="class-progress" style="background:rgba(255,200,87,0.08); color:#C9CFD4;">C{{ cn }} {{ pct }}%</span>
+                  <span class="class-progress" style="background:rgba(255,200,87,0.08); color:#C9CFD4;" title="{{ views }}× viewed">C{{ cn }} {{ pct }}%</span>
+                {% elif views > 0 %}
+                  <span class="class-progress" style="background:rgba(96,165,250,0.10); color:#9CA3AF;" title="{{ views }}× page-load only">C{{ cn }} 👁{% if views > 1 %} ×{{ views }}{% endif %}</span>
                 {% else %}
                   <span class="class-progress" style="background:rgba(0,0,0,0.3); color:#4B5563;">C{{ cn }} —</span>
                 {% endif %}
               {% endfor %}
+            </td>
+            <td>
+              {% set wd = t.webinar_duration_min %}
+              {% if wd is not none and wd > 0 %}
+                {% if wd >= 30 %}
+                  <span style="background:rgba(46,219,153,0.18); color:#2EDB99; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;" title="stayed {{ wd }} min in the live">{{ wd }}m</span>
+                {% elif wd >= 10 %}
+                  <span style="background:rgba(255,200,87,0.18); color:#FFC857; padding:2px 6px; border-radius:4px; font-size:11px;" title="stayed {{ wd }} min">{{ wd }}m</span>
+                {% else %}
+                  <span style="background:rgba(220,38,38,0.18); color:#FCA5A5; padding:2px 6px; border-radius:4px; font-size:11px;" title="briefly joined ({{ wd }} min)">{{ wd }}m</span>
+                {% endif %}
+              {% else %}
+                <span style="color:#374151;">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if t.has_paid_reservation %}
+                <span style="background:rgba(167,139,250,0.22); color:#C4B5FD; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;" title="Paid €100 reservation">€</span>
+              {% else %}
+                <span style="color:#374151;">—</span>
+              {% endif %}
             </td>
             <td>
               {% if country_flag %}
@@ -689,7 +737,7 @@
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="8" style="padding:30px; text-align:center; color:#9CA3AF;">No leads in this view yet.</td></tr>
+          <tr><td colspan="10" style="padding:30px; text-align:center; color:#9CA3AF;">No leads in this view yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>
