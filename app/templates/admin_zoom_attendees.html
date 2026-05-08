@@ -34,27 +34,32 @@
     </div>
     {% else %}
 
-    {# ── Engagement buckets ── #}
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
-        <div class="p-4 rounded-lg border border-brand-400/40 bg-black/60">
-            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-brand-400">▌ Top fans · 45 min+</p>
+    {# ── Engagement buckets · aligned to heat-scoring tiers (60+ / 30-60 / 10-30 / <10) ── #}
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-7">
+        <div class="p-4 rounded-lg border border-brand-400/40 bg-black/60" title="60+ minutes — heat tier 'webinar_attended_full' = +100 pts">
+            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-brand-400">▌ Top fans · 60m+</p>
             <p class="font-orbitron font-black text-3xl text-brand-400 mt-1" style="text-shadow:0 0 12px rgba(46,219,153,0.5);">{{ top_fans|length }}</p>
-            <p class="text-[11px] text-gray-500 mt-1">stayed the whole way</p>
+            <p class="text-[11px] text-gray-500 mt-1">full sit-through</p>
         </div>
-        <div class="p-4 rounded-lg border border-yellow-500/40 bg-black/60">
-            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-yellow-400">▌ Tibios · 10-44 min</p>
-            <p class="font-orbitron font-black text-3xl text-yellow-400 mt-1" style="text-shadow:0 0 12px rgba(255,200,87,0.45);">{{ tibios|length }}</p>
-            <p class="text-[11px] text-gray-500 mt-1">engaged but left early</p>
+        <div class="p-4 rounded-lg border border-yellow-500/40 bg-black/60" title="30-60 minutes — heat tier 'webinar_attended_long' = +70 pts">
+            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-yellow-400">▌ Long · 30-60m</p>
+            <p class="font-orbitron font-black text-3xl text-yellow-400 mt-1" style="text-shadow:0 0 12px rgba(255,200,87,0.45);">{{ long_stayers|length }}</p>
+            <p class="text-[11px] text-gray-500 mt-1">most of the live</p>
         </div>
-        <div class="p-4 rounded-lg border border-red-500/40 bg-black/60">
-            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-red-400">▌ Pasaron · &lt;10 min</p>
-            <p class="font-orbitron font-black text-3xl text-red-400 mt-1" style="text-shadow:0 0 12px rgba(239,68,68,0.45);">{{ pasaron|length }}</p>
+        <div class="p-4 rounded-lg border border-orange-500/40 bg-black/60" title="10-30 minutes — heat tier 'webinar_attended_short' = +40 pts">
+            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-orange-400">▌ Short · 10-30m</p>
+            <p class="font-orbitron font-black text-3xl text-orange-400 mt-1" style="text-shadow:0 0 12px rgba(249,115,22,0.45);">{{ short_stayers|length }}</p>
+            <p class="text-[11px] text-gray-500 mt-1">part of an evening</p>
+        </div>
+        <div class="p-4 rounded-lg border border-red-500/40 bg-black/60" title="<10 minutes — heat tier 'webinar_attended_brief' = +15 pts">
+            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-red-400">▌ Brief · &lt;10m</p>
+            <p class="font-orbitron font-black text-3xl text-red-400 mt-1" style="text-shadow:0 0 12px rgba(239,68,68,0.45);">{{ brief|length }}</p>
             <p class="text-[11px] text-gray-500 mt-1">joined to peek</p>
         </div>
-        <div class="p-4 rounded-lg border border-gray-600 bg-black/60">
-            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-gray-400">▌ Unknown duration</p>
+        <div class="p-4 rounded-lg border border-gray-600 bg-black/60" title="No duration captured (CSV import or Zoom API gap)">
+            <p class="font-mono-term text-[9px] tracking-[0.2em] uppercase text-gray-400">▌ Unknown</p>
             <p class="font-orbitron font-black text-3xl text-gray-400 mt-1">{{ unknown|length }}</p>
-            <p class="text-[11px] text-gray-500 mt-1">paste-only or no data</p>
+            <p class="text-[11px] text-gray-500 mt-1">no duration captured</p>
         </div>
     </div>
 

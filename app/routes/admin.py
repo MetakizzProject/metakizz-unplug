@@ -61,18 +61,23 @@ def _safe(fn, default, *args, **kwargs):
 # ════════════════════════════════════════════════════════════════════
 
 # Funnel events used by the SQL-aggregation classification helpers.
-# Launch is 2 classes + 1 live webinar + Class 3 = the live replay (Bunny
-# Stream upload after the live; tracked identically to class 1/2).
-_FUNNEL_EVENT_KEYS = [
-    "purchase_completed",
-    "webinar_joined",
-    "class1_completed", "class2_completed", "class3_completed",
-    "class1_progress_95", "class2_progress_95", "class3_progress_95",
-    "class1_progress_75", "class2_progress_75", "class3_progress_75",
-    "class1_progress_50", "class2_progress_50", "class3_progress_50",
-    "class1_progress_25", "class2_progress_25", "class3_progress_25",
-    "class1_viewed", "class2_viewed", "class3_viewed",
-]
+# Derived from the canonical class-event taxonomy in temperature.py so
+# adding a hypothetical class 4 later means updating one place. Includes
+# class 3 = the live-replay (Bunny upload, tracked identically to 1/2).
+def _build_funnel_event_keys():
+    from app.services.temperature import (
+        class_started_event_types, class_completed_event_types,
+        class_visited_event_types,
+    )
+    keys = ["purchase_completed", "webinar_joined"]
+    for cn in (1, 2, 3):
+        keys += class_started_event_types(cn)
+        keys += class_completed_event_types(cn)
+        keys += class_visited_event_types(cn)
+    # Dedup but preserve list semantics
+    return sorted(set(keys))
+
+_FUNNEL_EVENT_KEYS = _build_funnel_event_keys()
 
 
 # Bucket classifier moved to app.services.temperature so that the temp
@@ -501,10 +506,30 @@ def _compute_ghost_summary():
         if gc:    s["gclid"] = gc
         if page_url: s["page_url"] = page_url
 
-    # Per-ghost bucket from event-set classifier (same as Ambassador rows)
+    # Per-ghost bucket from event-set classifier (same as Ambassador rows).
+    # Pass has_paid_reservation so a ghost who paid via Stripe (e.g. shared
+    # link, paid, never registered) is correctly promoted to burning. One
+    # SQL pass for all ghost emails — cheap, idempotent.
     from app.services.temperature import bucket_from_event_set
-    for s in by_email.values():
-        s["bucket_key"] = bucket_from_event_set(s["event_types"])
+    from app.models import Reservation
+    paid_ghost_emails = set()
+    if by_email:
+        ghost_email_list = list(by_email.keys())
+        try:
+            paid_rows = (
+                db.session.query(Reservation.email)
+                .filter(func.lower(Reservation.email).in_(ghost_email_list))
+                .filter(Reservation.paid_at.isnot(None))
+                .all()
+            )
+            paid_ghost_emails = {(r.email or "").lower() for r in paid_rows if r.email}
+        except Exception:
+            logger.exception("paid_ghost_emails lookup failed")
+    for em_key, s in by_email.items():
+        s["bucket_key"] = bucket_from_event_set(
+            s["event_types"],
+            has_paid_reservation=(em_key in paid_ghost_emails),
+        )
         s["webinar_joined"] = "webinar_joined" in s["event_types"]
 
     return list(by_email.values())
@@ -722,11 +747,12 @@ def _compute_segments(ambassadors, referral_counts=None):
     # cutoff comes from REWATCH_WINDOW_OPENS_AT — anything strictly before
     # the cutoff is "first view"; anything at or after is "rewatch".
     sleepers_per_class = {1: [], 2: [], 3: []}
-    cutoff = _rewatch_cutoff()
-    if cutoff is not None:
+    # Per-class cutoff: class 3 may have a different rewatch window than 1/2.
+    cutoffs_per_class = {n: _rewatch_cutoff(n) for n in (1, 2, 3)}
+    if any(cutoffs_per_class.values()):
         # One scan over class engagement events; categorize each (email, class)
         # pair into {viewed_before, viewed_after}. Sleeper = viewed_before
-        # and not viewed_after.
+        # and not viewed_after — relative to that class's own cutoff.
         class_event_types = [
             "class1_viewed", "class2_viewed", "class3_viewed",
             "class1_completed", "class2_completed", "class3_completed",
@@ -743,16 +769,19 @@ def _compute_segments(ambassadors, referral_counts=None):
             if not em_norm:
                 continue
             try:
-                n = int(ev_type[5])  # parses "1" out of "class1_viewed" / "class1_completed"
+                n = int(ev_type[5])
             except (IndexError, ValueError):
                 continue
             if n not in (1, 2, 3):
+                continue
+            cls_cutoff = cutoffs_per_class.get(n)
+            if cls_cutoff is None:
                 continue
             ts_aware = ts if (ts and ts.tzinfo) else (ts.replace(tzinfo=timezone.utc) if ts else None)
             if ts_aware is None:
                 continue
             d = by_pair.setdefault((em_norm, n), {"before": False, "after": False})
-            if ts_aware < cutoff:
+            if ts_aware < cls_cutoff:
                 d["before"] = True
             else:
                 d["after"] = True
@@ -779,10 +808,21 @@ def _compute_segments(ambassadors, referral_counts=None):
     }
 
 
-def _rewatch_cutoff():
-    """Parse REWATCH_WINDOW_OPENS_AT from config into a timezone-aware datetime.
-    Returns None if the value is missing or unparseable."""
-    iso = current_app.config.get("REWATCH_WINDOW_OPENS_AT") if current_app else None
+def _rewatch_cutoff(class_n=None):
+    """Parse the rewatch cutoff from config into a timezone-aware datetime.
+
+    When `class_n` is 1/2/3, prefers REWATCH_WINDOW_OPENS_AT_CLASS{N}; falls
+    back to the global REWATCH_WINDOW_OPENS_AT. Returns None if neither is
+    parseable. Per-class overrides let class 3 (the live-replay) use a
+    different cutoff than classes 1/2 if needed.
+    """
+    if not current_app:
+        return None
+    iso = None
+    if class_n in (1, 2, 3):
+        iso = current_app.config.get(f"REWATCH_WINDOW_OPENS_AT_CLASS{class_n}")
+    if not iso:
+        iso = current_app.config.get("REWATCH_WINDOW_OPENS_AT")
     if not iso:
         return None
     try:
@@ -1677,9 +1717,23 @@ def emails():
 
     engaged_pairs = []
     if all_exclude_events:
-        engaged_pairs = (
+        # Path A: events with email captured (Lovable class views).
+        engaged_pairs = list(
             db.session.query(LeadEvent.email, LeadEvent.event_type)
             .filter(LeadEvent.event_type.in_(all_exclude_events))
+            .filter(LeadEvent.email.isnot(None))
+            .distinct()
+            .all()
+        )
+        # Path B: events linked only by ambassador_id (Zoom guest rematch
+        # left email empty). Resolve to Ambassador.email via inner join so
+        # the eligibility counts match the actual send-time exclusion.
+        engaged_pairs += list(
+            db.session.query(Ambassador.email, LeadEvent.event_type)
+            .join(LeadEvent, LeadEvent.ambassador_id == Ambassador.id)
+            .filter(LeadEvent.event_type.in_(all_exclude_events))
+            .filter(or_(LeadEvent.email.is_(None), LeadEvent.email == ""))
+            .filter(Ambassador.email.isnot(None))
             .distinct()
             .all()
         )
@@ -2173,16 +2227,35 @@ def segment_send_template(segment_name):
 
     # Filter 3: skip recipients who already engaged with this content
     # (e.g. don't send "Class 1 ready" to people who already viewed it).
+    # Two-pathway lookup: events linked by email (Lovable class views) AND
+    # events linked by ambassador_id with empty email (Zoom guest rematch).
+    # The OR catches both — without this, ~169 attendees rematched by name
+    # would slip through and get re-emailed.
     skipped_already_engaged = 0
     if exclude_if_event_in:
         from app.models import LeadEvent
-        engaged_emails = {
-            (em or "").lower() for (em,) in
+        engaged_emails = set()
+        # Path A: events that have an email captured
+        for (em,) in (
             db.session.query(LeadEvent.email)
             .filter(LeadEvent.event_type.in_(exclude_if_event_in))
-            .distinct()
-            .all() if em
-        }
+            .filter(LeadEvent.email.isnot(None))
+            .distinct().all()
+        ):
+            if em:
+                engaged_emails.add(em.lower())
+        # Path B: events linked only by ambassador_id (empty email).
+        # Resolve to canonical Ambassador.email via inner join.
+        for (em,) in (
+            db.session.query(Ambassador.email)
+            .join(LeadEvent, LeadEvent.ambassador_id == Ambassador.id)
+            .filter(LeadEvent.event_type.in_(exclude_if_event_in))
+            .filter(or_(LeadEvent.email.is_(None), LeadEvent.email == ""))
+            .filter(Ambassador.email.isnot(None))
+            .distinct().all()
+        ):
+            if em:
+                engaged_emails.add(em.lower())
         before = len(eligible)
         eligible = [
             a for a in eligible
@@ -4093,13 +4166,21 @@ def leads_insights():
     total_leads = _safe(lambda: Ambassador.query.count(), 0)
 
     # Distinct emails per relevant funnel event — single GROUP BY query.
-    funnel_event_keys = [
-        "class1_viewed", "class1_progress_25", "class1_progress_50",
-        "class1_progress_75", "class1_progress_95", "class1_completed",
-        "class2_viewed", "class2_progress_25", "class2_progress_50",
-        "class2_progress_75", "class2_progress_95", "class2_completed",
-        "webinar_joined", "purchase_completed",
-    ]
+    # Use the canonical helpers from temperature.py so this matches every
+    # other counter on the site (PLF totals on /admin/leads, the launch
+    # funnel, etc.). Includes class 3 (live-replay) automatically.
+    from app.services.temperature import (
+        class_started_event_types, class_completed_event_types,
+        class_visited_event_types,
+    )
+    funnel_event_keys = set()
+    for cn in (1, 2, 3):
+        funnel_event_keys.update(class_started_event_types(cn))
+        funnel_event_keys.update(class_completed_event_types(cn))
+        funnel_event_keys.update(class_visited_event_types(cn))
+    funnel_event_keys.update(["webinar_joined", "purchase_completed"])
+    funnel_event_keys = list(funnel_event_keys)
+
     rows = _safe(
         lambda: db.session.query(
             LeadEvent.event_type, func.count(func.distinct(LeadEvent.email))
@@ -4142,12 +4223,18 @@ def leads_insights():
     n_class1_done = _ge(1, 95)
     n_class2 = _ge(2, 25)
     n_class2_done = _ge(2, 95)
+    n_class3 = _ge(3, 25)
+    n_class3_done = _ge(3, 95)
     n_webinar = event_counts.get("webinar_joined", 0)
     n_purchased = event_counts.get("purchase_completed", 0)
 
     # Hot/burning approximation: people who completed any class (≥95%) OR
-    # joined webinar OR purchased. Uses canonical "completed" definition.
-    _hot_event_keys = _completed_evts(1) + _completed_evts(2) + ["webinar_joined", "purchase_completed"]
+    # joined webinar OR purchased. Uses canonical "completed" definition
+    # across all 3 classes (class 3 is the live-replay).
+    _hot_event_keys = (
+        _completed_evts(1) + _completed_evts(2) + _completed_evts(3)
+        + ["webinar_joined", "purchase_completed"]
+    )
     n_hot_or_burning = _safe(
         lambda: db.session.query(func.count(func.distinct(LeadEvent.email)))
             .filter(LeadEvent.event_type.in_(_hot_event_keys)).scalar() or 0,
@@ -4158,13 +4245,15 @@ def leads_insights():
     pct_customers = round(100 * n_customers / total_leads, 1) if total_leads else 0
 
     funnel_steps = [
-        {"label": "Registered",        "count": total_leads, "color": "#2EDB99"},
-        {"label": "Started Class 1",   "count": n_class1,    "color": "#2EDB99"},
-        {"label": "Finished Class 1",  "count": n_class1_done,"color": "#FFC857"},
-        {"label": "Started Class 2",   "count": n_class2,    "color": "#FFC857"},
-        {"label": "Finished Class 2",  "count": n_class2_done,"color": "#F97316"},
-        {"label": "Joined Webinar",    "count": n_webinar,   "color": "#DC2626"},
-        {"label": "Purchased",         "count": n_purchased, "color": "#A78BFA"},
+        {"label": "Registered",        "count": total_leads,   "color": "#2EDB99"},
+        {"label": "Started Class 1",   "count": n_class1,      "color": "#2EDB99"},
+        {"label": "Finished Class 1",  "count": n_class1_done, "color": "#FFC857"},
+        {"label": "Started Class 2",   "count": n_class2,      "color": "#FFC857"},
+        {"label": "Finished Class 2",  "count": n_class2_done, "color": "#F97316"},
+        {"label": "Joined Live",       "count": n_webinar,     "color": "#DC2626"},
+        {"label": "Started Class 3",   "count": n_class3,      "color": "#DC2626"},
+        {"label": "Finished Class 3",  "count": n_class3_done, "color": "#A78BFA"},
+        {"label": "Purchased",         "count": n_purchased,   "color": "#A78BFA"},
     ]
     # Compute drop-off % between consecutive steps + width % for visual bar
     for i, step in enumerate(funnel_steps):
@@ -4398,21 +4487,24 @@ def leads_insights():
     cand_lead_evts, cand_email_evts = (
         fetch_signals_bulk(cand_ids, max_ids=None) if cand_ids else ({}, {})
     )
-    # Bulk webinar duration + reservation paid for candidates.
+    # Bulk webinar duration + reservation paid for candidates. Each helper
+    # returns (by_amb_id, by_email_lower) so we cover both pathways
+    # (Lovable-tracked emails + Zoom guest rematches).
     from app.services.temperature import bulk_webinar_durations as _bulk_dur, bulk_paid_reservations as _bulk_paid
-    cand_emails = [a.email for a in candidate_ambs if a.email]
-    cand_dur = _bulk_dur(cand_emails)
-    cand_paid = _bulk_paid(cand_emails)
+    cand_dur_amb, cand_dur_em = _bulk_dur(candidate_ambs)
+    cand_paid_amb, cand_paid_em = _bulk_paid(candidate_ambs)
     scored_candidates = []
     for a in candidate_ambs:
         em_lower = (a.email or "").lower()
+        webinar_dur = cand_dur_amb.get(a.id) or (cand_dur_em.get(em_lower) if em_lower else None)
+        has_paid = (a.id in cand_paid_amb) or (em_lower and em_lower in cand_paid_em)
         t = compute_temperature(
             a,
             lead_events=cand_lead_evts.get(a.id, []),
             email_events=cand_email_evts.get(a.id, []),
             referral_count=ref_counts.get(a.id, 0),
-            webinar_duration_min=cand_dur.get(em_lower),
-            has_paid_reservation=em_lower in cand_paid,
+            webinar_duration_min=webinar_dur,
+            has_paid_reservation=has_paid,
         )
         scored_candidates.append((a, t))
 
@@ -4688,11 +4780,12 @@ def leads():
 
     # Bulk-resolve webinar duration and paid-reservation status for the
     # page in two single queries — rather than 50 sub-queries from inside
-    # compute_temperature. Keyed by lowercased email.
+    # compute_temperature. Each helper returns (by_amb_id, by_email_lower)
+    # so we catch both pathways: events linked via Lovable (email key)
+    # and events linked via Zoom name-rematch (ambassador_id key).
     from app.services.temperature import bulk_webinar_durations, bulk_paid_reservations
-    page_emails = [a.email for a in page_amb if a.email]
-    webinar_dur_by_email = bulk_webinar_durations(page_emails)
-    paid_emails = bulk_paid_reservations(page_emails)
+    webinar_dur_by_amb, webinar_dur_by_email = bulk_webinar_durations(page_amb)
+    paid_amb_ids, paid_emails = bulk_paid_reservations(page_amb)
 
     now_ts = datetime.now(timezone.utc)
     def _outreach_ago(dt):
@@ -4712,13 +4805,19 @@ def leads():
     rows_with_temp = []
     for a in page_amb:
         em_lower = (a.email or "").lower()
+        # Try ambassador_id first (catches name-rematched Zoom guests
+        # whose LeadEvent.email is empty), fall back to email match.
+        webinar_dur = webinar_dur_by_amb.get(a.id)
+        if webinar_dur is None and em_lower:
+            webinar_dur = webinar_dur_by_email.get(em_lower)
+        has_paid = (a.id in paid_amb_ids) or (em_lower and em_lower in paid_emails)
         t = compute_temperature(
             a,
             lead_events=lead_evts_by_id.get(a.id, []),
             email_events=email_evts_by_id.get(a.id, []),
             referral_count=ref_counts.get(a.id, 0),
-            webinar_duration_min=webinar_dur_by_email.get(em_lower),
-            has_paid_reservation=em_lower in paid_emails,
+            webinar_duration_min=webinar_dur,
+            has_paid_reservation=has_paid,
         )
         t["source_info"] = classify_source(a)
         t["outreach_ago"] = _outreach_ago(a.last_outreach_at)
@@ -4855,10 +4954,13 @@ def leads():
             .count(),
         0,
     )
-    # Compute outreach queue size (burning + hot, not yet contacted).
+    # Compute outreach queue size: burning + hot, not yet contacted.
+    # Customers are deliberately EXCLUDED — they already purchased; they
+    # don't belong in an outreach-to-buy queue. (Post-sale support can
+    # use a separate filter if needed later.)
     burning_hot_emails = {
         em for em, b in _build_email_buckets().items()
-        if b in ("burning", "hot", "customer")
+        if b in ("burning", "hot")
     }
     in_queue_count = 0
     if burning_hot_emails:
@@ -5803,10 +5905,20 @@ def zoom_attendees():
         .all()
     )
 
-    top_fans = [r for r in rows if (r.webinar_duration_min or 0) >= 45]
-    tibios = [r for r in rows if 10 <= (r.webinar_duration_min or 0) < 45]
-    pasaron = [r for r in rows if 0 < (r.webinar_duration_min or 0) < 10]
+    # Bucket boundaries match the heat-scoring tiers in temperature.py
+    # (see TEMP_WEIGHTS: webinar_attended_full=60+, _long=30-60, _short=10-30,
+    # _brief=<10). Aligning here so /admin/zoom/attendees and /admin/leads
+    # never disagree on who's a "top fan" vs a "long-stayer" etc.
+    top_fans = [r for r in rows if (r.webinar_duration_min or 0) >= 60]   # full sit-through
+    long_stayers = [r for r in rows if 30 <= (r.webinar_duration_min or 0) < 60]
+    short_stayers = [r for r in rows if 10 <= (r.webinar_duration_min or 0) < 30]
+    brief = [r for r in rows if 0 < (r.webinar_duration_min or 0) < 10]
     unknown = [r for r in rows if not r.webinar_duration_min]
+    # Legacy `tibios` / `pasaron` aliases preserved for the template
+    # transition so existing references don't 500. Will be removed when
+    # the template is updated.
+    tibios = long_stayers + short_stayers
+    pasaron = brief
 
     matched = sum(1 for r in rows if r.ambassador_id)
     ghosts = sum(1 for r in rows if not r.ambassador_id)
@@ -5829,6 +5941,9 @@ def zoom_attendees():
         active_section="emails",
         rows=rows,
         top_fans=top_fans,
+        long_stayers=long_stayers,
+        short_stayers=short_stayers,
+        brief=brief,
         tibios=tibios,
         pasaron=pasaron,
         unknown=unknown,
@@ -5856,8 +5971,10 @@ def class_views():
       ?bucket=returner|sleeper|rewatch_only|first_only  — restrict by bucket
       ?min_pct=25|50|75|95   — only rows with at least this max progress
     """
-    cutoff = _rewatch_cutoff()
+    cutoff = _rewatch_cutoff()  # global default for top of page
     cutoff_iso = current_app.config.get("REWATCH_WINDOW_OPENS_AT")
+    # Per-class cutoffs — class 3 may have a different window than 1/2.
+    cutoffs_per_class = {n: _rewatch_cutoff(n) for n in (1, 2, 3)}
 
     # Filter inputs
     f_class = (request.args.get("class") or "").strip()
@@ -5927,8 +6044,11 @@ def class_views():
             rec["first_view_at"] = ts_aware
         if ts_aware > rec["last_view_at"]:
             rec["last_view_at"] = ts_aware
-        if cutoff is not None:
-            if ts_aware < cutoff:
+        # Use per-class cutoff so class 3 (live-replay) can have a different
+        # rewatch window than 1/2.
+        cls_cutoff = cutoffs_per_class.get(n)
+        if cls_cutoff is not None:
+            if ts_aware < cls_cutoff:
                 rec["before_count"] += 1
             else:
                 rec["after_count"] += 1
@@ -5954,11 +6074,12 @@ def class_views():
         returners_set = set()
         sleepers_set = set()
         rewatch_only_set = set()
+        cls_cutoff = cutoffs_per_class.get(n)
         for (em_norm, cn), rec in by_pair.items():
             if cn != n:
                 continue
             first_views_set.add(em_norm)
-            if cutoff is None:
+            if cls_cutoff is None:
                 # Without a cutoff, every viewer is a "first view"; no rewatch concept.
                 bucket = "first_only"
             elif rec["before_count"] > 0 and rec["after_count"] > 0:

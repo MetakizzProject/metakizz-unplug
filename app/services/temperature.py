@@ -382,54 +382,102 @@ def compute_temperature(
     }
 
 
-def bulk_webinar_durations(emails) -> Dict[str, int]:
-    """One SQL: returns {email_lower: webinar_duration_min} for each email
-    that has a webinar_joined LeadEvent with a captured duration.
+def bulk_webinar_durations(ambassadors):
+    """One SQL: returns (by_amb_id, by_email_lower) tuple of dicts.
 
-    Caller passes a list of ambassador emails (any case). Output keys are
-    always lowercased. Use to avoid N+1 when scoring many leads at once.
+    Both dicts map to the MAX webinar_duration_min for that key.
+    Caller resolves with: `by_amb_id.get(a.id) or by_email.get(em_lower)`.
+
+    Why two paths: the Zoom rematch pass linked guest attendees to
+    ambassadors via ambassador_id but left LeadEvent.email empty (Zoom
+    Meetings don't capture guest emails). An email-only join would miss
+    those ~169 attendees. Resolving by ambassador_id first AND email as
+    fallback covers both pathways with one query.
     """
     from app.models import LeadEvent
-    from sqlalchemy import func
-    if not emails:
-        return {}
-    emails_lower = [e.lower() for e in emails if e]
-    if not emails_lower:
-        return {}
+    from sqlalchemy import func, or_
+    if not ambassadors:
+        return ({}, {})
+    amb_ids = [a.id for a in ambassadors if a.id]
+    emails_lower = [(a.email or "").lower() for a in ambassadors if a.email]
+    if not amb_ids and not emails_lower:
+        return ({}, {})
+    conds = []
+    if amb_ids:
+        conds.append(LeadEvent.ambassador_id.in_(amb_ids))
+    if emails_lower:
+        conds.append(func.lower(LeadEvent.email).in_(emails_lower))
     rows = (
         LeadEvent.query
         .filter(LeadEvent.event_type == "webinar_joined")
         .filter(LeadEvent.webinar_duration_min.isnot(None))
-        .filter(func.lower(LeadEvent.email).in_(emails_lower))
+        .filter(or_(*conds))
         .all()
     )
-    out = {}
+    by_amb, by_em = {}, {}
     for r in rows:
-        em = (r.email or "").lower()
-        if em and (em not in out or (r.webinar_duration_min or 0) > out[em]):
-            out[em] = r.webinar_duration_min
-    return out
+        dur = r.webinar_duration_min or 0
+        if r.ambassador_id and (r.ambassador_id not in by_amb or dur > by_amb[r.ambassador_id]):
+            by_amb[r.ambassador_id] = dur
+        if r.email:
+            em = r.email.lower()
+            if em not in by_em or dur > by_em[em]:
+                by_em[em] = dur
+    return (by_amb, by_em)
 
 
-def bulk_paid_reservations(emails) -> set:
-    """One SQL: returns set of lowercased emails that have at least one
-    Reservation row with paid_at IS NOT NULL.
+def bulk_paid_reservations(ambassadors):
+    """One SQL: returns (paid_amb_ids_set, paid_email_set) tuple.
+
+    Resolves by Reservation.ambassador_id first (typed link from Stripe
+    webhook when set) AND by case-insensitive email match (fallback for
+    typo'd emails or Stripe-only flows). Caller checks both:
+        if a.id in paid_amb_ids or em_lower in paid_emails: ...
     """
     from app.models import Reservation
-    from sqlalchemy import func
-    if not emails:
-        return set()
-    emails_lower = [e.lower() for e in emails if e]
-    if not emails_lower:
-        return set()
+    from sqlalchemy import func, or_
+    if not ambassadors:
+        return (set(), set())
+    amb_ids = [a.id for a in ambassadors if a.id]
+    emails_lower = [(a.email or "").lower() for a in ambassadors if a.email]
+    if not amb_ids and not emails_lower:
+        return (set(), set())
+    conds = []
+    if amb_ids:
+        conds.append(Reservation.ambassador_id.in_(amb_ids))
+    if emails_lower:
+        conds.append(func.lower(Reservation.email).in_(emails_lower))
     rows = (
         Reservation.query
-        .filter(func.lower(Reservation.email).in_(emails_lower))
         .filter(Reservation.paid_at.isnot(None))
-        .with_entities(Reservation.email)
+        .filter(or_(*conds))
+        .with_entities(Reservation.ambassador_id, Reservation.email)
         .all()
     )
-    return {(r.email or "").lower() for r in rows if r.email}
+    paid_amb_ids = set()
+    paid_emails = set()
+    for amb_id, em in rows:
+        if amb_id:
+            paid_amb_ids.add(amb_id)
+        if em:
+            paid_emails.add(em.lower())
+    return (paid_amb_ids, paid_emails)
+
+
+# ── Canonical class-event taxonomy ──────────────────────────────────
+# Single source of truth for "every class event type we care about
+# in funnel/temperature/segment/exclude calculations". Any place that
+# previously hardcoded a list of `class1_viewed, class2_viewed, ...`
+# strings should import this constant instead. Adding `class4` later
+# means extending this once and propagating automatically.
+ALL_CLASS_EVENT_TYPES = []
+for _cn in (1, 2, 3):
+    ALL_CLASS_EVENT_TYPES += class_visited_event_types(_cn)
+    ALL_CLASS_EVENT_TYPES += class_started_event_types(_cn)
+    # class_completed_event_types overlaps with progress_95/completed
+    # already covered by class_started_event_types — explicit add is
+    # idempotent because we wrap in set() at use sites.
+del _cn
 
 
 def fetch_signals_bulk(ambassador_ids, max_ids: int = 500):

@@ -215,6 +215,14 @@ def create_app():
     # a "first view". Used by /admin/class-views and the rewatch-reminder
     # segment computation. Default: Friday 2026-05-09 00:00 Madrid.
     app.config["REWATCH_WINDOW_OPENS_AT"] = os.getenv("REWATCH_WINDOW_OPENS_AT", "2026-05-09T00:00:00+02:00")
+    # Per-class overrides for the rewatch cutoff. Class 3 (live-replay)
+    # was uploaded AFTER the live (May 7+); the "rewatch" semantics for
+    # class 3 may need a different cutoff than 1+2. Default to the
+    # global REWATCH_WINDOW_OPENS_AT if not overridden per class.
+    for _cn in (1, 2, 3):
+        key = f"REWATCH_WINDOW_OPENS_AT_CLASS{_cn}"
+        app.config[key] = os.getenv(key, app.config["REWATCH_WINDOW_OPENS_AT"])
+    del _cn
 
     from app.models import db
 
