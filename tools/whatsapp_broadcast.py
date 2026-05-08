@@ -54,7 +54,8 @@ APP_BASE = os.environ.get("METAKIZZ_BASE", "https://metakizz-ambassador.onrender
 def first_name(s: str) -> str:
     if not s:
         return "there"
-    return s.strip().split()[0]
+    # Title-case so "BARBARA" → "Barbara" and friends.
+    return s.strip().split()[0].title()
 
 
 def build_msg(name: str) -> str:
@@ -112,6 +113,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--start-from", type=int, default=1, help="1-based index to resume from")
     ap.add_argument("--dry-run", action="store_true", help="List contacts only, don't open WA")
+    ap.add_argument("--auto", action="store_true",
+                    help="Draft into every chat sequentially without pausing. "
+                         "Browser stays open so you can attach the audio + send manually.")
     args = ap.parse_args()
 
     os.makedirs(USER_DATA_DIR, exist_ok=True)
@@ -208,13 +212,29 @@ def main():
                 print(f"   ⚠️  Couldn't draft: {e}")
                 continue
 
+            if args.auto:
+                # Give WA Web ~1.5s to persist the draft before navigating away.
+                time.sleep(1.5)
+                continue
+
             cmd = input("   [Enter]=next  [s]=skip  [q]=quit  > ").strip().lower()
             if cmd == "q":
                 print("Aborted by user.")
                 break
 
-        print("\n✅ All done.")
-        input("Press ENTER to close the browser...")
+        print("\n✅ All drafts ready.")
+        if args.auto:
+            print("   The Chromium window stays open. Click each chat in the left")
+            print("   sidebar (you'll see 'Draft: Hi...' in each), drop the audio")
+            print("   file in, send. When you're done, close the Chromium window")
+            print("   or hit Ctrl+C in this terminal.")
+            try:
+                while True:
+                    time.sleep(3600)
+            except KeyboardInterrupt:
+                pass
+        else:
+            input("Press ENTER to close the browser...")
         ctx.close()
 
 
