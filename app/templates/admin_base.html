@@ -50,6 +50,10 @@
                 <span class="nav-icon">📧</span>
                 <span class="nav-label">Emails</span>
             </a>
+            <a href="{{ url_for('admin.class_views') if 'class_views' in admin_routes else '#' }}" class="admin-nav-link {{ 'active' if active == 'class_views' }}">
+                <span class="nav-icon">▶</span>
+                <span class="nav-label">Class views</span>
+            </a>
             <a href="{{ url_for('admin.security') if 'security' in admin_routes else '#' }}" class="admin-nav-link {{ 'active' if active == 'security' }}">
                 <span class="nav-icon">🛡</span>
                 <span class="nav-label">Security</span>

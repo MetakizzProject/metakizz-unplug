@@ -25,9 +25,13 @@ from app.mailer import (
     send_you_won_email,
     send_class1_ready_email,
     send_class2_ready_email,
+    send_class3_ready_email,
     send_webinar_reminder_email,
     send_final_signal_email,
     send_live_imminent_email,
+    send_class1_rewatch_reminder_email,
+    send_class2_rewatch_reminder_email,
+    send_class3_rewatch_reminder_email,
     _send as _mailer_send,  # low-level Resend POST, used by /admin/broadcast
     # legacy:
     send_first_referral_email,
@@ -673,6 +677,54 @@ def _compute_segments(ambassadors, referral_counts=None):
     inactive_7d = [a for a in reachable if days_since_last_referral(a) >= 7]
     never_visited = [a for a in reachable if a.last_dashboard_visit_at is None]
 
+    # Class rewatch sleepers: started watching class N during the launch
+    # window but haven't returned during the weekend re-open window. The
+    # cutoff comes from REWATCH_WINDOW_OPENS_AT — anything strictly before
+    # the cutoff is "first view"; anything at or after is "rewatch".
+    sleepers_per_class = {1: [], 2: [], 3: []}
+    cutoff = _rewatch_cutoff()
+    if cutoff is not None:
+        # One scan over class engagement events; categorize each (email, class)
+        # pair into {viewed_before, viewed_after}. Sleeper = viewed_before
+        # and not viewed_after.
+        class_event_types = [
+            "class1_viewed", "class2_viewed", "class3_viewed",
+            "class1_completed", "class2_completed", "class3_completed",
+        ]
+        events = (
+            db.session.query(LeadEvent.email, LeadEvent.event_type, LeadEvent.created_at)
+            .filter(LeadEvent.event_type.in_(class_event_types))
+            .filter(LeadEvent.email.isnot(None))
+            .all()
+        )
+        by_pair = {}  # {(email_lower, class_n): {"before": bool, "after": bool}}
+        for em, ev_type, ts in events:
+            em_norm = (em or "").lower()
+            if not em_norm:
+                continue
+            try:
+                n = int(ev_type[5])  # parses "1" out of "class1_viewed" / "class1_completed"
+            except (IndexError, ValueError):
+                continue
+            if n not in (1, 2, 3):
+                continue
+            ts_aware = ts if (ts and ts.tzinfo) else (ts.replace(tzinfo=timezone.utc) if ts else None)
+            if ts_aware is None:
+                continue
+            d = by_pair.setdefault((em_norm, n), {"before": False, "after": False})
+            if ts_aware < cutoff:
+                d["before"] = True
+            else:
+                d["after"] = True
+        for amb in reachable:
+            em_norm = (amb.email or "").lower()
+            if not em_norm:
+                continue
+            for n in (1, 2, 3):
+                d = by_pair.get((em_norm, n))
+                if d and d["before"] and not d["after"]:
+                    sleepers_per_class[n].append(amb)
+
     return {
         "cold": cold,                          # 0 unplugs (need a kick)
         "sleeping": sleeping,                  # 1-4 unplugs (need momentum)
@@ -681,7 +733,25 @@ def _compute_segments(ambassadors, referral_counts=None):
         "top10": top10,                        # current top performers
         "inactive_7d": inactive_7d,            # no activity in 7 days
         "never_visited": never_visited,        # never opened their dashboard
+        "sleepers_class1": sleepers_per_class[1],  # class1 viewed pre-weekend, no return
+        "sleepers_class2": sleepers_per_class[2],
+        "sleepers_class3": sleepers_per_class[3],
     }
+
+
+def _rewatch_cutoff():
+    """Parse REWATCH_WINDOW_OPENS_AT from config into a timezone-aware datetime.
+    Returns None if the value is missing or unparseable."""
+    iso = current_app.config.get("REWATCH_WINDOW_OPENS_AT") if current_app else None
+    if not iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def _compute_suspicion(ambassador):
@@ -1553,6 +1623,7 @@ def emails():
     _MANUAL_TEMPLATES = [
         ("class1_ready",     "class1_email_sent_at"),
         ("class2_ready",     "class2_email_sent_at"),
+        ("class3_ready",     "class3_email_sent_at"),
         ("webinar_reminder", "webinar_reminder_sent_at"),
         ("final_signal",     "final_signal_sent_at"),
         ("live_imminent",    "live_imminent_sent_at"),
@@ -1883,6 +1954,44 @@ _SEGMENT_TEMPLATES = {
         "min_age_days": 0,
         # Skip those who've already joined the live or clicked the link
         "exclude_if_event_in": ["webinar_joined", "webinar_link_clicked"],
+    },
+    "class3_ready": {
+        "fn": send_class3_ready_email,
+        "default_segment": "all",
+        "flag": "class3_email_sent_at",
+        "label": "Class 3 ready (live masterclass replay)",
+        "min_age_days": 0,
+        "exclude_if_event_in": [
+            "class3_viewed", "class3_progress_25", "class3_progress_50",
+            "class3_progress_75", "class3_progress_95", "class3_completed",
+        ],
+    },
+    # ── Weekend re-open: rewatch reminders for the 3 classes
+    # Audience for each is computed dynamically by _compute_segments based
+    # on the REWATCH_WINDOW_OPENS_AT cutoff (sleepers = first-watched
+    # before, no view since). Empty exclude_if_event_in here on purpose:
+    # the sleeper logic already filters out anyone who came back, and
+    # we WANT past viewers (that's the whole audience).
+    "class1_rewatch_reminder": {
+        "fn": send_class1_rewatch_reminder_email,
+        "default_segment": "sleepers_class1",
+        "flag": "class1_rewatch_reminder_sent_at",
+        "label": "Class 1 rewatch reminder (weekend re-open)",
+        "min_age_days": 0,
+    },
+    "class2_rewatch_reminder": {
+        "fn": send_class2_rewatch_reminder_email,
+        "default_segment": "sleepers_class2",
+        "flag": "class2_rewatch_reminder_sent_at",
+        "label": "Class 2 rewatch reminder (weekend re-open)",
+        "min_age_days": 0,
+    },
+    "class3_rewatch_reminder": {
+        "fn": send_class3_rewatch_reminder_email,
+        "default_segment": "sleepers_class3",
+        "flag": "class3_rewatch_reminder_sent_at",
+        "label": "Class 3 rewatch reminder (weekend re-open)",
+        "min_age_days": 0,
     },
 }
 
@@ -2651,6 +2760,22 @@ def test_email():
             elif email_type == "live_imminent":
                 fake.referral_count = 0
                 success = send_live_imminent_email(fake, app_url)
+
+            elif email_type == "class3_ready":
+                fake.referral_count = 0
+                success = send_class3_ready_email(fake, app_url)
+
+            elif email_type == "class1_rewatch_reminder":
+                fake.referral_count = 0
+                success = send_class1_rewatch_reminder_email(fake, app_url)
+
+            elif email_type == "class2_rewatch_reminder":
+                fake.referral_count = 0
+                success = send_class2_rewatch_reminder_email(fake, app_url)
+
+            elif email_type == "class3_rewatch_reminder":
+                fake.referral_count = 0
+                success = send_class3_rewatch_reminder_email(fake, app_url)
 
             else:
                 flash(f"Unknown email type: {email_type}", "error")
@@ -5544,6 +5669,149 @@ def zoom_attendees():
         device_top=device_count.most_common(),
         total=len(rows),
         amb_lookup=amb_lookup,
+        **_admin_layout_context(),
+    )
+
+
+@admin_bp.route("/class-views")
+def class_views():
+    """Per-class engagement dashboard with first-view vs rewatch buckets.
+
+    Pulls every class{N}_viewed/completed/progress_* LeadEvent, segments
+    each ambassador as: never-viewed | first-view-only | returner |
+    rewatch-only (rare). Surfaces the "sleepers" set (first-view but no
+    rewatch yet) — that's the audience for the rewatch reminder email.
+    """
+    cutoff = _rewatch_cutoff()
+    cutoff_iso = current_app.config.get("REWATCH_WINDOW_OPENS_AT")
+
+    # All class engagement events in one scan (≤10k rows in practice).
+    class_event_types = [
+        "class1_viewed", "class2_viewed", "class3_viewed",
+        "class1_completed", "class2_completed", "class3_completed",
+        "class1_progress_25", "class1_progress_50", "class1_progress_75", "class1_progress_95",
+        "class2_progress_25", "class2_progress_50", "class2_progress_75", "class2_progress_95",
+        "class3_progress_25", "class3_progress_50", "class3_progress_75", "class3_progress_95",
+    ]
+    events = (
+        db.session.query(
+            LeadEvent.email, LeadEvent.event_type, LeadEvent.created_at,
+            LeadEvent.pct, LeadEvent.ambassador_id,
+        )
+        .filter(LeadEvent.event_type.in_(class_event_types))
+        .filter(LeadEvent.email.isnot(None))
+        .order_by(LeadEvent.created_at.asc())
+        .all()
+    )
+
+    # by_pair = { (email_lower, class_n): {
+    #     "first_view_at", "last_view_at", "before_count", "after_count",
+    #     "max_pct", "completed", "ambassador_id"
+    # }}
+    by_pair = {}
+    for em, ev_type, ts, pct, amb_id in events:
+        em_norm = (em or "").lower()
+        if not em_norm:
+            continue
+        try:
+            n = int(ev_type[5])
+        except (IndexError, ValueError):
+            continue
+        if n not in (1, 2, 3):
+            continue
+        ts_aware = ts if (ts and ts.tzinfo) else (ts.replace(tzinfo=timezone.utc) if ts else None)
+        if ts_aware is None:
+            continue
+        rec = by_pair.setdefault((em_norm, n), {
+            "first_view_at": ts_aware,
+            "last_view_at": ts_aware,
+            "before_count": 0,
+            "after_count": 0,
+            "max_pct": 0,
+            "completed": False,
+            "ambassador_id": amb_id,
+        })
+        if ts_aware < rec["first_view_at"]:
+            rec["first_view_at"] = ts_aware
+        if ts_aware > rec["last_view_at"]:
+            rec["last_view_at"] = ts_aware
+        if cutoff is not None:
+            if ts_aware < cutoff:
+                rec["before_count"] += 1
+            else:
+                rec["after_count"] += 1
+        if pct and pct > rec["max_pct"]:
+            rec["max_pct"] = pct
+        if ev_type.endswith("_completed"):
+            rec["completed"] = True
+        if amb_id and not rec["ambassador_id"]:
+            rec["ambassador_id"] = amb_id
+
+    # Resolve ambassadors for all matched ids in one shot.
+    amb_ids = {rec["ambassador_id"] for rec in by_pair.values() if rec["ambassador_id"]}
+    amb_lookup = {}
+    if amb_ids:
+        for a in Ambassador.query.filter(Ambassador.id.in_(amb_ids)).all():
+            amb_lookup[a.id] = a
+
+    # Build per-class summary + table rows.
+    classes = []
+    for n in (1, 2, 3):
+        rows = []
+        first_views_set = set()  # emails who watched at any point
+        returners_set = set()
+        sleepers_set = set()
+        rewatch_only_set = set()
+        for (em_norm, cn), rec in by_pair.items():
+            if cn != n:
+                continue
+            first_views_set.add(em_norm)
+            if cutoff is None:
+                # Without a cutoff, every viewer is a "first view"; no rewatch concept.
+                bucket = "first_only"
+            elif rec["before_count"] > 0 and rec["after_count"] > 0:
+                bucket = "returner"
+                returners_set.add(em_norm)
+            elif rec["before_count"] > 0 and rec["after_count"] == 0:
+                bucket = "sleeper"
+                sleepers_set.add(em_norm)
+            elif rec["before_count"] == 0 and rec["after_count"] > 0:
+                bucket = "rewatch_only"
+                rewatch_only_set.add(em_norm)
+            else:
+                bucket = "first_only"
+            rows.append({
+                "email": em_norm,
+                "ambassador": amb_lookup.get(rec["ambassador_id"]),
+                "first_view_at": rec["first_view_at"],
+                "last_view_at": rec["last_view_at"],
+                "before_count": rec["before_count"],
+                "after_count": rec["after_count"],
+                "max_pct": rec["max_pct"],
+                "completed": rec["completed"],
+                "bucket": bucket,
+            })
+        # Sort: returners first, then sleepers, then first-views; recent at top
+        bucket_order = {"returner": 0, "sleeper": 1, "rewatch_only": 2, "first_only": 3}
+        rows.sort(key=lambda r: (bucket_order.get(r["bucket"], 9), -(r["last_view_at"].timestamp() if r["last_view_at"] else 0)))
+        classes.append({
+            "n": n,
+            "label": f"Class 0{n}",
+            "total_unique": len(first_views_set),
+            "returners": len(returners_set),
+            "sleepers": len(sleepers_set),
+            "rewatch_only": len(rewatch_only_set),
+            "rows": rows,
+        })
+
+    return render_template(
+        "admin_class_views.html",
+        page_title="Class Views",
+        active_section="emails",
+        classes=classes,
+        cutoff_iso=cutoff_iso,
+        cutoff_dt=cutoff,
+        cutoff_set=cutoff is not None,
         **_admin_layout_context(),
     )
 

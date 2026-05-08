@@ -63,6 +63,11 @@ class Ambassador(db.Model):
     webinar_reminder_sent_at = db.Column(db.DateTime, nullable=True)
     final_signal_sent_at = db.Column(db.DateTime, nullable=True)
     live_imminent_sent_at = db.Column(db.DateTime, nullable=True)
+    # Weekend re-open reminders: one per class. Audience is "first-watched
+    # during launch but didn't return during REWATCH_WINDOW_OPENS_AT".
+    class1_rewatch_reminder_sent_at = db.Column(db.DateTime, nullable=True)
+    class2_rewatch_reminder_sent_at = db.Column(db.DateTime, nullable=True)
+    class3_rewatch_reminder_sent_at = db.Column(db.DateTime, nullable=True)
 
     # Engagement tracking — bumped on every /dashboard/<code> hit.
     last_dashboard_visit_at = db.Column(db.DateTime, nullable=True)

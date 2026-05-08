@@ -180,6 +180,8 @@ LEAD_EVENT_TAG_MAP = {
     "class1_completed":   "mkot3_class1_completed",
     "class2_viewed":      "mkot3_class2_started",
     "class2_completed":   "mkot3_class2_completed",
+    "class3_viewed":      "mkot3_class3_started",
+    "class3_completed":   "mkot3_class3_completed",
     "webinar_joined":     "mkot3_webinar_joined",
     "purchase_completed": "mkot3_purchased",
 }

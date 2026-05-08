@@ -458,13 +458,13 @@ def send_activation_push_email(ambassador, app_url):
 def send_class_ready_email(ambassador, app_url, class_number):
     """Manual admin send: announce that Class N is now live.
 
-    Launch is 2 classes + 1 live webinar — Class 3 doesn't exist as
-    content. The live webinar uses send_webinar_reminder_email().
+    Class 1 and 2 are pre-recorded lessons. Class 3 is the live-masterclass
+    replay (the Zoom session uploaded to Bunny Stream after the fact).
     """
     if is_unsubscribed(ambassador):
         return False
-    if class_number not in (1, 2):
-        raise ValueError(f"class_number must be 1 or 2, got {class_number}")
+    if class_number not in (1, 2, 3):
+        raise ValueError(f"class_number must be 1, 2 or 3, got {class_number}")
 
     # Landing where the lesson lives. Each class has its own page.
     landing_root = _landing_url() or app_url.rstrip("/")
@@ -485,8 +485,10 @@ def send_class_ready_email(ambassador, app_url, class_number):
     first = ambassador.name.split()[0] if ambassador.name else "Hey"
     if class_number == 1:
         subject = f"{first}, Class 01 just dropped — go watch it"
-    else:
+    elif class_number == 2:
         subject = f"{first}, Class 02 is unlocked — last one before the live"
+    else:
+        subject = f"{first}, Class 03 is live — the masterclass replay is up"
 
     return _send(
         ambassador.email,
@@ -503,6 +505,61 @@ def send_class1_ready_email(ambassador, app_url):
 
 def send_class2_ready_email(ambassador, app_url):
     return send_class_ready_email(ambassador, app_url, 2)
+
+
+def send_class3_ready_email(ambassador, app_url):
+    return send_class_ready_email(ambassador, app_url, 3)
+
+
+def send_class_rewatch_reminder_email(ambassador, app_url, class_number):
+    """Weekend re-open: remind ambassadors who watched class N during the
+    launch but haven't returned this weekend that the link is open again.
+
+    Audience is computed by /admin/class-views ("sleepers" = first-watched
+    before REWATCH_WINDOW_OPENS_AT, no view since). Idempotency lives on
+    Ambassador.class{N}_rewatch_reminder_sent_at.
+    """
+    if is_unsubscribed(ambassador):
+        return False
+    if class_number not in (1, 2, 3):
+        raise ValueError(f"class_number must be 1, 2 or 3, got {class_number}")
+
+    landing_root = _landing_url() or app_url.rstrip("/")
+    class_url = f"{landing_root}/class{class_number}"
+
+    html = render_template(
+        "emails/class_rewatch_reminder.html",
+        first_name=_first_name(ambassador),
+        email=ambassador.email,
+        class_number=class_number,
+        class_url=class_url,
+        unsubscribe_url=_unsubscribe_url(ambassador, app_url),
+        app_url=app_url.rstrip("/"),
+    )
+
+    first = ambassador.name.split()[0] if ambassador.name else "Hey"
+    class_label = f"Class 0{class_number}"
+    subject = f"{first}, the {class_label} replay is open this weekend"
+
+    return _send(
+        ambassador.email,
+        subject,
+        html,
+        template_key=f"class{class_number}_rewatch_reminder",
+        ambassador=ambassador,
+    )
+
+
+def send_class1_rewatch_reminder_email(ambassador, app_url):
+    return send_class_rewatch_reminder_email(ambassador, app_url, 1)
+
+
+def send_class2_rewatch_reminder_email(ambassador, app_url):
+    return send_class_rewatch_reminder_email(ambassador, app_url, 2)
+
+
+def send_class3_rewatch_reminder_email(ambassador, app_url):
+    return send_class_rewatch_reminder_email(ambassador, app_url, 3)
 
 
 def send_webinar_reminder_email(ambassador, app_url):

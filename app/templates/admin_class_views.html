@@ -1,0 +1,188 @@
+{% extends "admin_base.html" %}
+
+{% block admin_content %}
+<div class="px-4 lg:px-8 pt-6 pb-12 max-w-7xl">
+    <div class="flex items-center justify-between mb-3 font-mono-term text-[10px] tracking-[0.25em] uppercase">
+        <span class="text-brand-400/80"><span class="text-brand-400">▌</span> METAKIZZ // CLASS.VIEWS</span>
+        <a href="{{ url_for('admin.emails') }}" class="text-gray-500 hover:text-white">← back to emails</a>
+    </div>
+    <h1 class="text-2xl font-display font-bold mb-1">Class views &amp; rewatches</h1>
+    <p class="text-sm text-gray-400 mb-3">
+        Per-class engagement broken down by the rewatch window.
+        Sleepers are who watched during launch but haven't returned this weekend — the audience for the rewatch reminder.
+    </p>
+
+    {% if cutoff_set %}
+    <div class="mb-7 inline-flex items-center gap-2 font-mono-term text-[10px] tracking-[0.2em] uppercase text-yellow-300 bg-yellow-900/30 border border-yellow-500/40 px-3 py-2 rounded">
+        ⧗ Rewatch window opens at: <span class="text-yellow-100 font-bold">{{ cutoff_dt.strftime('%Y-%m-%d %H:%M %Z') if cutoff_dt else cutoff_iso }}</span>
+        <span class="text-gray-400">· events before = first views, on/after = rewatches</span>
+    </div>
+    {% else %}
+    <div class="mb-7 p-4 rounded-lg border border-red-500/40 bg-red-900/20">
+        <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-red-300 mb-1">▌ REWATCH_WINDOW_OPENS_AT not set</p>
+        <p class="text-xs text-gray-300">All views are counted as "first-only". Set <code class="text-yellow-300">REWATCH_WINDOW_OPENS_AT</code> in Render env (ISO timestamp like <code>2026-05-09T00:00:00+02:00</code>) to enable rewatch detection.</p>
+    </div>
+    {% endif %}
+
+    {# Per-class panels #}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+    {% for c in classes %}
+        <div class="rounded-xl border border-gray-700 bg-black/40 p-5">
+            <div class="flex items-center justify-between mb-3">
+                <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ {{ c.label }}</p>
+                <span class="text-xs text-gray-500">{{ c.total_unique }} unique</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mb-4">
+                <div class="text-center bg-brand-900/20 border border-brand-500/30 rounded p-2">
+                    <p class="font-orbitron font-black text-2xl text-brand-400" style="text-shadow:0 0 10px rgba(46,219,153,0.4);">{{ c.returners }}</p>
+                    <p class="text-[9px] text-gray-500 font-mono-term tracking-wider uppercase mt-1">returners</p>
+                </div>
+                <div class="text-center bg-yellow-900/20 border border-yellow-500/30 rounded p-2">
+                    <p class="font-orbitron font-black text-2xl text-yellow-400" style="text-shadow:0 0 10px rgba(255,200,87,0.4);">{{ c.sleepers }}</p>
+                    <p class="text-[9px] text-gray-500 font-mono-term tracking-wider uppercase mt-1">sleepers</p>
+                </div>
+                <div class="text-center bg-blue-900/20 border border-blue-500/30 rounded p-2">
+                    <p class="font-orbitron font-black text-2xl text-blue-400" style="text-shadow:0 0 10px rgba(96,165,250,0.4);">{{ c.rewatch_only }}</p>
+                    <p class="text-[9px] text-gray-500 font-mono-term tracking-wider uppercase mt-1">new viewers</p>
+                </div>
+            </div>
+            {# Send rewatch reminder to sleepers #}
+            {% if c.sleepers > 0 and cutoff_set %}
+            <button type="button" onclick="document.getElementById('cv-confirm-{{ c.n }}').classList.remove('hidden')"
+                    class="w-full font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-yellow-400 hover:bg-yellow-300 px-3 py-2.5 rounded font-bold transition">
+                ▶ Rewatch reminder to {{ c.sleepers }} sleepers
+            </button>
+
+            {# Confirmation modal — same shape as /admin/emails canary modal #}
+            <div id="cv-confirm-{{ c.n }}" class="hidden fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm">
+                <form method="POST" action="{{ url_for('admin.segment_send_template', segment_name='sleepers_class' ~ c.n) }}"
+                      class="bg-gray-900 border-2 border-yellow-400/60 rounded-xl p-6 max-w-md w-full"
+                      style="box-shadow: 0 0 40px rgba(255,200,87,0.3);">
+                    <input type="hidden" name="template" value="class{{ c.n }}_rewatch_reminder">
+                    <div class="flex items-center justify-between mb-4">
+                        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-yellow-400">▌ CONFIRM SEND</p>
+                        <button type="button" onclick="document.getElementById('cv-confirm-{{ c.n }}').classList.add('hidden')" class="text-gray-500 hover:text-white text-xl leading-none">×</button>
+                    </div>
+                    <h3 class="text-base font-bold text-white mb-2">{{ c.label }} rewatch reminder</h3>
+                    <p class="text-sm text-gray-300 mb-4">
+                        About to send to <strong class="text-yellow-300">{{ c.sleepers }}</strong> ambassadors who watched {{ c.label }} during launch but haven't come back this weekend.
+                    </p>
+                    <div class="bg-yellow-900/20 border border-yellow-500/40 rounded p-3 mb-4 text-xs text-yellow-200">
+                        ⚠ Real send to production. Test on yourself first using the canary box below.
+                    </div>
+                    <div class="bg-blue-900/20 border border-blue-500/40 rounded p-3 mb-5">
+                        <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-blue-300 mb-2">🧪 Canary send · test addresses first</p>
+                        <textarea name="only_emails" rows="3" placeholder="your@email.com&#10;teammate@email.com"
+                                  class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white font-mono"
+                                  oninput="
+                                    var lines = this.value.trim().split(/[\n,]/).map(function(l){return l.trim();}).filter(Boolean);
+                                    var n = lines.length;
+                                    var btn = document.getElementById('cv-confirm-{{ c.n }}-btn');
+                                    if (n > 0) {
+                                      btn.textContent = '🧪 Canary: send to ' + n + ' test address' + (n === 1 ? '' : 'es');
+                                      btn.classList.remove('bg-yellow-400'); btn.classList.add('bg-blue-500'); btn.classList.add('text-white'); btn.classList.remove('text-black');
+                                    } else {
+                                      btn.textContent = '▶ Send to {{ c.sleepers }} sleepers';
+                                      btn.classList.add('bg-yellow-400'); btn.classList.remove('bg-blue-500'); btn.classList.remove('text-white'); btn.classList.add('text-black');
+                                    }
+                                  "></textarea>
+                        <p class="text-[10px] text-gray-500 mt-1">One email per line. Recommended: send to yourself + 1-2 teammates first.</p>
+                    </div>
+                    <div class="flex gap-2 justify-end">
+                        <button type="button" onclick="document.getElementById('cv-confirm-{{ c.n }}').classList.add('hidden')"
+                                class="font-mono-term text-[11px] tracking-wider uppercase text-gray-400 hover:text-white px-4 py-2.5">Cancel</button>
+                        <button type="submit" id="cv-confirm-{{ c.n }}-btn"
+                                class="font-mono-term text-[11px] tracking-[0.2em] uppercase text-black bg-yellow-400 px-5 py-2.5 rounded-lg font-bold transition"
+                                style="box-shadow: 0 0 16px rgba(255,200,87,0.4);">
+                          ▶ Send to {{ c.sleepers }} sleepers
+                        </button>
+                    </div>
+                </form>
+            </div>
+            {% else %}
+            <button disabled class="w-full font-mono-term text-[10px] tracking-[0.2em] uppercase bg-gray-800 text-gray-600 px-3 py-2.5 rounded">
+                {% if not cutoff_set %}set rewatch window first{% else %}no sleepers{% endif %}
+            </button>
+            {% endif %}
+        </div>
+    {% endfor %}
+    </div>
+
+    {# Combined attendees table — across all 3 classes #}
+    <div class="rounded-xl border border-gray-700 bg-gray-900/40 overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-white">▌ Attendees · sorted by bucket then recent activity</p>
+            <span class="text-xs text-gray-500">{{ classes|sum(attribute='total_unique') }} rows across 3 classes</span>
+        </div>
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-black/60 border-b border-gray-700 text-[10px] font-mono-term tracking-wider uppercase text-gray-400">
+                <tr>
+                    <th class="px-4 py-2 text-left">Class</th>
+                    <th class="px-4 py-2 text-left">Name / Email</th>
+                    <th class="px-4 py-2 text-left">Bucket</th>
+                    <th class="px-4 py-2 text-right">Pre · Post</th>
+                    <th class="px-4 py-2 text-right">Max %</th>
+                    <th class="px-4 py-2 text-left">First → Last view</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in classes %}
+                    {% for r in c.rows %}
+                    <tr class="border-b border-gray-800 hover:bg-gray-800/40">
+                        <td class="px-4 py-2.5">
+                            <span class="font-mono-term text-[10px] tracking-wider uppercase text-brand-400">{{ c.label }}</span>
+                        </td>
+                        <td class="px-4 py-2.5">
+                            {% if r.ambassador %}
+                                <a href="{{ url_for('admin.ambassador_detail', ambassador_id=r.ambassador.id) }}" class="text-white hover:text-brand-400 font-semibold">{{ r.ambassador.name }}</a>
+                                <div class="text-[11px] text-gray-500">{{ r.email }}</div>
+                            {% else %}
+                                <span class="text-gray-300">{{ r.email }}</span>
+                                <div class="text-[10px] text-gray-600 italic">ghost lead — email not in DB</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2.5">
+                            {% if r.bucket == 'returner' %}
+                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-brand-400 bg-brand-900/20 border border-brand-500/30 px-2 py-0.5 rounded">returner</span>
+                            {% elif r.bucket == 'sleeper' %}
+                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-yellow-400 bg-yellow-900/20 border border-yellow-500/30 px-2 py-0.5 rounded">sleeper</span>
+                            {% elif r.bucket == 'rewatch_only' %}
+                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-blue-400 bg-blue-900/20 border border-blue-500/30 px-2 py-0.5 rounded">new viewer</span>
+                            {% else %}
+                                <span class="font-mono-term text-[9px] tracking-wider uppercase text-gray-500 bg-gray-800 border border-gray-700 px-2 py-0.5 rounded">first only</span>
+                            {% endif %}
+                            {% if r.completed %}
+                                <span class="ml-1 font-mono-term text-[9px] tracking-wider uppercase text-brand-300">✓ done</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2.5 text-right text-xs font-mono">
+                            <span class="text-gray-400">{{ r.before_count }}</span>
+                            <span class="text-gray-600 mx-1">·</span>
+                            <span class="text-yellow-300">{{ r.after_count }}</span>
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                            {% if r.max_pct %}
+                                {% if r.max_pct >= 75 %}
+                                    <span class="font-mono text-brand-400 font-bold">{{ r.max_pct }}%</span>
+                                {% elif r.max_pct >= 50 %}
+                                    <span class="font-mono text-yellow-400">{{ r.max_pct }}%</span>
+                                {% else %}
+                                    <span class="font-mono text-red-400">{{ r.max_pct }}%</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-gray-600">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2.5 text-gray-500 text-[11px] font-mono">
+                            {{ r.first_view_at.strftime('%m-%d %H:%M') }} → {{ r.last_view_at.strftime('%m-%d %H:%M') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

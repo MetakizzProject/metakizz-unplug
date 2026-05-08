@@ -56,6 +56,9 @@ def _ensure_unsubscribe_columns(db):
             "webinar_reminder_sent_at",
             "final_signal_sent_at",
             "live_imminent_sent_at",
+            "class1_rewatch_reminder_sent_at",
+            "class2_rewatch_reminder_sent_at",
+            "class3_rewatch_reminder_sent_at",
         ):
             if col not in cols:
                 conn.execute(text(f"ALTER TABLE ambassadors ADD COLUMN {col} TIMESTAMP"))
@@ -197,6 +200,11 @@ def create_app():
     app.config["CRON_SECRET"] = os.getenv("CRON_SECRET", "")
     # Hard campaign close: 2026-05-07 19:00 Europe/Madrid. Used by cron logic.
     app.config["CAMPAIGN_CLOSE_ISO"] = os.getenv("CAMPAIGN_CLOSE_ISO", "2026-05-07T19:00:00+02:00")
+    # Weekend re-open of all 3 classes. Anything in lead_events.created_at
+    # at-or-after this timestamp counts as a "rewatch", anything before is
+    # a "first view". Used by /admin/class-views and the rewatch-reminder
+    # segment computation. Default: Friday 2026-05-09 00:00 Madrid.
+    app.config["REWATCH_WINDOW_OPENS_AT"] = os.getenv("REWATCH_WINDOW_OPENS_AT", "2026-05-09T00:00:00+02:00")
 
     from app.models import db
 
