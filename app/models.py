@@ -69,6 +69,16 @@ class Ambassador(db.Model):
     class2_rewatch_reminder_sent_at = db.Column(db.DateTime, nullable=True)
     class3_rewatch_reminder_sent_at = db.Column(db.DateTime, nullable=True)
 
+    # Personal outreach tracking — when the founder/team contacted this lead
+    # via a 1:1 channel (WhatsApp DM, email, phone call, SMS). Used to:
+    #   - hide already-contacted leads from the daily outreach queue
+    #   - count "contacted today" KPI
+    #   - record what channel worked (so re-engagement uses the right one)
+    # Set by /admin/leads/<id>/mark-contacted; cleared by .../unmark-contacted.
+    last_outreach_at = db.Column(db.DateTime, nullable=True, index=True)
+    last_outreach_channel = db.Column(db.String(20), nullable=True)  # whatsapp|email|call|sms
+    last_outreach_notes = db.Column(db.Text, nullable=True)
+
     # Engagement tracking — bumped on every /dashboard/<code> hit.
     last_dashboard_visit_at = db.Column(db.DateTime, nullable=True)
     dashboard_visit_count = db.Column(db.Integer, default=0)

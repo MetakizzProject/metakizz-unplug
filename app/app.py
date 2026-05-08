@@ -59,10 +59,20 @@ def _ensure_unsubscribe_columns(db):
             "class1_rewatch_reminder_sent_at",
             "class2_rewatch_reminder_sent_at",
             "class3_rewatch_reminder_sent_at",
+            "last_outreach_at",
         ):
             if col not in cols:
                 conn.execute(text(f"ALTER TABLE ambassadors ADD COLUMN {col} TIMESTAMP"))
                 logger.info("added column ambassadors.%s", col)
+        # Outreach tracking columns with non-timestamp types (channel = short
+        # string, notes = free-form text). Same pattern as the GHL block below.
+        for col_name, col_type in [
+            ("last_outreach_channel", "VARCHAR(20)"),
+            ("last_outreach_notes",   "TEXT"),
+        ]:
+            if col_name not in cols:
+                conn.execute(text(f"ALTER TABLE ambassadors ADD COLUMN {col_name} {col_type}"))
+                logger.info("added column ambassadors.%s", col_name)
         # Engagement tracking columns (added later).
         if "last_dashboard_visit_at" not in cols:
             conn.execute(text("ALTER TABLE ambassadors ADD COLUMN last_dashboard_visit_at TIMESTAMP"))

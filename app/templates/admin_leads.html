@@ -382,6 +382,32 @@
   </div>
 
   <!-- ────────────────────────────────────────────────────────────
+       OUTREACH STRIP — daily 1:1 contact tracker
+       ──────────────────────────────────────────────────────────── -->
+  {% if outreach_stats %}
+  <div class="cards-row" style="margin-top: 12px;">
+    <div class="stat-card" style="border-color: rgba(46,219,153,0.4);">
+      <div class="label" style="color: #2EDB99;">📲 Contacted today</div>
+      <div class="value" style="color: #2EDB99;">{{ outreach_stats.contacted_today }}</div>
+    </div>
+    <div class="stat-card" style="border-color: rgba(220,38,38,0.4);">
+      <div class="label" style="color: #DC2626;">🔥 Hot in queue</div>
+      <div class="value" style="color: #DC2626;">{{ outreach_stats.in_queue }}</div>
+      <div style="font-size:9px; color:#6B7280; margin-top:2px;">burning + hot, not contacted</div>
+    </div>
+    <div class="stat-card" style="border-color: rgba(255,200,87,0.4);">
+      <div class="label" style="color: #FFC857;">∑ Total contacted</div>
+      <div class="value" style="color: #FFC857;">{{ outreach_stats.contacted_total }}</div>
+    </div>
+    <a href="{{ url_for('admin.leads') }}?temp=burning&has_phone=1&not_contacted=1&sort=temp"
+       class="stat-card" style="border-color: rgba(167,139,250,0.4); text-decoration: none; cursor: pointer;">
+      <div class="label" style="color: #A78BFA;">🎯 Today's queue ↗</div>
+      <div class="value" style="color: #A78BFA; font-size: 14px;">Burning · phone · not contacted</div>
+    </a>
+  </div>
+  {% endif %}
+
+  <!-- ────────────────────────────────────────────────────────────
        LAUNCH FUNNEL + 7-DAY ACTIVITY SPARKLINE
        Funnel rows are clickable: jump to the matching filter on the table.
        ──────────────────────────────────────────────────────────── -->
@@ -564,6 +590,10 @@
             <input type="checkbox" name="has_phone" value="1" {% if f_has_phone %}checked{% endif %} onchange="this.form.submit()">
             📱 Has phone
           </label>
+          <label class="checkbox-pill {% if f_not_contacted %}checked{% endif %}" style="--accent: #A78BFA;">
+            <input type="checkbox" name="not_contacted" value="1" {% if f_not_contacted %}checked{% endif %} onchange="this.form.submit()">
+            🚫 Not contacted yet
+          </label>
         </div>
       </div>
     </div>
@@ -739,7 +769,24 @@
               {% if amb.ghl_contact_id %}
                 <a class="action-btn action-detail" href="https://app.gohighlevel.com/v2/location/CrneQsu72gpHGTOMzRGd/contacts/detail/{{ amb.ghl_contact_id }}" target="_blank" title="Open in GHL">↗ GHL</a>
               {% endif %}
-              <a class="action-btn action-detail" href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}">→</a>
+              <a class="action-btn action-detail" href="{{ url_for('admin.ambassador_detail', ambassador_id=amb.id) }}" title="Lead detail">→</a>
+              {# ── Outreach mark/unmark ── #}
+              {% if amb.last_outreach_at and t.outreach_ago %}
+                {% set ch_emoji = {'whatsapp':'💬','email':'✉','call':'📞','sms':'📨'}.get(amb.last_outreach_channel, '✓') %}
+                <span style="display:inline-block; padding:3px 8px; background:rgba(46,219,153,0.18); color:#2EDB99; border:1px solid rgba(46,219,153,0.4); border-radius:6px; font-size:10px; font-family:'Share Tech Mono',monospace; letter-spacing:0.5px; margin-left:4px;" title="Contacted via {{ amb.last_outreach_channel }} {{ t.outreach_ago }}">
+                  ✓ {{ ch_emoji }} {{ t.outreach_ago }}
+                </span>
+                <form method="POST" action="{{ url_for('admin.unmark_contacted', ambassador_id=amb.id) }}" style="display:inline; margin-left:2px;">
+                  <button type="submit" title="Unmark as contacted" style="background:transparent; border:none; color:#6B7280; cursor:pointer; font-size:11px; padding:2px 4px;">×</button>
+                </form>
+              {% else %}
+                <form method="POST" action="{{ url_for('admin.mark_contacted', ambassador_id=amb.id) }}" style="display:inline; margin-left:6px;">
+                  <button type="submit" name="channel" value="whatsapp" title="Mark as contacted via WhatsApp" style="background:rgba(37,211,102,0.15); border:1px solid rgba(37,211,102,0.4); color:#25D366; cursor:pointer; padding:3px 6px; border-radius:4px; font-size:11px; margin-right:1px;">💬</button>
+                  <button type="submit" name="channel" value="email" title="Mark as contacted via Email" style="background:rgba(96,165,250,0.15); border:1px solid rgba(96,165,250,0.4); color:#60A5FA; cursor:pointer; padding:3px 6px; border-radius:4px; font-size:11px; margin-right:1px;">✉</button>
+                  <button type="submit" name="channel" value="call" title="Mark as contacted via Call" style="background:rgba(167,139,250,0.15); border:1px solid rgba(167,139,250,0.4); color:#A78BFA; cursor:pointer; padding:3px 6px; border-radius:4px; font-size:11px; margin-right:1px;">📞</button>
+                  <button type="submit" name="channel" value="sms" title="Mark as contacted via SMS" style="background:rgba(255,200,87,0.15); border:1px solid rgba(255,200,87,0.4); color:#FFC857; cursor:pointer; padding:3px 6px; border-radius:4px; font-size:11px;">📨</button>
+                </form>
+              {% endif %}
             </td>
           </tr>
         {% else %}

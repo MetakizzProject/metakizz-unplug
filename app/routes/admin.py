@@ -81,46 +81,38 @@ _FUNNEL_EVENT_KEYS = [
 _email_to_bucket = bucket_from_event_set
 
 
-def _emails_in_temp_bucket(bucket: str) -> set:
-    """Return the set of (lowercased) emails that classify into the given
-    temperature bucket via SQL aggregation. Used by /admin/leads to
-    apply the temperature filter globally instead of just on the
-    current page slice.
+def _build_email_buckets() -> dict:
+    """Return {email_lower: bucket_key} for every lead with any signal.
 
-    Three data sources combined per email:
-      1. LeadEvent rows with email set → email→event_types
-      2. LeadEvent rows with email NULL but ambassador_id set (the Zoom
-         guests rematched by name) → look up the ambassador's email and
-         attribute the events to that
-      3. Reservation rows with paid_at IS NOT NULL → has_paid_reservation
-         flag promotes the bucket to ≥burning
+    Single source of truth for temperature classification across:
+      - /admin/leads ?temp= filter (_emails_in_temp_bucket)
+      - /admin/leads top distribution counters (_quick_temp_dist_sql)
+      - /admin/leads default sort by score (sort=temp)
 
-    Returns empty set on error (so a failing query becomes "no matches"
-    rather than 500-ing the whole page).
+    Combines three data sources:
+      1. LeadEvent rows with email set (Lovable-tracked class views)
+      2. LeadEvent rows linked only by ambassador_id (Zoom guests rematched
+         by name) → joins Ambassador to attribute events to the correct email
+      3. Reservation rows with paid_at IS NOT NULL → promotes bucket to ≥burning
+
+    Empty dict on error so callers degrade gracefully.
     """
     from app.models import LeadEvent, Reservation
     try:
-        # 1. Email-keyed events (Lovable-tracked class views, most cases)
         email_rows = (
             db.session.query(LeadEvent.email, LeadEvent.event_type)
             .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
             .filter(LeadEvent.email.isnot(None))
-            .distinct()
-            .all()
+            .distinct().all()
         )
-        # 2. Events linked only by ambassador_id (Zoom guests rematched
-        #    by name — no email captured by Zoom). Join Ambassador to
-        #    get the canonical email.
         amb_rows = (
             db.session.query(Ambassador.email, LeadEvent.event_type)
             .join(LeadEvent, LeadEvent.ambassador_id == Ambassador.id)
             .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
             .filter(or_(LeadEvent.email.is_(None), LeadEvent.email == ""))
             .filter(Ambassador.email.isnot(None))
-            .distinct()
-            .all()
+            .distinct().all()
         )
-        # 3. Paid reservations (each paid email auto-promotes to burning)
         paid_emails = {
             (em or "").lower() for (em,) in
             db.session.query(Reservation.email)
@@ -128,8 +120,8 @@ def _emails_in_temp_bucket(bucket: str) -> set:
             .all() if em
         }
     except Exception:
-        logger.exception("emails_in_temp_bucket query failed")
-        return set()
+        logger.exception("_build_email_buckets query failed")
+        return {}
 
     by_email = defaultdict(set)
     for em, et in email_rows:
@@ -138,72 +130,33 @@ def _emails_in_temp_bucket(bucket: str) -> set:
     for em, et in amb_rows:
         if em:
             by_email[em.lower()].add(et)
-
-    # Make sure every paid email is at least represented (so burning bucket
-    # picks them up even when they have no class events).
     for em in paid_emails:
         if em not in by_email:
             by_email[em] = set()
 
     return {
-        em for em, evts in by_email.items()
-        if _email_to_bucket(evts, has_paid_reservation=(em in paid_emails)) == bucket
+        em: bucket_from_event_set(evts, has_paid_reservation=(em in paid_emails))
+        for em, evts in by_email.items()
     }
+
+
+def _emails_in_temp_bucket(bucket: str) -> set:
+    """Subset of _build_email_buckets() — emails matching the given bucket."""
+    return {em for em, b in _build_email_buckets().items() if b == bucket}
 
 
 def _quick_temp_dist_sql():
-    """Approximate temperature distribution via SQL aggregation.
-
-    Aggregates events from three sources (email-keyed, ambassador-keyed,
-    and paid reservations) so the bucket counts include guests rematched
-    by name and customers with payment intent. Returns dict {bucket_key: count}.
+    """Temperature distribution via the unified _build_email_buckets()
+    helper. Returns dict {bucket_key: count}.
     """
-    from app.models import LeadEvent, Ambassador, Reservation
-
-    email_rows = (
-        db.session.query(LeadEvent.email, LeadEvent.event_type)
-        .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
-        .filter(LeadEvent.email.isnot(None))
-        .distinct()
-        .all()
-    )
-    amb_rows = (
-        db.session.query(Ambassador.email, LeadEvent.event_type)
-        .join(LeadEvent, LeadEvent.ambassador_id == Ambassador.id)
-        .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
-        .filter(or_(LeadEvent.email.is_(None), LeadEvent.email == ""))
-        .filter(Ambassador.email.isnot(None))
-        .distinct()
-        .all()
-    )
-    paid_emails = {
-        (em or "").lower() for (em,) in
-        db.session.query(Reservation.email)
-        .filter(Reservation.paid_at.isnot(None))
-        .all() if em
-    }
-
-    by_email = defaultdict(set)
-    for em, et in email_rows:
-        if em:
-            by_email[em.lower()].add(et)
-    for em, et in amb_rows:
-        if em:
-            by_email[em.lower()].add(et)
-    for em in paid_emails:
-        if em not in by_email:
-            by_email[em] = set()
-
+    buckets = _build_email_buckets()
     total_reachable = (
         Ambassador.query.filter(Ambassador.unsubscribed_at.is_(None)).count()
     )
-
     counts = {"customer": 0, "burning": 0, "hot": 0, "warm": 0, "cool": 0, "cold": 0}
-    for em, evts in by_email.items():
-        bucket = _email_to_bucket(evts, has_paid_reservation=(em in paid_emails))
+    for bucket in buckets.values():
         if bucket in counts:
             counts[bucket] += 1
-
     cold = max(0, total_reachable - sum(counts.values()))
     counts["cold"] = cold
     return counts
@@ -4548,7 +4501,11 @@ def leads():
     class_2    = request.args.get("class_2") == "1"
     class_3    = request.args.get("class_3") == "1"
     webinar_joined_filter = request.args.get("webinar") == "1"
-    sort_mode  = (request.args.get("sort") or "").strip().lower()  # "" | "temp" | "temp_asc"
+    not_contacted_filter = request.args.get("not_contacted") == "1"
+    # Default sort = hottest first. The user wants opening /admin/leads to
+    # immediately surface high-temperature leads for outreach without an
+    # extra click. Pass ?sort=recent to fall back to recency-sorted view.
+    sort_mode  = (request.args.get("sort") or "temp").strip().lower()  # "temp" (default) | "temp_asc" | "recent"
     page       = max(1, request.args.get("page", default=1, type=int))
     per_page   = 50
 
@@ -4667,27 +4624,21 @@ def leads():
     # 'referral', 'email', 'other' fall through — no DB filter
     # (the user can still see them by source / tag instead)
 
-    # Sort: default = recent activity. ?sort=temp = hottest first
-    # (customer → burning → hot → warm → cool → cold). ?sort=temp_asc reverses.
+    # Outreach status filter (?not_contacted=1)
+    if not_contacted_filter:
+        base = base.filter(Ambassador.last_outreach_at.is_(None))
+
+    # Sort: default = hottest first (?sort=temp). ?sort=temp_asc reverses.
+    # ?sort=recent falls back to dashboard-visit recency (the previous default).
     if sort_mode in ("temp", "temp_asc"):
-        # Build email → bucket priority map via single SQL (same shape as
-        # _emails_in_temp_bucket). Reuses the launch-day classifier so the
-        # sort matches what the row badge displays.
-        event_rows = _safe(
-            lambda: db.session.query(LeadEvent.email, LeadEvent.event_type)
-                .filter(LeadEvent.event_type.in_(_FUNNEL_EVENT_KEYS))
-                .distinct().all(),
-            [],
-        )
-        events_by_email = defaultdict(set)
-        for em, et in event_rows:
-            if em:
-                events_by_email[em.lower()].add(et)
+        # Use the unified bucket helper so sort + temp filter + distribution
+        # counters all classify identically (paid reservations promote to
+        # burning, name-matched ghosts attribute via ambassador_id, etc.).
+        email_to_bucket = _build_email_buckets()
         PRIORITY = {"customer": 6, "burning": 5, "hot": 4, "warm": 3, "cool": 2, "cold": 1}
         emails_by_priority = defaultdict(list)
-        for em, evts in events_by_email.items():
-            p = PRIORITY[bucket_from_event_set(evts)]
-            emails_by_priority[p].append(em)
+        for em, bucket in email_to_bucket.items():
+            emails_by_priority[PRIORITY.get(bucket, 1)].append(em)
 
         from sqlalchemy import case as sa_case
         priority_cases = []
@@ -4713,7 +4664,7 @@ def leads():
                 Ambassador.last_dashboard_visit_at.desc().nullslast(),
                 Ambassador.created_at.desc().nullslast(),
             )
-    else:
+    else:  # "recent" or any other value
         base = base.order_by(
             Ambassador.last_dashboard_visit_at.desc().nullslast(),
             Ambassador.created_at.desc().nullslast(),
@@ -4743,6 +4694,21 @@ def leads():
     webinar_dur_by_email = bulk_webinar_durations(page_emails)
     paid_emails = bulk_paid_reservations(page_emails)
 
+    now_ts = datetime.now(timezone.utc)
+    def _outreach_ago(dt):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        secs = int((now_ts - dt).total_seconds())
+        if secs < 60:
+            return "just now"
+        if secs < 3600:
+            return f"{secs // 60}m ago"
+        if secs < 86400:
+            return f"{secs // 3600}h ago"
+        return f"{secs // 86400}d ago"
+
     rows_with_temp = []
     for a in page_amb:
         em_lower = (a.email or "").lower()
@@ -4755,6 +4721,7 @@ def leads():
             has_paid_reservation=em_lower in paid_emails,
         )
         t["source_info"] = classify_source(a)
+        t["outreach_ago"] = _outreach_ago(a.last_outreach_at)
         rows_with_temp.append((a, t))
 
     # Temperature-bucket filter is already applied at the DB-filter
@@ -4870,6 +4837,45 @@ def leads():
         "labels": [], "signups": [], "class1": [], "class2": [],
     })
 
+    # ── Outreach KPI strip ──
+    # contacted_today: marks made in the last 24h (rolling, not midnight-aligned —
+    # the user works late, midnight-reset would feel weird).
+    # in_queue: ambassadors classified as burning|hot via _build_email_buckets()
+    # who have NOT been contacted yet — the natural daily target.
+    one_day_ago = datetime.now(timezone.utc) - timedelta(hours=24)
+    contacted_today_count = _safe(
+        lambda: Ambassador.query
+            .filter(Ambassador.last_outreach_at >= one_day_ago)
+            .count(),
+        0,
+    )
+    contacted_total = _safe(
+        lambda: Ambassador.query
+            .filter(Ambassador.last_outreach_at.isnot(None))
+            .count(),
+        0,
+    )
+    # Compute outreach queue size (burning + hot, not yet contacted).
+    burning_hot_emails = {
+        em for em, b in _build_email_buckets().items()
+        if b in ("burning", "hot", "customer")
+    }
+    in_queue_count = 0
+    if burning_hot_emails:
+        in_queue_count = _safe(
+            lambda: Ambassador.query
+                .filter(func.lower(Ambassador.email).in_(burning_hot_emails))
+                .filter(Ambassador.last_outreach_at.is_(None))
+                .filter(Ambassador.unsubscribed_at.is_(None))
+                .count(),
+            0,
+        )
+    outreach_stats = {
+        "contacted_today": contacted_today_count,
+        "contacted_total": contacted_total,
+        "in_queue": in_queue_count,
+    }
+
     return render_template(
         "admin_leads.html",
         rows=rows_with_temp,
@@ -4887,6 +4893,7 @@ def leads():
         f_temp=temp_bucket, f_has_phone=has_phone,
         f_class_1=class_1, f_class_2=class_2, f_class_3=class_3,
         f_webinar=webinar_joined_filter,
+        f_not_contacted=not_contacted_filter,
         f_sort=sort_mode,
         relevant_tags=sorted(RELEVANT_LEAD_TAGS),
         lookup_country=lookup_country,
@@ -4894,14 +4901,52 @@ def leads():
         funnel_steps=funnel_steps,
         funnel_visited=funnel_visited,
         activity_series=activity_series,
+        outreach_stats=outreach_stats,
         dance_dist=dance_dist,
         f_dance=dance,
         short_dance=_short_dance,
         active_chips=active_chips,
         clear_all_url=url_for("admin.leads"),
         active_section="leads",
+        now_ts=datetime.now(timezone.utc),
         **_admin_layout_context(),
     )
+
+
+# ════════════════════════════════════════════════════════════════════
+# OUTREACH TRACKING — manual mark-as-contacted per lead
+# ════════════════════════════════════════════════════════════════════
+
+@admin_bp.route("/leads/<int:ambassador_id>/mark-contacted", methods=["POST"])
+def mark_contacted(ambassador_id):
+    """Record a 1:1 outreach attempt on this lead. Called by the small
+    channel-icon buttons in each row of /admin/leads. Future: also
+    called by the Playwright WhatsApp drafter after a draft is left
+    in the input box (so the queue reflects pending sends).
+    """
+    a = Ambassador.query.get_or_404(ambassador_id)
+    channel = (request.form.get("channel") or "whatsapp").strip().lower()
+    if channel not in ("whatsapp", "email", "call", "sms"):
+        channel = "whatsapp"
+    note = (request.form.get("note") or "").strip() or None
+    a.last_outreach_at = datetime.now(timezone.utc)
+    a.last_outreach_channel = channel
+    if note:
+        a.last_outreach_notes = note
+    db.session.commit()
+    # Preserve the user's filters/page when redirecting back.
+    return redirect(request.referrer or url_for("admin.leads"))
+
+
+@admin_bp.route("/leads/<int:ambassador_id>/unmark-contacted", methods=["POST"])
+def unmark_contacted(ambassador_id):
+    """Undo a contact mark — for fat-finger clicks. Keeps last_outreach_notes
+    intact since it has forensic value even after un-marking."""
+    a = Ambassador.query.get_or_404(ambassador_id)
+    a.last_outreach_at = None
+    a.last_outreach_channel = None
+    db.session.commit()
+    return redirect(request.referrer or url_for("admin.leads"))
 
 
 @admin_bp.route("/leads/ghosts")
@@ -4920,7 +4965,8 @@ def leads_ghosts():
     class_2    = request.args.get("class_2") == "1"
     class_3    = request.args.get("class_3") == "1"
     webinar    = request.args.get("webinar") == "1"
-    sort_mode  = (request.args.get("sort") or "").strip().lower()
+    # Default sort = hottest first, matching /admin/leads.
+    sort_mode  = (request.args.get("sort") or "temp").strip().lower()
     page       = max(1, request.args.get("page", default=1, type=int))
     per_page   = 50
 
