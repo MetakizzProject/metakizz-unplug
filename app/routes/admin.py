@@ -5886,6 +5886,45 @@ def preview_reservation_first50_email():
     )
 
 
+@admin_bp.route("/reservations/<int:reservation_id>/mark-contacted", methods=["POST"])
+def reservation_mark_contacted(reservation_id):
+    """Mark a Reservation as contacted (sets last_contacted_at to now).
+    Idempotent — safe to call multiple times. Optional channel form param."""
+    from flask import jsonify
+    res = Reservation.query.get_or_404(reservation_id)
+    res.last_contacted_at = datetime.now(timezone.utc)
+    res.last_contacted_channel = (request.form.get("channel") or "manual")[:20]
+    db.session.commit()
+    return jsonify({
+        "ok": True,
+        "last_contacted_at": res.last_contacted_at.isoformat(),
+        "last_contacted_channel": res.last_contacted_channel,
+    })
+
+
+@admin_bp.route("/reservations/<int:reservation_id>/unmark-contacted", methods=["POST"])
+def reservation_unmark_contacted(reservation_id):
+    """Clear contacted state — useful if you marked someone by accident."""
+    from flask import jsonify
+    res = Reservation.query.get_or_404(reservation_id)
+    res.last_contacted_at = None
+    res.last_contacted_channel = None
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@admin_bp.route("/reservations/<int:reservation_id>/save-note", methods=["POST"])
+def reservation_save_note(reservation_id):
+    """Persist the admin's free-text note for a Reservation. Posted on blur
+    by the inline editor on /admin/reservations."""
+    from flask import jsonify
+    res = Reservation.query.get_or_404(reservation_id)
+    note = (request.form.get("note") or "").strip()
+    res.admin_notes = note or None
+    db.session.commit()
+    return jsonify({"ok": True, "admin_notes": res.admin_notes or ""})
+
+
 @admin_bp.route("/reservations/<int:reservation_id>/delete", methods=["POST"])
 def delete_reservation(reservation_id):
     """Hard-delete a Reservation. Used to clean up test data.
@@ -5994,6 +6033,10 @@ def reservations_json():
                 "ambassador_id": r.ambassador_id,
                 # Phone (E.164) from the linked Ambassador, if any. Used to open WhatsApp.
                 "phone": (r.ambassador.phone_number if (r.ambassador and r.ambassador.phone_number) else ""),
+                # Admin follow-up state (CRM hub)
+                "last_contacted_at": r.last_contacted_at.isoformat() if r.last_contacted_at else None,
+                "last_contacted_channel": r.last_contacted_channel or "",
+                "admin_notes": r.admin_notes or "",
             }
             for r in rows
         ],

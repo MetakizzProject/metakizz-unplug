@@ -433,6 +433,14 @@ class Reservation(db.Model):
     form_completed_at = db.Column(db.DateTime, nullable=True, index=True)
     confirmation_email_sent_at = db.Column(db.DateTime, nullable=True)
 
+    # Admin follow-up state — turns /admin/reservations into a CRM hub.
+    # last_contacted_at is the source of truth for "have we reached out
+    # to this buyer yet?" The channel is what was used (wa/email/call).
+    # admin_notes is free-text scratchpad maintained by the admin.
+    last_contacted_at = db.Column(db.DateTime, nullable=True, index=True)
+    last_contacted_channel = db.Column(db.String(20), nullable=True)
+    admin_notes = db.Column(db.Text, nullable=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     ambassador = db.relationship("Ambassador", foreign_keys=[ambassador_id])

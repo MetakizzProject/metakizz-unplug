@@ -194,6 +194,18 @@
       </button>
     </div>
     <div class="flex flex-wrap items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Follow-up:</span>
+      <button data-filter="not_contacted" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+        ❌ Not contacted
+      </button>
+      <button data-filter="contacted" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+        ✓ Contacted
+      </button>
+      <button data-filter="has_note" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
+        ✎ Has note
+      </button>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
       <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Program:</span>
       <button data-filter="dancers"     class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Dancers</button>
       <button data-filter="instructors" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Instructors</button>
@@ -213,11 +225,13 @@
             <th class="text-left px-4 py-3">Form</th>
             <th class="text-left px-4 py-3">Name</th>
             <th class="text-left px-4 py-3">Email</th>
+            <th class="text-left px-4 py-3 whitespace-nowrap">📞 Contacted</th>
+            <th class="text-left px-4 py-3 whitespace-nowrap">✎ Admin note</th>
             <th class="text-left px-4 py-3">Program</th>
             <th class="text-left px-4 py-3">Modality</th>
             <th class="text-left px-4 py-3">Payment</th>
             <th class="text-left px-4 py-3">Feeling</th>
-            <th class="text-left px-4 py-3">Notes</th>
+            <th class="text-left px-4 py-3">Buyer notes</th>
             <th class="text-left px-4 py-3">Stripe</th>
             <th class="text-right px-4 py-3"></th>
           </tr>
@@ -229,6 +243,8 @@
               data-pending="{{ '1' if (r.paid_at and not r.form_completed_at) else '0' }}"
               data-paid="{{ '1' if r.paid_at else '0' }}"
               data-doubts="{{ '1' if r.clarity == 'doubts' else '0' }}"
+              data-contacted="{{ '1' if r.last_contacted_at else '0' }}"
+              data-has-note="{{ '1' if r.admin_notes else '0' }}"
               data-program="{{ r.program_choice or '' }}"
               data-modality="{{ r.modality_choice or '' }}"
               class="hover:bg-gray-800/30">
@@ -240,6 +256,27 @@
             </td>
             <td class="px-4 py-3 text-white">{{ r.name or '' }} {{ r.surname or '' }}</td>
             <td class="px-4 py-3 text-gray-300 text-xs">{{ r.email }}</td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              {% if r.last_contacted_at %}
+                <button class="contact-toggle inline-flex items-center gap-1 px-2 py-1 rounded-md bg-brand-900/40 hover:bg-brand-800/60 border border-brand-700/40 text-brand-300 text-[11px] font-mono uppercase tracking-wider transition"
+                        data-rid="{{ r.id }}" data-state="1"
+                        title="Mark as not contacted">
+                  ✓ {{ r.last_contacted_at.strftime('%d %b %H:%M') }}{% if r.last_contacted_channel %} · {{ r.last_contacted_channel }}{% endif %}
+                </button>
+              {% else %}
+                <button class="contact-toggle inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-brand-800/40 border border-gray-700 hover:border-brand-700/60 text-gray-300 hover:text-brand-300 text-[11px] font-mono uppercase tracking-wider transition"
+                        data-rid="{{ r.id }}" data-state="0"
+                        title="Mark as contacted">
+                  ❌ Not contacted
+                </button>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3">
+              <textarea class="admin-note-input bg-black/40 border border-gray-800 hover:border-gray-700 focus:border-brand-700/60 focus:bg-black/60 rounded-md text-xs text-gray-200 font-mono px-2 py-1.5 w-[220px] resize-y outline-none transition placeholder-gray-700"
+                        data-rid="{{ r.id }}" rows="1"
+                        placeholder="+ add note (auto-saves)">{{ r.admin_notes or '' }}</textarea>
+              <span class="note-status text-[9px] uppercase tracking-widest text-gray-700 font-mono ml-1"></span>
+            </td>
             <td class="px-4 py-3">
               {% if r.program_choice == 'dancers' %}<span class="inline-block bg-brand-900/40 text-brand-300 px-2 py-0.5 rounded text-xs font-mono uppercase">Dancers</span>
               {% elif r.program_choice == 'instructors' %}<span class="inline-block bg-purple-900/40 text-purple-300 px-2 py-0.5 rounded text-xs font-mono uppercase">Instructors</span>
@@ -301,7 +338,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="11" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
+          <tr><td colspan="13" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -364,16 +401,19 @@
 
   function rowMatchesFilter(row) {
     const f = currentFilter;
-    if (f === 'all')         return true;
-    if (f === 'paid')        return row.dataset.paid === '1';
-    if (f === 'eligible')    return row.dataset.eligible === '1';
-    if (f === 'pending')     return row.dataset.pending === '1';
-    if (f === 'doubts')      return row.dataset.doubts === '1';
-    if (f === 'dancers')     return row.dataset.program === 'dancers';
-    if (f === 'instructors') return row.dataset.program === 'instructors';
-    if (f === 'solo')        return row.dataset.modality === 'solo';
-    if (f === 'couple')      return row.dataset.modality === 'duo';
-    if (f === 'notsure')     return row.dataset.program === 'not_sure' || row.dataset.modality === 'not_sure';
+    if (f === 'all')           return true;
+    if (f === 'paid')          return row.dataset.paid === '1';
+    if (f === 'eligible')      return row.dataset.eligible === '1';
+    if (f === 'pending')       return row.dataset.pending === '1';
+    if (f === 'doubts')        return row.dataset.doubts === '1';
+    if (f === 'not_contacted') return row.dataset.contacted === '0' && row.dataset.paid === '1';
+    if (f === 'contacted')     return row.dataset.contacted === '1';
+    if (f === 'has_note')      return row.dataset.hasNote === '1';
+    if (f === 'dancers')       return row.dataset.program === 'dancers';
+    if (f === 'instructors')   return row.dataset.program === 'instructors';
+    if (f === 'solo')          return row.dataset.modality === 'solo';
+    if (f === 'couple')        return row.dataset.modality === 'duo';
+    if (f === 'notsure')       return row.dataset.program === 'not_sure' || row.dataset.modality === 'not_sure';
     return true;
   }
 
@@ -392,6 +432,41 @@
     });
   });
 
+  function fmtContactedDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleDateString([], {day:'2-digit', month:'short'}) + ' ' +
+           d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }
+
+  function contactBadge(rid, lastAt, channel) {
+    if (lastAt) {
+      const stamp = fmtContactedDate(lastAt);
+      const ch = channel ? ' · ' + escapeHtml(channel) : '';
+      return '<button class="contact-toggle inline-flex items-center gap-1 px-2 py-1 rounded-md bg-brand-900/40 hover:bg-brand-800/60 border border-brand-700/40 text-brand-300 text-[11px] font-mono uppercase tracking-wider transition" '
+           + 'data-rid="' + rid + '" data-state="1" title="Mark as not contacted">'
+           + '✓ ' + stamp + ch + '</button>';
+    }
+    return '<button class="contact-toggle inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-brand-800/40 border border-gray-700 hover:border-brand-700/60 text-gray-300 hover:text-brand-300 text-[11px] font-mono uppercase tracking-wider transition" '
+         + 'data-rid="' + rid + '" data-state="0" title="Mark as contacted">'
+         + '❌ Not contacted</button>';
+  }
+
+  function noteCell(rid, note) {
+    return '<textarea class="admin-note-input bg-black/40 border border-gray-800 hover:border-gray-700 focus:border-brand-700/60 focus:bg-black/60 rounded-md text-xs text-gray-200 font-mono px-2 py-1.5 w-[220px] resize-y outline-none transition placeholder-gray-700" '
+         + 'data-rid="' + rid + '" rows="1" placeholder="+ add note (auto-saves)">' + escapeHtml(note || '') + '</textarea>'
+         + '<span class="note-status text-[9px] uppercase tracking-widest text-gray-700 font-mono ml-1"></span>';
+  }
+
+  // Skip the table re-render while the operator is mid-edit — otherwise
+  // typing in a note textarea or holding the contact toggle would get
+  // wiped every poll cycle.
+  function isUserEditing() {
+    const a = document.activeElement;
+    if (!a) return false;
+    return a.classList && (a.classList.contains('admin-note-input') || a.classList.contains('contact-toggle'));
+  }
+
   async function poll() {
     try {
       const resp = await fetch(STATE_URL, { cache: 'no-store' });
@@ -408,6 +483,18 @@
       if (isClosed !== lastClosed) { window.location.reload(); return; }
       if (data.winner_id && data.winner_id !== lastWinnerId) { window.location.reload(); return; }
 
+      if (isUserEditing()) {
+        // Only update revenue KPIs and bail out on the table refresh.
+        if (data.revenue) {
+          const fmt2 = function(n) { return '€' + (n || 0).toLocaleString('es-ES'); };
+          const $$ = function(id) { return document.getElementById(id); };
+          if ($$('kpi-rev-total'))      $$('kpi-rev-total').textContent      = fmt2(data.revenue.estimated_total);
+          if ($$('kpi-rev-deposits'))   $$('kpi-rev-deposits').textContent   = fmt2(data.revenue.deposits_in);
+          if ($$('kpi-rev-outstanding'))$$('kpi-rev-outstanding').textContent= fmt2(data.revenue.outstanding);
+        }
+        return;
+      }
+
       // Re-render rows
       const closed_at = data.window_closed_at ? new Date(data.window_closed_at) : null;
       const html = data.rows.map(function(r) {
@@ -415,11 +502,15 @@
         const isEligible = !!(r.paid_at && r.form_completed_at && (!closed_at || formAt <= closed_at));
         const isPending = !!(r.paid_at && !r.form_completed_at);
         const isDoubts  = r.clarity === 'doubts';
+        const hasNote   = !!(r.admin_notes && r.admin_notes.length);
+        const contacted = !!r.last_contacted_at;
         return '<tr data-row-id="' + r.id + '" '
           + 'data-eligible="' + (isEligible ? '1' : '0') + '" '
           + 'data-pending="' + (isPending ? '1' : '0') + '" '
           + 'data-paid="' + (r.paid_at ? '1' : '0') + '" '
           + 'data-doubts="' + (isDoubts ? '1' : '0') + '" '
+          + 'data-contacted="' + (contacted ? '1' : '0') + '" '
+          + 'data-has-note="' + (hasNote ? '1' : '0') + '" '
           + 'data-program="' + escapeHtml(r.program_choice || '') + '" '
           + 'data-modality="' + escapeHtml(r.modality_choice || '') + '" '
           + 'class="hover:bg-gray-800/30">'
@@ -427,6 +518,8 @@
           + '<td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">' + (r.form_completed_at ? fmtTime(r.form_completed_at) : '<span class="text-yellow-500">—</span>') + '</td>'
           + '<td class="px-4 py-3 text-white">' + escapeHtml(r.name) + ' ' + escapeHtml(r.surname) + '</td>'
           + '<td class="px-4 py-3 text-gray-300 text-xs">' + escapeHtml(r.email) + '</td>'
+          + '<td class="px-4 py-3 whitespace-nowrap">' + contactBadge(r.id, r.last_contacted_at, r.last_contacted_channel) + '</td>'
+          + '<td class="px-4 py-3">' + noteCell(r.id, r.admin_notes) + '</td>'
           + '<td class="px-4 py-3">' + programBadge(r.program_choice) + '</td>'
           + '<td class="px-4 py-3 text-xs">' + modalityBadge(r.modality_choice) + '</td>'
           + '<td class="px-4 py-3 text-xs">' + paymentBadge(r.payment_plan) + '</td>'
@@ -445,7 +538,12 @@
           + '</td>'
           + '</tr>';
       }).join('');
-      tbody.innerHTML = html || '<tr><td colspan="11" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>';
+      tbody.innerHTML = html || '<tr><td colspan="13" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>';
+
+      // Re-seed savedValue on the freshly-rendered textareas so blur-detect works.
+      tbody.querySelectorAll('.admin-note-input').forEach(ta => {
+        ta.dataset.savedValue = ta.value;
+      });
 
       // Update revenue KPIs live
       if (data.revenue) {
@@ -462,6 +560,73 @@
       console.warn('poll failed', e);
     }
   }
+
+  // ── Contacted toggle (event delegation so it works on re-rendered rows) ──
+  tbody.addEventListener('click', async function(ev) {
+    const btn = ev.target.closest('.contact-toggle');
+    if (!btn) return;
+    ev.preventDefault();
+    const rid = btn.dataset.rid;
+    const wasContacted = btn.dataset.state === '1';
+    const url = '/admin/reservations/' + rid + (wasContacted ? '/unmark-contacted' : '/mark-contacted');
+    const fd = new FormData();
+    if (!wasContacted) fd.append('channel', 'manual');
+    btn.disabled = true;
+    try {
+      const r = await fetch(url, { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!data.ok) throw new Error('save failed');
+
+      const tr = btn.closest('tr');
+      if (wasContacted) {
+        tr.dataset.contacted = '0';
+        btn.outerHTML = '<button class="contact-toggle inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800/60 hover:bg-brand-800/40 border border-gray-700 hover:border-brand-700/60 text-gray-300 hover:text-brand-300 text-[11px] font-mono uppercase tracking-wider transition" data-rid="' + rid + '" data-state="0" title="Mark as contacted">❌ Not contacted</button>';
+      } else {
+        tr.dataset.contacted = '1';
+        const stamp = fmtContactedDate(data.last_contacted_at);
+        btn.outerHTML = '<button class="contact-toggle inline-flex items-center gap-1 px-2 py-1 rounded-md bg-brand-900/40 hover:bg-brand-800/60 border border-brand-700/40 text-brand-300 text-[11px] font-mono uppercase tracking-wider transition" data-rid="' + rid + '" data-state="1" title="Mark as not contacted">✓ ' + stamp + ' · ' + (data.last_contacted_channel || 'manual') + '</button>';
+      }
+      applyFilter();
+    } catch (e) {
+      btn.disabled = false;
+      console.warn('contact toggle failed', e);
+    }
+  });
+
+  // ── Admin note autosave on blur (event delegation) ──
+  tbody.addEventListener('focusout', async function(ev) {
+    const ta = ev.target.closest('.admin-note-input');
+    if (!ta) return;
+    const rid = ta.dataset.rid;
+    const note = ta.value.trim();
+    if (note === (ta.dataset.savedValue || '')) return;  // unchanged
+    const status = ta.parentElement.querySelector('.note-status');
+    if (status) { status.textContent = 'saving...'; status.style.color = '#9CA3AF'; }
+    try {
+      const fd = new FormData();
+      fd.append('note', note);
+      const r = await fetch('/admin/reservations/' + rid + '/save-note', { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!data.ok) throw new Error('save failed');
+      ta.dataset.savedValue = note;
+      const tr = ta.closest('tr');
+      if (tr) tr.dataset.hasNote = note ? '1' : '0';
+      if (status) {
+        status.textContent = '✓ saved';
+        status.style.color = '#2EDB99';
+        setTimeout(() => { status.textContent = ''; }, 1800);
+      }
+      applyFilter();
+    } catch (e) {
+      if (status) { status.textContent = '⚠ failed'; status.style.color = '#DC2626'; }
+      console.warn('note save failed', e);
+    }
+  });
+
+  // Seed savedValue on initial render so we can detect dirty changes.
+  document.querySelectorAll('.admin-note-input').forEach(ta => {
+    ta.dataset.savedValue = ta.value;
+  });
 
   applyFilter();
   setInterval(poll, 3000);

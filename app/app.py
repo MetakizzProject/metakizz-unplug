@@ -149,12 +149,21 @@ def _ensure_unsubscribe_columns(db):
             conn.execute(text("ALTER TABLE referrals ADD COLUMN signup_user_agent VARCHAR(500)"))
             logger.info("added column referrals.signup_user_agent")
 
-        # MKOT 3.0 reservations table — add payment_plan if missing.
+        # MKOT 3.0 reservations table — add payment_plan if missing, plus the
+        # admin follow-up columns that turn /admin/reservations into a CRM hub.
         if "reservations" in inspector.get_table_names():
             res_cols = {c["name"] for c in inspector.get_columns("reservations")}
             if "payment_plan" not in res_cols:
                 conn.execute(text("ALTER TABLE reservations ADD COLUMN payment_plan VARCHAR(20)"))
                 logger.info("added column reservations.payment_plan")
+            for col_name, col_type in [
+                ("last_contacted_at",      "TIMESTAMP"),
+                ("last_contacted_channel", "VARCHAR(20)"),
+                ("admin_notes",            "TEXT"),
+            ]:
+                if col_name not in res_cols:
+                    conn.execute(text(f"ALTER TABLE reservations ADD COLUMN {col_name} {col_type}"))
+                    logger.info("added column reservations.%s", col_name)
 
         # Webinar attendance enrichment columns on lead_events. Populated by
         # /admin/zoom/import-participants — sums duration across rejoins,
