@@ -21,7 +21,6 @@ from flask import Blueprint, render_template, request, jsonify
 from app.models import db, PartnerInvite
 from app.services.circle_invite import invite_partner_to_circle, serialize_response
 from app.mailer import (
-    send_partner_welcome,
     send_partner_buyer_confirmation,
     send_partner_invite_failure_alert,
 )
@@ -150,18 +149,9 @@ def invite_submit():
         logger.error("partner invite unknown circle status %r for invite %s", status, invite.id)
         return jsonify({"ok": False, "message": FRIENDLY_FAILURE_MSG}), 200
 
-    # Circle add succeeded → send both emails. Failures here are non-fatal;
-    # we flag the row for manual follow-up but still tell the buyer success.
-    try:
-        partner_sent = send_partner_welcome(invite)
-        if partner_sent:
-            invite.partner_email_sent_at = _utcnow()
-        else:
-            invite.needs_followup = True
-    except Exception:
-        logger.exception("failed to send partner welcome email for invite %s", invite.id)
-        invite.needs_followup = True
-
+    # Circle add succeeded → Circle sends its own "Accept invitation" email
+    # to the partner automatically (via skip_invitation=False). We only need
+    # to send the buyer their confirmation with the WhatsApp CTA.
     try:
         buyer_sent = send_partner_buyer_confirmation(invite)
         if buyer_sent:
@@ -173,11 +163,9 @@ def invite_submit():
 
     logger.info(
         "partner invite ok: id=%s buyer=%s partner=%s circle=%s target=%s "
-        "partner_email_sent=%s buyer_email_sent=%s needs_followup=%s",
+        "buyer_email_sent=%s",
         invite.id, buyer_email, partner_email, status, target_group,
-        invite.partner_email_sent_at is not None,
         invite.buyer_email_sent_at is not None,
-        invite.needs_followup,
     )
 
     return jsonify({"ok": True, "message": SUCCESS_MSG}), 200

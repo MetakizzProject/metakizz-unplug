@@ -1130,7 +1130,9 @@ You've unplugged {count} dancers. Just <strong style="color:#2EDB99;">ONE more</
 
 # ─── PARTNER INVITE FLOW (Couple plan) ────────────────────────────
 
-ACADEMY_URL = "https://community.metakizzproject.com"
+# Note: Circle sends the partner's invitation email automatically (we pass
+# skip_invitation=False when creating the member). We only send a confirmation
+# to the BUYER from this app — see send_partner_buyer_confirmation below.
 
 
 def _first_name_from(full_name):
@@ -1139,74 +1141,6 @@ def _first_name_from(full_name):
         return "there"
     parts = full_name.strip().split()
     return parts[0] if parts else "there"
-
-
-def send_partner_welcome(invite, app_url=None):
-    """Email sent to the partner after a successful Circle invite.
-
-    Lands them on the academy with their access already provisioned.
-    No unsubscribe footer — this is a one-shot transactional email,
-    not a marketing list.
-    """
-    if not invite or not invite.partner_email:
-        return False
-
-    if app_url is None:
-        from flask import current_app
-        app_url = current_app.config.get("APP_URL", "")
-
-    partner_first = _first_name_from(invite.partner_name)
-    buyer_first = _first_name_from(invite.buyer_name)
-
-    note_block = ""
-    if invite.personal_note and invite.personal_note.strip():
-        safe_note = invite.personal_note.strip().replace("<", "&lt;").replace(">", "&gt;")
-        note_block = f"""
-<table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
-<tr><td style="background-color:#0A0F0A;border-left:3px solid #2EDB99;border-radius:6px;padding:14px 16px;">
-    <p style="color:#9CA3AF;font-size:11px;text-transform:uppercase;letter-spacing:2px;margin:0 0 6px 0;">A note from {buyer_first}</p>
-    <p style="color:#FFFFFF;font-size:15px;line-height:1.6;margin:0;font-style:italic;">"{safe_note}"</p>
-</td></tr>
-</table>"""
-
-    safe_partner_email = invite.partner_email.replace("<", "&lt;").replace(">", "&gt;")
-
-    content = f"""
-<h1 style="color:#FFFFFF;font-size:22px;margin:0 0 16px 0;">Hi {partner_first},</h1>
-
-<p style="color:#E5E7EB;font-size:15px;line-height:1.7;">
-{buyer_first} just bought the Couple plan for MKOT 3.0 — and they want you on this journey with them.
-</p>
-
-<p style="color:#FFFFFF;font-size:18px;line-height:1.5;margin:18px 0;">
-You're officially in. <span style="color:#2EDB99;">🫶🏼</span>
-</p>
-
-<p style="color:#2EDB99;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin:24px 0 12px 0;">🔻 Here's what to do next</p>
-
-<ol style="color:#E5E7EB;font-size:15px;line-height:1.8;padding-left:20px;margin:0;">
-    <li>Click the link below to access the Metakizz Academy</li>
-    <li>Create your free account using <strong style="color:#FFFFFF;">{safe_partner_email}</strong></li>
-    <li>You'll land in the Waiting Room — that's your home until May 18</li>
-</ol>
-
-{_button("ENTER THE ACADEMY →", ACADEMY_URL)}
-{note_block}
-<p style="color:#9CA3AF;font-size:14px;line-height:1.7;margin:24px 0 0 0;">
-The doors open <strong style="color:#FFFFFF;">Sunday May 18, 19:00 CET</strong>, with our Live Welcome Session.
-</p>
-
-<p style="color:#9CA3AF;font-size:14px;line-height:1.7;margin:8px 0 0 0;">
-We can't wait to meet you both.
-</p>
-
-<p style="color:#6B7280;font-size:13px;margin:24px 0 0 0;">
-— Jesús, Anni & Álvaro
-</p>
-"""
-
-    subject = f"{buyer_first} just gave you access to MKOT 3.0 🟢"
-    return _send(invite.partner_email, subject, _wrap(content, app_url))
 
 
 def send_partner_buyer_confirmation(invite, app_url=None):

@@ -22,8 +22,10 @@ python -m flask --app app.app:create_app run
 Lets a buyer who paid the Couple plan submit their partner's info. The
 backend looks up the buyer in Circle, mirrors their access group
 (Dancers or Instructors), and adds the partner to the same group via the
-Circle V2 admin API. Resend then sends a welcome to the partner + a
-confirmation to the buyer.
+Circle V2 admin API. Circle then sends the partner its standard
+"Accept invitation" email automatically (with the button to set their
+password). The app sends ONE additional email — a confirmation to the
+buyer with a WhatsApp CTA.
 
 ### URLs
 
@@ -108,7 +110,6 @@ to the full 4-field version (buyer fills everything in by hand).
 | `buyer_missing` | Buyer email not in the Circle community. Buyer is told to double-check the email. No admin alert (assumes typo). |
 | `buyer_no_group` | Buyer is in neither Dancers nor Instructors. Admin alert; buyer sees friendly fallback. |
 | `failed` | Auth / network / 5xx error. Admin alert; buyer sees friendly fallback. |
-| `needs_followup=True` | Circle add succeeded but the partner welcome email failed. Row shows a yellow pill on the admin page. |
 
 ### Production deploy checklist
 

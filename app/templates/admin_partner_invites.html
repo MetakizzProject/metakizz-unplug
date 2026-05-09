@@ -53,7 +53,6 @@
           <th class="px-3 py-2.5">Location</th>
           <th class="px-3 py-2.5">Track</th>
           <th class="px-3 py-2.5">Circle</th>
-          <th class="px-3 py-2.5">Partner email</th>
           <th class="px-3 py-2.5">Buyer email</th>
           <th class="px-3 py-2.5">Follow-up</th>
         </tr>
@@ -97,13 +96,6 @@
               <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/40 text-yellow-300 border border-yellow-700/50" title="{{ inv.circle_response or '' }}">● buyer no track</span>
             {% elif inv.circle_status == 'failed' %}
               <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-red-900/40 text-red-300 border border-red-700/50" title="{{ inv.circle_response or '' }}">● failed</span>
-            {% else %}
-              <span class="text-gray-600 text-xs">—</span>
-            {% endif %}
-          </td>
-          <td class="px-3 py-2.5">
-            {% if inv.partner_email_sent_at %}
-              <span class="text-brand-400 text-xs">✓ sent</span>
             {% else %}
               <span class="text-gray-600 text-xs">—</span>
             {% endif %}
