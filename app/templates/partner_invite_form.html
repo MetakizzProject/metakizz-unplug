@@ -10,31 +10,42 @@
     <div class="text-center mb-6">
       <p class="text-xs uppercase tracking-widest text-brand-400 font-mono mb-3">▌ MKOT 3.0 // COUPLE PLAN</p>
       <h1 class="text-2xl font-display font-bold mb-2">Send access to your partner</h1>
-      <p class="text-gray-400 text-sm leading-relaxed">
-        You bought the Couple plan. Drop your partner's info below and we'll get them in.
-      </p>
+      {% if prefilled %}
+        <p class="text-gray-400 text-sm leading-relaxed">
+          Hi <span class="text-white font-semibold">{{ buyer_name.split(' ')[0] }}</span> — drop your partner's info below and we'll get them in.
+        </p>
+      {% else %}
+        <p class="text-gray-400 text-sm leading-relaxed">
+          You bought the Couple plan. Drop your partner's info below and we'll get them in.
+        </p>
+      {% endif %}
     </div>
 
     <div id="error-banner" class="hidden rounded-lg px-4 py-3 mb-4 text-sm bg-red-900/50 text-red-200 border border-red-800"></div>
 
     <form id="invite-form" class="space-y-5" novalidate>
 
-      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono mt-2">You</p>
-      <div class="space-y-3">
-        <div>
-          <label for="buyer_name" class="block text-sm text-gray-400 mb-1">Your name</label>
-          <input type="text" id="buyer_name" name="buyer_name" required autocomplete="name"
-                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+      {% if prefilled %}
+        <input type="hidden" name="buyer_name" value="{{ buyer_name }}">
+        <input type="hidden" name="buyer_email" value="{{ buyer_email }}">
+      {% else %}
+        <p class="text-xs uppercase tracking-widest text-gray-500 font-mono mt-2">You</p>
+        <div class="space-y-3">
+          <div>
+            <label for="buyer_name" class="block text-sm text-gray-400 mb-1">Your name</label>
+            <input type="text" id="buyer_name" name="buyer_name" required autocomplete="name"
+                   class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+          </div>
+          <div>
+            <label for="buyer_email" class="block text-sm text-gray-400 mb-1">Your email</label>
+            <input type="email" id="buyer_email" name="buyer_email" required autocomplete="email"
+                   class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+            <p class="text-xs text-gray-600 mt-1">The same email you used to pay.</p>
+          </div>
         </div>
-        <div>
-          <label for="buyer_email" class="block text-sm text-gray-400 mb-1">Your email</label>
-          <input type="email" id="buyer_email" name="buyer_email" required autocomplete="email"
-                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
-          <p class="text-xs text-gray-600 mt-1">The same email you used to pay.</p>
-        </div>
-      </div>
+      {% endif %}
 
-      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono pt-2">Your partner</p>
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono {{ 'mt-2' if prefilled else 'pt-2' }}">Your partner</p>
       <div class="space-y-3">
         <div>
           <label for="partner_name" class="block text-sm text-gray-400 mb-1">Partner's full name</label>
@@ -47,21 +58,6 @@
                  class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
           <p class="text-xs text-gray-600 mt-1">This is where we'll send their access link.</p>
         </div>
-        <div>
-          <label for="location" class="block text-sm text-gray-400 mb-1">Country / City <span class="text-gray-600">(optional)</span></label>
-          <input type="text" id="location" name="location"
-                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
-        </div>
-      </div>
-
-      <div>
-        <div class="flex items-baseline justify-between mb-1">
-          <label for="personal_note" class="block text-sm text-gray-400">A short note for your partner <span class="text-gray-600">(optional)</span></label>
-          <span id="note-counter" class="text-xs text-gray-600 font-mono">0/200</span>
-        </div>
-        <textarea id="personal_note" name="personal_note" rows="3" maxlength="200"
-                  placeholder="We'll include this in their welcome email."
-                  class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"></textarea>
       </div>
 
       <button type="submit" id="submit-btn"
@@ -95,14 +91,6 @@
   var errorBanner = document.getElementById('error-banner');
   var formWrapper = document.getElementById('form-wrapper');
   var successWrapper = document.getElementById('success-wrapper');
-  var noteEl = document.getElementById('personal_note');
-  var counter = document.getElementById('note-counter');
-
-  function updateCounter() {
-    counter.textContent = (noteEl.value.length || 0) + '/200';
-  }
-  noteEl.addEventListener('input', updateCounter);
-  updateCounter();
 
   function showError(msg) {
     errorBanner.textContent = msg;
@@ -124,9 +112,7 @@
       buyer_name: form.buyer_name.value,
       buyer_email: form.buyer_email.value,
       partner_name: form.partner_name.value,
-      partner_email: form.partner_email.value,
-      location: form.location.value,
-      personal_note: form.personal_note.value
+      partner_email: form.partner_email.value
     };
 
     fetch('/api/invite-partner', {

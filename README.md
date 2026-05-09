@@ -43,6 +43,31 @@ EMAIL_FROM                          # MetaKizz <noreply@metakizzproject.com>
 ADMIN_NOTIFICATION_EMAIL            # Where admin alerts go on Circle failure
 ```
 
+### Pre-fill the form via URL
+
+To skip the buyer fields, link directly with `buyer_name` and `buyer_email`
+as URL-encoded query params. The form will hide those fields and only show
+the partner inputs.
+
+```
+https://metakizz-ambassador.onrender.com/invite-partner?buyer_name=Juan%20P%C3%A9rez&buyer_email=juan%40example.com
+```
+
+URL-encoding gotchas:
+- spaces → `%20`
+- `@` → `%40`
+- accents (`é`, `ñ`, etc.) → use UTF-8 percent-encoding (`é` → `%C3%A9`)
+
+If you're pasting the link into an email tool with merge tags, use the
+tags directly — most platforms URL-encode automatically:
+
+```
+https://metakizz-ambassador.onrender.com/invite-partner?buyer_name={{first_name}}&buyer_email={{email}}
+```
+
+If a param is missing or `buyer_email` is malformed, the form falls back
+to the full 4-field version (buyer fills everything in by hand).
+
 ### How the access-group mirroring works
 
 1. We search Circle for the buyer by email.

@@ -54,7 +54,21 @@ def _utcnow():
 
 @partner_invite_bp.route("/invite-partner", methods=["GET"])
 def invite_form():
-    return render_template("partner_invite_form.html")
+    """Render the form. If `?buyer_name=…&buyer_email=…` are present and
+    valid, render in pre-filled mode (only partner fields visible; buyer
+    data injected as hidden inputs). Otherwise show the full 4-field form.
+    """
+    buyer_name = (request.args.get("buyer_name") or "").strip()
+    buyer_email_raw = (request.args.get("buyer_email") or "").strip().lower()
+    prefilled = bool(
+        buyer_name and buyer_email_raw and EMAIL_RE.match(buyer_email_raw)
+    )
+    return render_template(
+        "partner_invite_form.html",
+        prefilled=prefilled,
+        buyer_name=buyer_name if prefilled else "",
+        buyer_email=buyer_email_raw if prefilled else "",
+    )
 
 
 @partner_invite_bp.route("/api/invite-partner", methods=["POST"])
