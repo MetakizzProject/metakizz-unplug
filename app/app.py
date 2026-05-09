@@ -165,6 +165,15 @@ def _ensure_unsubscribe_columns(db):
                     conn.execute(text(f"ALTER TABLE reservations ADD COLUMN {col_name} {col_type}"))
                     logger.info("added column reservations.%s", col_name)
 
+        # Partner-invite target_group column (added 2026-05-09). Mirrors the
+        # buyer's access group so we know whether a couple was put on the
+        # Dancers or Instructors track.
+        if "partner_invites" in inspector.get_table_names():
+            pi_cols = {c["name"] for c in inspector.get_columns("partner_invites")}
+            if "target_group" not in pi_cols:
+                conn.execute(text("ALTER TABLE partner_invites ADD COLUMN target_group VARCHAR(20)"))
+                logger.info("added column partner_invites.target_group")
+
         # Webinar attendance enrichment columns on lead_events. Populated by
         # /admin/zoom/import-participants — sums duration across rejoins,
         # captures country / device / first-join / last-leave from the Zoom
@@ -217,6 +226,11 @@ def create_app():
     app.config["GHL_WEBHOOK_SECRET"] = os.getenv("GHL_WEBHOOK_SECRET", "")
     app.config["WHATSAPP_GROUP_URL"] = os.getenv("WHATSAPP_GROUP_URL", "")
     app.config["CRON_SECRET"] = os.getenv("CRON_SECRET", "")
+    # Partner Invite flow (MKOT 3.0 Couple plan). The flow mirrors the
+    # buyer's access group, so we need both Dancers and Instructors IDs.
+    app.config["CIRCLE_ACCESS_GROUP_DANCERS_ID"] = os.getenv("CIRCLE_ACCESS_GROUP_DANCERS_ID", "")
+    app.config["CIRCLE_ACCESS_GROUP_INSTRUCTORS_ID"] = os.getenv("CIRCLE_ACCESS_GROUP_INSTRUCTORS_ID", "")
+    app.config["ADMIN_NOTIFICATION_EMAIL"] = os.getenv("ADMIN_NOTIFICATION_EMAIL", "")
     # Hard campaign close: 2026-05-07 19:00 Europe/Madrid. Used by cron logic.
     app.config["CAMPAIGN_CLOSE_ISO"] = os.getenv("CAMPAIGN_CLOSE_ISO", "2026-05-07T19:00:00+02:00")
     # Weekend re-open of all 3 classes. Anything in lead_events.created_at
@@ -250,6 +264,7 @@ def create_app():
     from app.routes.cron import cron_bp
     from app.routes.reservation import reservation_bp
     from app.routes.stripe_webhook import stripe_bp
+    from app.routes.partner_invite import partner_invite_bp
 
     app.register_blueprint(home_bp)
     app.register_blueprint(dashboard_bp)
@@ -259,6 +274,7 @@ def create_app():
     app.register_blueprint(cron_bp)
     app.register_blueprint(reservation_bp)
     app.register_blueprint(stripe_bp)
+    app.register_blueprint(partner_invite_bp)
 
     return app
 

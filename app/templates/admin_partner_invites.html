@@ -1,0 +1,156 @@
+{% extends "admin_base.html" %}
+
+{% block admin_content %}
+<div class="px-4 lg:px-6 py-5">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-5">
+    <div>
+      <h1 class="font-display font-bold text-2xl text-white">Partner Invites</h1>
+      <p class="text-xs text-gray-500 font-mono uppercase tracking-widest mt-1">
+        // MKOT 3.0 Couple plan · /invite-partner
+      </p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="{{ url_for('partner_invite.invite_form') }}" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
+        📝 Open form ↗
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
+      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Total invites</p>
+      <p class="font-display font-bold text-2xl text-white">{{ total }}</p>
+    </div>
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
+      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Circle failed</p>
+      <p class="font-display font-bold text-2xl {{ 'text-red-400' if failed_count else 'text-white' }}">{{ failed_count }}</p>
+    </div>
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
+      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Need follow-up</p>
+      <p class="font-display font-bold text-2xl {{ 'text-yellow-400' if followup_count else 'text-white' }}">{{ followup_count }}</p>
+    </div>
+  </div>
+
+  <!-- Search filter -->
+  <div class="mb-3">
+    <input type="text" id="invite-filter" placeholder="Filter by buyer / partner / email..."
+           class="w-full md:w-96 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-500">
+  </div>
+
+  <!-- Table -->
+  {% if invites %}
+  <div class="overflow-x-auto bg-gray-900/40 border border-gray-800 rounded-xl">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-[10px] uppercase tracking-widest text-gray-500 font-mono border-b border-gray-800">
+          <th class="px-3 py-2.5">Created</th>
+          <th class="px-3 py-2.5">Buyer</th>
+          <th class="px-3 py-2.5">Partner</th>
+          <th class="px-3 py-2.5">Location</th>
+          <th class="px-3 py-2.5">Track</th>
+          <th class="px-3 py-2.5">Circle</th>
+          <th class="px-3 py-2.5">Partner email</th>
+          <th class="px-3 py-2.5">Buyer email</th>
+          <th class="px-3 py-2.5">Follow-up</th>
+        </tr>
+      </thead>
+      <tbody id="invites-tbody">
+        {% for inv in invites %}
+        <tr class="invite-row border-b border-gray-800/60 hover:bg-gray-900/60"
+            data-search="{{ (inv.buyer_name ~ ' ' ~ inv.buyer_email ~ ' ' ~ inv.partner_name ~ ' ' ~ inv.partner_email)|lower }}">
+          <td class="px-3 py-2.5 text-gray-400 font-mono text-xs whitespace-nowrap">
+            {{ inv.created_at.strftime('%Y-%m-%d %H:%M') if inv.created_at else '—' }}
+          </td>
+          <td class="px-3 py-2.5">
+            <div class="text-white">{{ inv.buyer_name }}</div>
+            <div class="text-gray-500 text-xs">{{ inv.buyer_email }}</div>
+          </td>
+          <td class="px-3 py-2.5">
+            <div class="text-white">{{ inv.partner_name }}</div>
+            <div class="text-gray-500 text-xs">{{ inv.partner_email }}</div>
+            {% if inv.personal_note %}
+              <div class="text-gray-600 text-xs mt-1 italic max-w-xs truncate" title="{{ inv.personal_note }}">"{{ inv.personal_note }}"</div>
+            {% endif %}
+          </td>
+          <td class="px-3 py-2.5 text-gray-400 text-xs">{{ inv.location or '—' }}</td>
+          <td class="px-3 py-2.5">
+            {% if inv.target_group == 'dancers' %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-purple-900/40 text-purple-300 border border-purple-700/50">💃 dancers</span>
+            {% elif inv.target_group == 'instructors' %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-cyan-900/40 text-cyan-300 border border-cyan-700/50">🎓 instructors</span>
+            {% else %}
+              <span class="text-gray-600 text-xs">—</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-2.5">
+            {% if inv.circle_status == 'created' %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50" title="{{ inv.circle_response or '' }}">● created</span>
+            {% elif inv.circle_status == 'added_to_group' %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-blue-900/40 text-blue-300 border border-blue-700/50" title="{{ inv.circle_response or '' }}">● added</span>
+            {% elif inv.circle_status == 'buyer_missing' %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-orange-900/40 text-orange-300 border border-orange-700/50" title="Buyer email not found in Circle community">● buyer not found</span>
+            {% elif inv.circle_status == 'buyer_no_group' %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/40 text-yellow-300 border border-yellow-700/50" title="{{ inv.circle_response or '' }}">● buyer no track</span>
+            {% elif inv.circle_status == 'failed' %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-red-900/40 text-red-300 border border-red-700/50" title="{{ inv.circle_response or '' }}">● failed</span>
+            {% else %}
+              <span class="text-gray-600 text-xs">—</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-2.5">
+            {% if inv.partner_email_sent_at %}
+              <span class="text-brand-400 text-xs">✓ sent</span>
+            {% else %}
+              <span class="text-gray-600 text-xs">—</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-2.5">
+            {% if inv.buyer_email_sent_at %}
+              <span class="text-brand-400 text-xs">✓ sent</span>
+            {% else %}
+              <span class="text-gray-600 text-xs">—</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-2.5">
+            {% if inv.needs_followup %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/40 text-yellow-300 border border-yellow-700/50">⚠ yes</span>
+            {% else %}
+              <span class="text-gray-600 text-xs">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="text-xs text-gray-600 mt-3 font-mono">Showing newest 500 · {{ total }} total</p>
+
+  {% else %}
+  <div class="bg-gray-900/40 border border-gray-800 rounded-xl px-6 py-12 text-center">
+    <p class="text-gray-500">No partner invites yet.</p>
+    <p class="text-xs text-gray-600 mt-2 font-mono">Once a buyer submits the form at /invite-partner, rows will appear here.</p>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+(function () {
+  var input = document.getElementById('invite-filter');
+  var rows = document.querySelectorAll('.invite-row');
+  if (!input || !rows.length) return;
+  input.addEventListener('input', function () {
+    var q = (input.value || '').trim().toLowerCase();
+    rows.forEach(function (r) {
+      var hay = r.getAttribute('data-search') || '';
+      r.style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+    });
+  });
+})();
+</script>
+{% endblock %}

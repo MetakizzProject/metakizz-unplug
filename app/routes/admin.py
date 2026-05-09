@@ -10,7 +10,7 @@ from flask import (
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
-from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent, Reservation, RaffleState
+from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent, Reservation, RaffleState, PartnerInvite
 from app.services.temperature import bucket_from_event_set
 from app.mailer import (
     send_welcome_email,
@@ -1328,6 +1328,36 @@ def _compute_chart_data(ambassadors=None, referral_counts=None):
     }
 
 
+@admin_bp.route("/partner-invites")
+def partner_invites():
+    """Read-only list of MKOT 3.0 Couple-plan partner invites.
+
+    Newest first, capped at 500 to keep the page snappy. Use the search bar
+    on the page (client-side filter) for older rows; if we ever cross 500
+    invites we'll add server-side filtering.
+    """
+    invites = (
+        PartnerInvite.query
+        .order_by(PartnerInvite.created_at.desc())
+        .limit(500)
+        .all()
+    )
+
+    total = PartnerInvite.query.count()
+    failed_count = PartnerInvite.query.filter_by(circle_status="failed").count()
+    followup_count = PartnerInvite.query.filter_by(needs_followup=True).count()
+
+    return render_template(
+        "admin_partner_invites.html",
+        invites=invites,
+        total=total,
+        failed_count=failed_count,
+        followup_count=followup_count,
+        active_section="partner_invites",
+        **_admin_layout_context(),
+    )
+
+
 @admin_bp.before_request
 def require_admin():
     if request.endpoint == "admin.login":
@@ -1348,6 +1378,7 @@ def _admin_layout_context():
             "overview", "live", "queue", "emails", "class_views",
             "security", "reach", "leads", "leads_insights",
             "ghosts", "network", "reservations", "raffle",
+            "partner_invites",
         ],
         "pending_review_count": PendingReferral.query.filter_by(status="pending").count(),
     }

@@ -446,6 +446,45 @@ class Reservation(db.Model):
     ambassador = db.relationship("Ambassador", foreign_keys=[ambassador_id])
 
 
+class PartnerInvite(db.Model):
+    """One row per Couple-plan partner invite submitted via /invite-partner.
+
+    Lifecycle:
+      1. Buyer submits the public form. We INSERT a row immediately so we
+         have a record even if Circle / Resend later fail.
+      2. We call Circle's V2 Admin API to create the partner (or add them
+         to the access group if they already exist) and stamp circle_status.
+      3. We send the partner welcome + buyer confirmation via Resend and
+         stamp the *_email_sent_at columns. If a Resend send fails after
+         a successful Circle add, needs_followup is set so the admin page
+         can flag the row for manual outreach.
+    """
+    __tablename__ = "partner_invites"
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+
+    buyer_name = db.Column(db.String(120), nullable=False)
+    buyer_email = db.Column(db.String(200), nullable=False, index=True)
+    partner_name = db.Column(db.String(120), nullable=False)
+    partner_email = db.Column(db.String(200), nullable=False, index=True)
+    location = db.Column(db.String(200), nullable=True)
+    personal_note = db.Column(db.String(220), nullable=True)
+
+    # "created" | "added_to_group" | "buyer_missing" | "buyer_no_group" | "failed"
+    circle_status = db.Column(db.String(20), nullable=True, index=True)
+    circle_response = db.Column(db.Text, nullable=True)
+    # "dancers" | "instructors" | None — mirrors the buyer's access group.
+    target_group = db.Column(db.String(20), nullable=True, index=True)
+
+    partner_email_sent_at = db.Column(db.DateTime, nullable=True)
+    buyer_email_sent_at = db.Column(db.DateTime, nullable=True)
+    admin_alert_sent_at = db.Column(db.DateTime, nullable=True)
+
+    # True when Circle add succeeded but partner welcome email failed.
+    needs_followup = db.Column(db.Boolean, default=False, nullable=False, index=True)
+
+
 class RaffleState(db.Model):
     """Singleton row (id=1) holding the current raffle window state.
 

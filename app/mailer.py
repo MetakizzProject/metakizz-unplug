@@ -1126,3 +1126,184 @@ You've unplugged {count} dancers. Just <strong style="color:#2EDB99;">ONE more</
         f"1 more dancer to unlock {next_tier.name}",
         _wrap(content, app_url),
     )
+
+
+# ─── PARTNER INVITE FLOW (Couple plan) ────────────────────────────
+
+ACADEMY_URL = "https://community.metakizzproject.com"
+
+
+def _first_name_from(full_name):
+    """Extract a first name from a free-form 'full name' field."""
+    if not full_name:
+        return "there"
+    parts = full_name.strip().split()
+    return parts[0] if parts else "there"
+
+
+def send_partner_welcome(invite, app_url=None):
+    """Email sent to the partner after a successful Circle invite.
+
+    Lands them on the academy with their access already provisioned.
+    No unsubscribe footer — this is a one-shot transactional email,
+    not a marketing list.
+    """
+    if not invite or not invite.partner_email:
+        return False
+
+    if app_url is None:
+        from flask import current_app
+        app_url = current_app.config.get("APP_URL", "")
+
+    partner_first = _first_name_from(invite.partner_name)
+    buyer_first = _first_name_from(invite.buyer_name)
+
+    note_block = ""
+    if invite.personal_note and invite.personal_note.strip():
+        safe_note = invite.personal_note.strip().replace("<", "&lt;").replace(">", "&gt;")
+        note_block = f"""
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
+<tr><td style="background-color:#0A0F0A;border-left:3px solid #2EDB99;border-radius:6px;padding:14px 16px;">
+    <p style="color:#9CA3AF;font-size:11px;text-transform:uppercase;letter-spacing:2px;margin:0 0 6px 0;">A note from {buyer_first}</p>
+    <p style="color:#FFFFFF;font-size:15px;line-height:1.6;margin:0;font-style:italic;">"{safe_note}"</p>
+</td></tr>
+</table>"""
+
+    safe_partner_email = invite.partner_email.replace("<", "&lt;").replace(">", "&gt;")
+
+    content = f"""
+<h1 style="color:#FFFFFF;font-size:22px;margin:0 0 16px 0;">Hi {partner_first},</h1>
+
+<p style="color:#E5E7EB;font-size:15px;line-height:1.7;">
+{buyer_first} just bought the Couple plan for MKOT 3.0 — and they want you on this journey with them.
+</p>
+
+<p style="color:#FFFFFF;font-size:18px;line-height:1.5;margin:18px 0;">
+You're officially in. <span style="color:#2EDB99;">🫶🏼</span>
+</p>
+
+<p style="color:#2EDB99;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin:24px 0 12px 0;">🔻 Here's what to do next</p>
+
+<ol style="color:#E5E7EB;font-size:15px;line-height:1.8;padding-left:20px;margin:0;">
+    <li>Click the link below to access the Metakizz Academy</li>
+    <li>Create your free account using <strong style="color:#FFFFFF;">{safe_partner_email}</strong></li>
+    <li>You'll land in the Waiting Room — that's your home until May 18</li>
+</ol>
+
+{_button("ENTER THE ACADEMY →", ACADEMY_URL)}
+{note_block}
+<p style="color:#9CA3AF;font-size:14px;line-height:1.7;margin:24px 0 0 0;">
+The doors open <strong style="color:#FFFFFF;">Sunday May 18, 19:00 CET</strong>, with our Live Welcome Session.
+</p>
+
+<p style="color:#9CA3AF;font-size:14px;line-height:1.7;margin:8px 0 0 0;">
+We can't wait to meet you both.
+</p>
+
+<p style="color:#6B7280;font-size:13px;margin:24px 0 0 0;">
+— Jesús, Anni & Álvaro
+</p>
+"""
+
+    subject = f"{buyer_first} just gave you access to MKOT 3.0 🟢"
+    return _send(invite.partner_email, subject, _wrap(content, app_url))
+
+
+def send_partner_buyer_confirmation(invite, app_url=None):
+    """Confirmation email to the buyer after a successful partner invite."""
+    if not invite or not invite.buyer_email:
+        return False
+
+    if app_url is None:
+        from flask import current_app
+        app_url = current_app.config.get("APP_URL", "")
+
+    buyer_first = _first_name_from(invite.buyer_name)
+    partner_first = _first_name_from(invite.partner_name)
+
+    content = f"""
+<h1 style="color:#FFFFFF;font-size:22px;margin:0 0 16px 0;">Hi {buyer_first},</h1>
+
+<p style="color:#E5E7EB;font-size:15px;line-height:1.7;">
+<strong style="color:#FFFFFF;">{partner_first}</strong> just received their access. They should receive an email any minute now.
+</p>
+
+<p style="color:#9CA3AF;font-size:14px;line-height:1.7;margin:18px 0;">
+If they don't see it, ask them to check spam (and add <strong style="color:#FFFFFF;">hello@metakizzproject.com</strong> to their contacts).
+</p>
+
+<p style="color:#9CA3AF;font-size:14px;line-height:1.7;">
+See you both on the other side.
+</p>
+
+<p style="color:#6B7280;font-size:13px;margin:24px 0 0 0;">
+— Álvaro
+</p>
+"""
+
+    return _send(invite.buyer_email, "Your partner is in 🟢", _wrap(content, app_url))
+
+
+def send_partner_invite_failure_alert(invite, error_summary, app_url=None):
+    """Internal alert email to the admin when a partner invite Circle add fails.
+
+    Goes to ADMIN_NOTIFICATION_EMAIL (falls back to EMAIL_FROM address).
+    """
+    admin_email = os.getenv("ADMIN_NOTIFICATION_EMAIL", "").strip()
+    if not admin_email:
+        # Fall back to the sender address so failures aren't silently lost.
+        default_from = os.getenv("EMAIL_FROM", "")
+        if "<" in default_from:
+            admin_email = default_from.split("<", 1)[-1].rstrip(">").strip()
+        else:
+            admin_email = default_from.strip()
+    if not admin_email:
+        logger.warning("no ADMIN_NOTIFICATION_EMAIL set, skipping admin alert")
+        return False
+
+    if app_url is None:
+        from flask import current_app
+        app_url = current_app.config.get("APP_URL", "")
+
+    safe_note = ""
+    if invite.personal_note:
+        safe_note = invite.personal_note.replace("<", "&lt;").replace(">", "&gt;")
+
+    safe_error = (error_summary or "").replace("<", "&lt;").replace(">", "&gt;")
+
+    rows = [
+        ("Buyer name", invite.buyer_name or ""),
+        ("Buyer email", invite.buyer_email or ""),
+        ("Partner name", invite.partner_name or ""),
+        ("Partner email", invite.partner_email or ""),
+        ("Location", invite.location or "—"),
+        ("Personal note", safe_note or "—"),
+    ]
+
+    rows_html = "".join(
+        f'<tr><td style="padding:6px 12px 6px 0;color:#9CA3AF;font-size:13px;vertical-align:top;">{k}</td>'
+        f'<td style="padding:6px 0;color:#FFFFFF;font-size:14px;word-break:break-word;">{v}</td></tr>'
+        for k, v in rows
+    )
+
+    content = f"""
+<h1 style="color:#FFFFFF;font-size:20px;margin:0 0 12px 0;">⚠️ Partner invite failed</h1>
+
+<p style="color:#9CA3AF;font-size:14px;line-height:1.6;">
+The Circle add step failed for the buyer below. The buyer was shown the friendly fallback message ("Álvaro will reach out personally..."). You'll need to add the partner manually.
+</p>
+
+<table cellpadding="0" cellspacing="0" style="margin:18px 0;width:100%;background-color:#0A0F0A;border:1px solid #1A1A2E;border-radius:8px;padding:8px 12px;">
+{rows_html}
+</table>
+
+<p style="color:#2EDB99;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin:18px 0 8px 0;">Circle response</p>
+<pre style="color:#E5E7EB;font-size:12px;background-color:#0A0F0A;padding:10px;border-radius:6px;white-space:pre-wrap;word-break:break-all;margin:0;">{safe_error}</pre>
+
+<p style="color:#6B7280;font-size:12px;margin:18px 0 0 0;">
+PartnerInvite id #{invite.id} — see /admin/partner-invites for full row.
+</p>
+"""
+
+    subject = f"⚠️ Partner invite failed — {invite.buyer_email}"
+    return _send(admin_email, subject, _wrap(content, app_url), from_name="MetaKizz Alerts")

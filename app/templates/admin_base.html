@@ -80,6 +80,10 @@
                 <span class="nav-label">Sorteo (stage)</span>
                 <span class="nav-badge nav-badge-amber" style="font-size:9px;">↗</span>
             </a>
+            <a href="{{ url_for('admin.partner_invites') if 'partner_invites' in admin_routes else '#' }}" class="admin-nav-link {{ 'active' if active == 'partner_invites' }}">
+                <span class="nav-icon">👥</span>
+                <span class="nav-label">Partner invites</span>
+            </a>
 
             <div class="admin-nav-divider"></div>
 

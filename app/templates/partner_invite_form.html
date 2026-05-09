@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Send access to your partner — MKOT 3.0{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto px-4 pt-10 pb-12">
+
+  <div id="form-wrapper">
+    <div class="text-center mb-6">
+      <p class="text-xs uppercase tracking-widest text-brand-400 font-mono mb-3">▌ MKOT 3.0 // COUPLE PLAN</p>
+      <h1 class="text-2xl font-display font-bold mb-2">Send access to your partner</h1>
+      <p class="text-gray-400 text-sm leading-relaxed">
+        You bought the Couple plan. Drop your partner's info below and we'll get them in.
+      </p>
+    </div>
+
+    <div id="error-banner" class="hidden rounded-lg px-4 py-3 mb-4 text-sm bg-red-900/50 text-red-200 border border-red-800"></div>
+
+    <form id="invite-form" class="space-y-5" novalidate>
+
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono mt-2">You</p>
+      <div class="space-y-3">
+        <div>
+          <label for="buyer_name" class="block text-sm text-gray-400 mb-1">Your name</label>
+          <input type="text" id="buyer_name" name="buyer_name" required autocomplete="name"
+                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+        </div>
+        <div>
+          <label for="buyer_email" class="block text-sm text-gray-400 mb-1">Your email</label>
+          <input type="email" id="buyer_email" name="buyer_email" required autocomplete="email"
+                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+          <p class="text-xs text-gray-600 mt-1">The same email you used to pay.</p>
+        </div>
+      </div>
+
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono pt-2">Your partner</p>
+      <div class="space-y-3">
+        <div>
+          <label for="partner_name" class="block text-sm text-gray-400 mb-1">Partner's full name</label>
+          <input type="text" id="partner_name" name="partner_name" required
+                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+        </div>
+        <div>
+          <label for="partner_email" class="block text-sm text-gray-400 mb-1">Partner's email</label>
+          <input type="email" id="partner_email" name="partner_email" required
+                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+          <p class="text-xs text-gray-600 mt-1">This is where we'll send their access link.</p>
+        </div>
+        <div>
+          <label for="location" class="block text-sm text-gray-400 mb-1">Country / City <span class="text-gray-600">(optional)</span></label>
+          <input type="text" id="location" name="location"
+                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+        </div>
+      </div>
+
+      <div>
+        <div class="flex items-baseline justify-between mb-1">
+          <label for="personal_note" class="block text-sm text-gray-400">A short note for your partner <span class="text-gray-600">(optional)</span></label>
+          <span id="note-counter" class="text-xs text-gray-600 font-mono">0/200</span>
+        </div>
+        <textarea id="personal_note" name="personal_note" rows="3" maxlength="200"
+                  placeholder="We'll include this in their welcome email."
+                  class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"></textarea>
+      </div>
+
+      <button type="submit" id="submit-btn"
+              class="w-full bg-brand-400 hover:bg-brand-300 text-black font-semibold py-3 rounded-lg transition mt-2 disabled:opacity-50 disabled:cursor-wait">
+        Send Access to My Partner →
+      </button>
+
+      <p class="text-center text-xs text-gray-600 mt-2">
+        We'll add them to the academy and email them right away.
+      </p>
+    </form>
+  </div>
+
+  <div id="success-wrapper" class="hidden text-center pt-12">
+    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-900/40 border border-brand-700 mb-6">
+      <span class="text-3xl">🟢</span>
+    </div>
+    <h1 class="text-2xl font-display font-bold mb-3">Done.</h1>
+    <p class="text-gray-300 text-base leading-relaxed">
+      Your partner will receive their access in the next 5 minutes. <span>🫶🏼</span>
+    </p>
+    <p class="text-xs text-gray-600 mt-6">If they don't see the email, ask them to check spam.</p>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var form = document.getElementById('invite-form');
+  var submitBtn = document.getElementById('submit-btn');
+  var errorBanner = document.getElementById('error-banner');
+  var formWrapper = document.getElementById('form-wrapper');
+  var successWrapper = document.getElementById('success-wrapper');
+  var noteEl = document.getElementById('personal_note');
+  var counter = document.getElementById('note-counter');
+
+  function updateCounter() {
+    counter.textContent = (noteEl.value.length || 0) + '/200';
+  }
+  noteEl.addEventListener('input', updateCounter);
+  updateCounter();
+
+  function showError(msg) {
+    errorBanner.textContent = msg;
+    errorBanner.classList.remove('hidden');
+    errorBanner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function hideError() {
+    errorBanner.classList.add('hidden');
+    errorBanner.textContent = '';
+  }
+
+  form.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    hideError();
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending...';
+
+    var payload = {
+      buyer_name: form.buyer_name.value,
+      buyer_email: form.buyer_email.value,
+      partner_name: form.partner_name.value,
+      partner_email: form.partner_email.value,
+      location: form.location.value,
+      personal_note: form.personal_note.value
+    };
+
+    fetch('/api/invite-partner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        if (res.body && res.body.ok === true) {
+          formWrapper.classList.add('hidden');
+          successWrapper.classList.remove('hidden');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          var msg = (res.body && res.body.message) || 'Something went wrong. Please try again.';
+          showError(msg);
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Send Access to My Partner →';
+        }
+      })
+      .catch(function () {
+        showError("We couldn't reach the server. Check your connection and try again.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Send Access to My Partner →';
+      });
+  });
+})();
+</script>
+{% endblock %}
