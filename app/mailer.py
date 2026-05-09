@@ -1220,28 +1220,71 @@ def send_partner_buyer_confirmation(invite, app_url=None):
 
     buyer_first = _first_name_from(invite.buyer_name)
     partner_first = _first_name_from(invite.partner_name)
+    safe_partner_name = (invite.partner_name or partner_first).replace("<", "&lt;").replace(">", "&gt;")
+    safe_partner_email = (invite.partner_email or "").replace("<", "&lt;").replace(">", "&gt;")
+
+    whatsapp_url = "https://wa.me/34623960962"
 
     content = f"""
-<h1 style="color:#FFFFFF;font-size:22px;margin:0 0 16px 0;">Hi {buyer_first},</h1>
+<!-- Status badge -->
+<table cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;">
+<tr><td style="background-color:#0A2A1F;border:1px solid #1a7a55;border-radius:999px;padding:6px 14px;">
+    <span style="color:#2EDB99;font-family:'Share Tech Mono','Courier New',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;">● ACCESS GRANTED</span>
+</td></tr>
+</table>
 
-<p style="color:#E5E7EB;font-size:15px;line-height:1.7;">
-<strong style="color:#FFFFFF;">{partner_first}</strong> just received their access. They should receive an email any minute now.
+<h1 style="color:#FFFFFF;font-size:24px;line-height:1.25;margin:0 0 8px 0;">
+    {partner_first} is in. <span style="color:#2EDB99;">🟢</span>
+</h1>
+
+<p style="color:#9CA3AF;font-size:15px;line-height:1.7;margin:0 0 24px 0;">
+    Hi {buyer_first} — your partner has been added to the Academy.
 </p>
 
-<p style="color:#9CA3AF;font-size:14px;line-height:1.7;margin:18px 0;">
-If they don't see it, ask them to check spam (and add <strong style="color:#FFFFFF;">hello@metakizzproject.com</strong> to their contacts).
+<!-- Partner card -->
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0A0F0A;border:1px solid #1F2937;border-radius:14px;margin:0 0 24px 0;">
+<tr><td style="padding:18px 20px;">
+    <p style="color:#6B7280;font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:0 0 10px 0;">▌ Partner added</p>
+    <p style="color:#FFFFFF;font-size:17px;font-weight:bold;margin:0 0 4px 0;">{safe_partner_name}</p>
+    <p style="color:#9CA3AF;font-size:13px;font-family:'Share Tech Mono','Courier New',monospace;margin:0;word-break:break-all;">{safe_partner_email}</p>
+</td></tr>
+</table>
+
+<p style="color:#E5E7EB;font-size:15px;line-height:1.7;margin:0 0 6px 0;">
+    They'll receive their welcome email in the next few minutes.
+</p>
+<p style="color:#9CA3AF;font-size:13px;line-height:1.6;margin:0 0 24px 0;">
+    Didn't show up? Ask them to check spam.
 </p>
 
-<p style="color:#9CA3AF;font-size:14px;line-height:1.7;">
-See you both on the other side.
-</p>
+<!-- WhatsApp CTA -->
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0A1A0F;border:1px solid #1a7a55;border-radius:14px;margin:0 0 8px 0;">
+<tr><td style="padding:20px;">
+    <p style="color:#2EDB99;font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:0 0 8px 0;">▌ Need anything?</p>
+    <p style="color:#FFFFFF;font-size:15px;line-height:1.5;margin:0 0 14px 0;">
+        Hit me on WhatsApp — I'm here to help with anything either of you need.
+    </p>
+    <table cellpadding="0" cellspacing="0">
+    <tr><td style="background-color:#25D366;border-radius:10px;">
+        <a href="{whatsapp_url}" style="display:inline-block;padding:12px 22px;color:#FFFFFF;text-decoration:none;font-weight:bold;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            💬&nbsp;&nbsp;Chat on WhatsApp
+        </a>
+    </td></tr>
+    </table>
+</td></tr>
+</table>
 
-<p style="color:#6B7280;font-size:13px;margin:24px 0 0 0;">
-— Álvaro
+<p style="color:#6B7280;font-size:13px;line-height:1.6;margin:28px 0 0 0;">
+    See you both on the other side.<br>
+    <span style="color:#9CA3AF;">— Álvaro</span>
 </p>
 """
 
-    return _send(invite.buyer_email, "Your partner is in 🟢", _wrap(content, app_url))
+    return _send(
+        invite.buyer_email,
+        f"{partner_first} is in 🟢 — your partner has access",
+        _wrap(content, app_url),
+    )
 
 
 def send_partner_invite_failure_alert(invite, error_summary, app_url=None):
