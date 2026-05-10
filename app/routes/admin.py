@@ -6036,10 +6036,17 @@ def reservation_save_note(reservation_id):
 
 @admin_bp.route("/reservations/<int:reservation_id>/delete", methods=["POST"])
 def delete_reservation(reservation_id):
-    """Hard-delete a Reservation. Used to clean up test data.
-    If the deleted row was the raffle winner, also clears the winner."""
+    """Hard-delete a Reservation and any CirclePayments for the same email.
+    Used to clean up test data and customers who shouldn't appear in the
+    dashboard. If the deleted row was the raffle winner, also clears the
+    winner. Returns JSON when called via fetch (Accept includes JSON),
+    otherwise redirects (legacy form submit).
+    """
+    from flask import jsonify
     res = Reservation.query.get(reservation_id)
     if res is None:
+        if "application/json" in (request.headers.get("Accept") or ""):
+            return jsonify(ok=False, error="not_found"), 404
         flash("Reservation not found.", "error")
         return redirect(url_for("admin.reservations"))
 
@@ -6048,11 +6055,47 @@ def delete_reservation(reservation_id):
         state.winner_reservation_id = None
         state.spun_at = None
 
+    email = (res.email or "").lower()
     label = f"#{res.id} {res.email}"
+
+    # Also delete any CirclePayments for the same email so the buyer
+    # doesn't reappear as an orphan row after deletion.
+    deleted_cps = 0
+    if email:
+        cps = CirclePayment.query.filter(CirclePayment.email.ilike(email)).all()
+        for cp in cps:
+            db.session.delete(cp)
+            deleted_cps += 1
+
     db.session.delete(res)
     db.session.commit()
-    flash(f"Deleted reservation {label}.", "success")
+
+    msg = f"Deleted reservation {label}"
+    if deleted_cps:
+        msg += f" + {deleted_cps} Circle payment(s)"
+    msg += "."
+
+    if "application/json" in (request.headers.get("Accept") or ""):
+        return jsonify(ok=True, deleted_reservation_id=reservation_id, deleted_circle_payments=deleted_cps)
+    flash(msg, "success")
     return redirect(url_for("admin.reservations"))
+
+
+@admin_bp.route("/circle-payments/<int:cp_id>/delete", methods=["POST"])
+def delete_circle_payment(cp_id):
+    """Hard-delete a CirclePayment. Used to remove orphan rows from the
+    dashboard (direct buyers who shouldn't appear, test charges, etc.).
+    Returns JSON. Idempotent — already-gone returns ok with deleted=False.
+    """
+    from flask import jsonify
+    cp = CirclePayment.query.get(cp_id)
+    if cp is None:
+        return jsonify(ok=True, deleted=False, reason="not_found")
+    label = f"{cp.email} (€{((cp.amount_cents or 0) / 100):.0f})"
+    db.session.delete(cp)
+    db.session.commit()
+    logger.info("deleted CirclePayment %s — %s", cp_id, label)
+    return jsonify(ok=True, deleted=True, label=label)
 
 
 @admin_bp.route("/reservations")

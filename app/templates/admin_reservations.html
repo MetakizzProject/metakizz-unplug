@@ -513,10 +513,10 @@
               {% endif %}
               <form method="POST" action="{{ url_for('admin.delete_reservation', reservation_id=r.id) }}"
                     style="display:inline;"
-                    onsubmit="return confirm('Delete reservation for {{ r.email }}? This cannot be undone.');">
+                    onsubmit="return confirm('Delete reservation for {{ r.email }} AND any Circle payments for this email? This cannot be undone.');">
                 <button type="submit"
                         class="text-gray-600 hover:text-red-400 text-xs font-mono uppercase tracking-wider transition px-2 py-1 rounded border border-transparent hover:border-red-700/50"
-                        title="Delete reservation">
+                        title="Delete reservation + any Circle payments for this email (does NOT touch Stripe)">
                   ✕ del
                 </button>
               </form>
@@ -600,10 +600,17 @@
             <td class="px-4 py-3 text-[10px] text-gray-600 font-mono">{{ (cp.stripe_charge_id or '')[:14] }}…</td>
             <td class="px-4 py-3 text-right whitespace-nowrap">
               <a href="{{ url_for('admin.buyer_detail', email=cp.email) }}"
-                 class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-800/60 hover:bg-purple-700/40 border border-gray-700 hover:border-purple-700/60 text-gray-300 hover:text-purple-200 transition text-xs font-mono uppercase tracking-wider whitespace-nowrap"
+                 class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-800/60 hover:bg-purple-700/40 border border-gray-700 hover:border-purple-700/60 text-gray-300 hover:text-purple-200 transition mr-1 text-xs font-mono uppercase tracking-wider whitespace-nowrap"
                  title="Open profile">
                 👤 profile
               </a>
+              <button type="button"
+                      class="orphan-delete-btn text-gray-600 hover:text-red-400 text-xs font-mono uppercase tracking-wider transition px-2 py-1 rounded border border-transparent hover:border-red-700/50"
+                      data-cpid="{{ cp.id }}"
+                      data-email="{{ cp.email }}"
+                      title="Delete this CirclePayment (does NOT touch Stripe — only removes from dashboard)">
+                ✕ del
+              </button>
             </td>
           </tr>
           {% endfor %}
@@ -955,7 +962,7 @@
                 : '<span class="inline-flex items-center justify-center w-7 h-7 text-gray-700 text-xs cursor-not-allowed mr-1" title="No phone on file">·</span>'
               )
             + '<form method="POST" action="/admin/reservations/' + r.id + '/delete" style="display:inline;" '
-              + 'onsubmit="return confirm(\'Delete reservation for ' + escapeHtml(r.email).replace(/\\u0027/g, "\\\\u0027") + '? This cannot be undone.\');">'
+              + 'onsubmit="return confirm(\'Delete reservation for ' + escapeHtml(r.email).replace(/\\u0027/g, "\\\\u0027") + ' AND any Circle payments for this email? This cannot be undone.\');">'
               + '<button type="submit" class="text-gray-600 hover:text-red-400 text-xs font-mono uppercase tracking-wider transition px-2 py-1 rounded border border-transparent hover:border-red-700/50" title="Delete reservation">✕ del</button>'
             + '</form>'
           + '</td>'
@@ -996,7 +1003,8 @@
           ) + '</td>'
           + '<td class="px-4 py-3 text-[10px] text-gray-600 font-mono">' + '—' + '</td>'
           + '<td class="px-4 py-3 text-right whitespace-nowrap">'
-            + '<a href="/admin/buyer/' + encodeURIComponent(cp.email) + '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-800/60 hover:bg-purple-700/40 border border-gray-700 hover:border-purple-700/60 text-gray-300 hover:text-purple-200 transition text-xs font-mono uppercase tracking-wider whitespace-nowrap">👤 profile</a>'
+            + '<a href="/admin/buyer/' + encodeURIComponent(cp.email) + '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-800/60 hover:bg-purple-700/40 border border-gray-700 hover:border-purple-700/60 text-gray-300 hover:text-purple-200 transition mr-1 text-xs font-mono uppercase tracking-wider whitespace-nowrap">👤 profile</a>'
+            + '<button type="button" class="orphan-delete-btn text-gray-600 hover:text-red-400 text-xs font-mono uppercase tracking-wider transition px-2 py-1 rounded border border-transparent hover:border-red-700/50" data-cpid="' + cp.id + '" data-email="' + escapeHtml(cp.email) + '" title="Delete this CirclePayment">✕ del</button>'
           + '</td>'
           + '</tr>';
       }).join('');
@@ -1144,6 +1152,39 @@
       alert('Could not mark as refunded: ' + e);
     } finally {
       btn.disabled = false;
+    }
+  });
+
+  // Orphan delete — removes a CirclePayment row that doesn't have a
+  // matching Reservation. Used to clean up test charges, customers
+  // from other contexts, etc. Does NOT refund anything in Stripe.
+  document.body.addEventListener('click', async function(ev) {
+    const btn = ev.target.closest('.orphan-delete-btn');
+    if (!btn) return;
+    ev.preventDefault();
+    const cpid = btn.dataset.cpid;
+    const email = btn.dataset.email || '';
+    if (!cpid) return;
+    if (!confirm('Borrar este pago del dashboard?\n\n' + email + '\n\nEsto NO devuelve nada en Stripe — solo lo quita de la tabla. Si re-sincronizas, volverá a aparecer.')) return;
+    btn.disabled = true;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '⏳';
+    try {
+      const r = await fetch('/admin/circle-payments/' + cpid + '/delete', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+      });
+      const data = await r.json();
+      if (data.ok) {
+        await poll();
+      } else {
+        alert('No se pudo borrar: ' + (data.reason || data.error || 'unknown'));
+      }
+    } catch (e) {
+      alert('Request failed: ' + e);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = orig;
     }
   });
 
