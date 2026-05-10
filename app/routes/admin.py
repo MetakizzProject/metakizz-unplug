@@ -6002,9 +6002,8 @@ def reservations():
     pending_form = paid_total - completed_total
     revenue = _revenue_breakdown(all_rows)
 
-    # Build a {email_lowercase -> CirclePayment} map so the template can
-    # show, for each Reservation, whether the buyer also paid the full
-    # plan in the Circle Stripe account. Latest payment per email wins.
+    # Latest CirclePayment per email (descending) — used to render the
+    # "Plan completo" column for each Reservation row.
     circle_by_email = {}
     full_paid_total = 0
     full_paid_amount_cents = 0
@@ -6016,6 +6015,45 @@ def reservations():
             circle_by_email[key] = cp
             full_paid_total += 1
             full_paid_amount_cents += (cp.amount_cents or 0)
+
+    # Order index by Circle paid_at ASC — earliest payer = #1. Used to
+    # award the "video feedback" gift to the first 50.
+    ordered_cps = (
+        CirclePayment.query
+        .order_by(CirclePayment.paid_at.asc().nullslast())
+        .all()
+    )
+    order_index_by_email = {}
+    for idx, cp in enumerate(ordered_cps):
+        if cp.email and cp.email.lower() not in order_index_by_email:
+            order_index_by_email[cp.email.lower()] = idx + 1
+    TOP_N_VIDEO = 50
+
+    # Orphan buyers: paid the full plan but never went through reservation.
+    reservation_emails = {r.email.lower() for r in all_rows if r.email}
+    orphan_payments = [
+        cp for cp in ordered_cps
+        if cp.email and cp.email.lower() not in reservation_emails
+    ]
+    # De-dup by email (latest payment per orphan email wins for display).
+    seen_orphan_emails = set()
+    deduped_orphans = []
+    for cp in sorted(orphan_payments, key=lambda c: c.paid_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True):
+        if cp.email.lower() in seen_orphan_emails:
+            continue
+        seen_orphan_emails.add(cp.email.lower())
+        deduped_orphans.append(cp)
+
+    # Cash collected (NET): deposits in + full payments in − refunds out.
+    deposits_in_cents = sum(r.amount_cents or 0 for r in all_rows if r.paid_at)
+    full_in_cents = sum(cp.amount_cents or 0 for cp in ordered_cps)
+    refunds_out_cents = sum(
+        r.refund_amount_cents or 0
+        for r in all_rows
+        if r.refund_status == "success"
+    )
+    cash_gross_cents = deposits_in_cents + full_in_cents
+    cash_net_cents = cash_gross_cents - refunds_out_cents
 
     return render_template(
         "admin_reservations.html",
@@ -6032,6 +6070,12 @@ def reservations():
         circle_by_email=circle_by_email,
         full_paid_total=full_paid_total,
         full_paid_amount_cents=full_paid_amount_cents,
+        order_index_by_email=order_index_by_email,
+        top_n_video=TOP_N_VIDEO,
+        orphan_payments=deduped_orphans,
+        cash_net_cents=cash_net_cents,
+        cash_gross_cents=cash_gross_cents,
+        refunds_out_cents=refunds_out_cents,
         **_admin_layout_context(),
     )
 
@@ -6062,9 +6106,55 @@ def reservations_json():
             full_paid_total += 1
             full_paid_amount_cents += (cp.amount_cents or 0)
 
+    # Order index by Circle paid_at ASC.
+    ordered_cps = (
+        CirclePayment.query
+        .order_by(CirclePayment.paid_at.asc().nullslast())
+        .all()
+    )
+    order_index_by_email = {}
+    for idx, cp in enumerate(ordered_cps):
+        if cp.email and cp.email.lower() not in order_index_by_email:
+            order_index_by_email[cp.email.lower()] = idx + 1
+    TOP_N_VIDEO = 50
+
+    # Cash collected (NET).
+    deposits_in_cents = sum(r.amount_cents or 0 for r in rows if r.paid_at)
+    full_in_cents = sum(cp.amount_cents or 0 for cp in ordered_cps)
+    refunds_out_cents = sum(
+        r.refund_amount_cents or 0 for r in rows if r.refund_status == "success"
+    )
+    cash_gross_cents = deposits_in_cents + full_in_cents
+    cash_net_cents = cash_gross_cents - refunds_out_cents
+
+    # Orphans for the JSON payload (emails that paid full but no Reservation).
+    reservation_emails = {r.email.lower() for r in rows if r.email}
+    orphan_seen = set()
+    orphan_rows_payload = []
+    for cp in sorted(ordered_cps, key=lambda c: c.paid_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True):
+        if not cp.email:
+            continue
+        key = cp.email.lower()
+        if key in reservation_emails or key in orphan_seen:
+            continue
+        orphan_seen.add(key)
+        orphan_rows_payload.append({
+            "id": cp.id,
+            "email": cp.email,
+            "name": cp.customer_name or "",
+            "amount_cents": cp.amount_cents or 0,
+            "paid_at": cp.paid_at.isoformat() if cp.paid_at else None,
+            "description": cp.description or "",
+            "order_index": order_index_by_email.get(key),
+            "is_top_50": (order_index_by_email.get(key) or 999) <= TOP_N_VIDEO,
+            "invoice_sent_at": cp.invoice_sent_at.isoformat() if cp.invoice_sent_at else None,
+            "invoice_id": cp.invoice_id or "",
+        })
+
     rows_payload = []
     for r in rows:
         cp = circle_by_email.get(r.email.lower()) if r.email else None
+        order_idx = order_index_by_email.get(r.email.lower()) if r.email else None
         rows_payload.append({
             "id": r.id,
             "paid_at": r.paid_at.isoformat() if r.paid_at else None,
@@ -6097,6 +6187,8 @@ def reservations_json():
                 "invoice_sent_at": cp.invoice_sent_at.isoformat() if cp.invoice_sent_at else None,
                 "invoice_id": cp.invoice_id or "",
             } if cp else None),
+            "order_index": order_idx,
+            "is_top_50": (order_idx is not None and order_idx <= TOP_N_VIDEO),
         })
 
     return jsonify({
@@ -6111,6 +6203,10 @@ def reservations_json():
         "completed_total": sum(1 for r in rows if r.paid_at and r.form_completed_at),
         "full_paid_total": full_paid_total,
         "full_paid_amount_cents": full_paid_amount_cents,
+        "cash_net_cents": cash_net_cents,
+        "cash_gross_cents": cash_gross_cents,
+        "refunds_out_cents": refunds_out_cents,
+        "top_n_video": TOP_N_VIDEO,
         "revenue": {
             "estimated_total": rev["estimated_total"],
             "deposits_in":     rev["deposits_in"],
@@ -6121,6 +6217,7 @@ def reservations_json():
             "revenue":         rev["revenue"],
         },
         "rows": rows_payload,
+        "orphan_rows": orphan_rows_payload,
     })
 
 
@@ -6187,6 +6284,217 @@ def unmark_reservation_refunded(reservation_id):
     db.session.commit()
     logger.info("unmarked refund on reservation %s", r.id)
     return jsonify(ok=True, reservation_id=r.id)
+
+
+@admin_bp.route("/buyer/<path:email>")
+def buyer_detail(email):
+    """Per-buyer profile aggregating everything we know about this email:
+    Reservation (if any), CirclePayments, Ambassador (Circle member),
+    PartnerInvite (sent or received), LeadEvents (timeline), LeadNotes.
+    """
+    email = (email or "").strip().lower()
+    if not email:
+        return redirect(url_for("admin.reservations"))
+
+    reservation = (
+        Reservation.query
+        .filter(Reservation.email.ilike(email))
+        .order_by(Reservation.paid_at.desc().nullslast())
+        .first()
+    )
+    circle_payments = (
+        CirclePayment.query
+        .filter(CirclePayment.email.ilike(email))
+        .order_by(CirclePayment.paid_at.desc().nullslast())
+        .all()
+    )
+    ambassador = Ambassador.query.filter(Ambassador.email.ilike(email)).first()
+    partner_invite_as_buyer = (
+        PartnerInvite.query
+        .filter(PartnerInvite.buyer_email.ilike(email))
+        .order_by(PartnerInvite.created_at.desc())
+        .first()
+    )
+    partner_invite_as_partner = (
+        PartnerInvite.query
+        .filter(PartnerInvite.partner_email.ilike(email))
+        .order_by(PartnerInvite.created_at.desc())
+        .first()
+    )
+    lead_events = (
+        LeadEvent.query
+        .filter(LeadEvent.email.ilike(email))
+        .order_by(LeadEvent.created_at.desc())
+        .limit(500)
+        .all()
+    )
+    # LeadNotes: we keep them per-ambassador. If the buyer is an ambassador, fetch theirs.
+    lead_notes = []
+    if ambassador:
+        from app.models import LeadNote
+        lead_notes = (
+            LeadNote.query
+            .filter_by(ambassador_id=ambassador.id)
+            .order_by(LeadNote.created_at.desc())
+            .all()
+        )
+
+    # Order index (for the "Top 50" badge)
+    order_index = None
+    is_top_50 = False
+    TOP_N_VIDEO = 50
+    if circle_payments and circle_payments[0].paid_at:
+        # Recompute the global order to find this buyer's rank.
+        ordered = (
+            CirclePayment.query
+            .order_by(CirclePayment.paid_at.asc().nullslast())
+            .all()
+        )
+        for idx, cp in enumerate(ordered):
+            if cp.email and cp.email.lower() == email:
+                order_index = idx + 1
+                break
+        is_top_50 = (order_index is not None and order_index <= TOP_N_VIDEO)
+
+    # Unified, chronological timeline (most recent first).
+    timeline = []
+    if reservation:
+        if reservation.paid_at:
+            timeline.append({
+                "ts": reservation.paid_at,
+                "type": "deposit_paid",
+                "icon": "💰",
+                "label": f"€{(reservation.amount_cents or 10000)/100:.0f} deposit paid",
+            })
+        if reservation.form_completed_at:
+            timeline.append({
+                "ts": reservation.form_completed_at,
+                "type": "form_completed",
+                "icon": "📝",
+                "label": "Reservation form completed",
+            })
+        if reservation.refunded_at:
+            timeline.append({
+                "ts": reservation.refunded_at,
+                "type": "refunded",
+                "icon": "↩️",
+                "label": f"€{(reservation.refund_amount_cents or 10000)/100:.0f} deposit refunded",
+                "extra": reservation.refund_id or "",
+            })
+        if reservation.last_contacted_at:
+            timeline.append({
+                "ts": reservation.last_contacted_at,
+                "type": "contacted",
+                "icon": "📞",
+                "label": f"Contacted via {reservation.last_contacted_channel or '—'}",
+            })
+    for cp in circle_payments:
+        if cp.paid_at:
+            timeline.append({
+                "ts": cp.paid_at,
+                "type": "full_paid",
+                "icon": "🎉",
+                "label": f"€{(cp.amount_cents or 0)/100:.0f} full plan paid (Circle)",
+                "extra": cp.description or "",
+            })
+        if cp.invoice_sent_at:
+            timeline.append({
+                "ts": cp.invoice_sent_at,
+                "type": "invoice_sent",
+                "icon": "📄",
+                "label": "Invoice sent",
+                "extra": cp.invoice_id or "",
+            })
+    if partner_invite_as_buyer:
+        timeline.append({
+            "ts": partner_invite_as_buyer.created_at,
+            "type": "partner_invited",
+            "icon": "🫶🏼",
+            "label": f"Invited partner: {partner_invite_as_buyer.partner_name} ({partner_invite_as_buyer.partner_email})",
+        })
+    if partner_invite_as_partner:
+        timeline.append({
+            "ts": partner_invite_as_partner.created_at,
+            "type": "invited_by",
+            "icon": "🫶🏼",
+            "label": f"Invited by: {partner_invite_as_partner.buyer_name} ({partner_invite_as_partner.buyer_email})",
+        })
+    for ev in lead_events:
+        timeline.append({
+            "ts": ev.created_at,
+            "type": "activity",
+            "icon": _activity_icon(ev.event_type),
+            "label": _activity_label(ev),
+            "extra": ev.event_type,
+        })
+    for n in lead_notes:
+        timeline.append({
+            "ts": n.created_at,
+            "type": "admin_note",
+            "icon": "✎",
+            "label": n.type or "note",
+            "content": n.content or "",
+        })
+
+    timeline.sort(
+        key=lambda e: e["ts"] or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+
+    # Status header pills
+    has_deposit = bool(reservation and reservation.paid_at)
+    has_full_paid = bool(circle_payments)
+    has_refund = bool(reservation and reservation.refund_status == "success")
+    track = None  # 'dancers' | 'instructors' from PartnerInvite.target_group
+    if partner_invite_as_buyer and partner_invite_as_buyer.target_group:
+        track = partner_invite_as_buyer.target_group
+
+    return render_template(
+        "admin_buyer_detail.html",
+        email=email,
+        reservation=reservation,
+        circle_payments=circle_payments,
+        ambassador=ambassador,
+        partner_invite_as_buyer=partner_invite_as_buyer,
+        partner_invite_as_partner=partner_invite_as_partner,
+        timeline=timeline,
+        order_index=order_index,
+        is_top_50=is_top_50,
+        has_deposit=has_deposit,
+        has_full_paid=has_full_paid,
+        has_refund=has_refund,
+        track=track,
+        active_section="reservations",
+        **_admin_layout_context(),
+    )
+
+
+def _activity_icon(event_type):
+    et = (event_type or "").lower()
+    if "webinar" in et:
+        return "🎥"
+    if "completed" in et:
+        return "✓"
+    if "viewed" in et or "started" in et:
+        return "▶"
+    if "progress" in et:
+        return "⏳"
+    if "resource" in et or "download" in et:
+        return "📎"
+    if "purchase" in et:
+        return "🛒"
+    return "•"
+
+
+def _activity_label(ev):
+    et = (ev.event_type or "").replace("_", " ")
+    if ev.class_number:
+        et = f"Class {ev.class_number} · {et}"
+    if ev.pct is not None:
+        et += f" ({ev.pct}%)"
+    if ev.webinar_duration_min:
+        et += f" — {ev.webinar_duration_min} min"
+    return et
 
 
 @admin_bp.route("/circle-payments/sync", methods=["POST"])

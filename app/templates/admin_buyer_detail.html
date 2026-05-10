@@ -1,0 +1,285 @@
+{% extends "admin_base.html" %}
+
+{% block admin_content %}
+<div class="px-4 lg:px-6 py-5">
+
+  <!-- Back link + email -->
+  <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+    <div class="flex items-center gap-3">
+      <a href="{{ url_for('admin.reservations') }}"
+         class="text-xs font-mono uppercase tracking-widest text-gray-500 hover:text-brand-400 transition">
+        ← Back to reservations
+      </a>
+    </div>
+    {% if ambassador and ambassador.phone_number %}
+      {% set wa_msg = 'Hey ' ~ ((reservation.name if reservation and reservation.name else (ambassador.name.split()[0] if ambassador.name else 'there'))) ~ ', how are you doing today?' %}
+      <a href="https://wa.me/{{ ambassador.phone_number|replace('+','')|replace(' ','') }}?text={{ wa_msg|urlencode }}"
+         target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white transition text-xs font-mono uppercase tracking-wider">
+        💬 WhatsApp {{ ambassador.phone_number }}
+      </a>
+    {% endif %}
+  </div>
+
+  <!-- Header card -->
+  <div class="bg-gradient-to-br from-gray-900/80 via-black/60 to-gray-900/40 border border-gray-800 rounded-2xl p-5 mb-5">
+    <p class="text-[10px] uppercase tracking-[0.3em] text-brand-400 font-mono mb-2">▌ BUYER PROFILE</p>
+    <h1 class="font-display font-bold text-2xl md:text-3xl text-white mb-1 break-all">
+      {% if reservation and reservation.name %}{{ reservation.name }} {{ reservation.surname or '' }}
+      {% elif circle_payments and circle_payments[0].customer_name %}{{ circle_payments[0].customer_name }}
+      {% elif ambassador and ambassador.name %}{{ ambassador.name }}
+      {% else %}(no name on file){% endif %}
+    </h1>
+    <p class="text-sm text-gray-400 font-mono break-all">{{ email }}</p>
+
+    <!-- Status pills -->
+    <div class="flex flex-wrap gap-2 mt-4">
+      {% if has_deposit %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono bg-blue-900/40 text-blue-300 border border-blue-700/50">✓ €100 deposit</span>
+      {% endif %}
+      {% if has_full_paid %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono bg-purple-900/40 text-purple-300 border border-purple-700/50">✓ full plan paid</span>
+      {% endif %}
+      {% if has_refund %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50">✓ deposit refunded</span>
+      {% endif %}
+      {% if order_index %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono bg-gray-800/60 text-white border border-gray-700/60">#{{ order_index }} buyer of plan</span>
+      {% endif %}
+      {% if is_top_50 %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-300 border border-brand-700/50">🎬 Top 50 — video feedback</span>
+      {% endif %}
+      {% if track == 'dancers' %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono bg-purple-900/40 text-purple-300 border border-purple-700/50">💃 Dancers</span>
+      {% elif track == 'instructors' %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono bg-cyan-900/40 text-cyan-300 border border-cyan-700/50">🎓 Instructors</span>
+      {% endif %}
+      {% if ambassador %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono bg-gray-800/60 text-gray-300 border border-gray-700/60">⭕ in Circle</span>
+      {% endif %}
+      {% if not has_deposit and has_full_paid %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/30 text-yellow-300 border border-yellow-700/50">⚡ direct buyer (no deposit)</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+    <!-- LEFT 2/3 — Timeline + Payments + Form -->
+    <div class="lg:col-span-2 space-y-5">
+
+      <!-- Payments -->
+      <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5">
+        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-3">▌ Payments</p>
+        {% if not (reservation and reservation.paid_at) and not circle_payments %}
+          <p class="text-sm text-gray-600 italic">No payments on file.</p>
+        {% else %}
+        <div class="space-y-2">
+          {% if reservation and reservation.paid_at %}
+            <div class="flex items-baseline gap-3 text-sm">
+              <span class="text-blue-300 font-mono text-xs whitespace-nowrap">{{ reservation.paid_at.strftime('%Y-%m-%d %H:%M') }}</span>
+              <span class="text-white">€{{ '%.2f'|format((reservation.amount_cents or 10000)/100) }} <span class="text-gray-500 text-xs">deposit</span></span>
+              {% if reservation.refund_status == 'success' %}
+                <span class="ml-auto text-brand-400 text-xs font-mono">↩ refunded {{ reservation.refunded_at.strftime('%b %d') if reservation.refunded_at else '' }}</span>
+              {% endif %}
+            </div>
+          {% endif %}
+          {% for cp in circle_payments %}
+            <div class="flex items-baseline gap-3 text-sm">
+              <span class="text-purple-300 font-mono text-xs whitespace-nowrap">{{ cp.paid_at.strftime('%Y-%m-%d %H:%M') if cp.paid_at else '—' }}</span>
+              <span class="text-white">€{{ '%.2f'|format((cp.amount_cents or 0)/100) }} <span class="text-gray-500 text-xs">full plan (Circle)</span></span>
+              {% if cp.description %}
+                <span class="ml-auto text-gray-500 text-xs italic truncate max-w-[40%]" title="{{ cp.description }}">{{ cp.description }}</span>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Reservation form details -->
+      {% if reservation and reservation.form_completed_at %}
+      <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5">
+        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-3">▌ Reservation form</p>
+        <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          <div>
+            <dt class="text-gray-500 text-xs font-mono uppercase">Program</dt>
+            <dd class="text-white">{{ reservation.program_choice or '—' }}</dd>
+          </div>
+          <div>
+            <dt class="text-gray-500 text-xs font-mono uppercase">Modality</dt>
+            <dd class="text-white">{{ reservation.modality_choice or '—' }}</dd>
+          </div>
+          <div>
+            <dt class="text-gray-500 text-xs font-mono uppercase">Payment plan</dt>
+            <dd class="text-white">{{ reservation.payment_plan or '—' }}</dd>
+          </div>
+          <div>
+            <dt class="text-gray-500 text-xs font-mono uppercase">Clarity</dt>
+            <dd class="text-white">{{ reservation.clarity or '—' }}</dd>
+          </div>
+          {% if reservation.notes %}
+          <div class="col-span-2">
+            <dt class="text-gray-500 text-xs font-mono uppercase">Buyer notes</dt>
+            <dd class="text-gray-300 italic">"{{ reservation.notes }}"</dd>
+          </div>
+          {% endif %}
+        </dl>
+      </div>
+      {% endif %}
+
+      <!-- Timeline -->
+      <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5">
+        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-4">▌ Timeline</p>
+        {% if not timeline %}
+          <p class="text-sm text-gray-600 italic">No activity yet.</p>
+        {% else %}
+        <div class="relative space-y-3">
+          {% for ev in timeline %}
+          <div class="flex items-start gap-3 text-sm">
+            <span class="text-lg leading-none flex-shrink-0 mt-0.5">{{ ev.icon }}</span>
+            <div class="flex-1 min-w-0">
+              <p class="text-white">{{ ev.label }}{% if ev.extra %} <span class="text-gray-500 text-xs font-mono ml-1">{{ ev.extra }}</span>{% endif %}</p>
+              {% if ev.content %}
+                <p class="text-gray-400 text-xs mt-1 italic">"{{ ev.content }}"</p>
+              {% endif %}
+              <p class="text-gray-600 text-xs font-mono">{{ ev.ts.strftime('%Y-%m-%d %H:%M') if ev.ts else '—' }}</p>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+    </div>
+
+    <!-- RIGHT 1/3 — Circle + Partner + Stripe IDs -->
+    <div class="space-y-5">
+
+      <!-- Circle -->
+      {% if ambassador %}
+      <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5">
+        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-3">▌ Circle</p>
+        <dl class="space-y-2 text-sm">
+          {% if ambassador.name %}
+          <div>
+            <dt class="text-gray-500 text-xs font-mono uppercase">Name</dt>
+            <dd class="text-white">{{ ambassador.name }}</dd>
+          </div>
+          {% endif %}
+          {% if ambassador.circle_member_id %}
+          <div>
+            <dt class="text-gray-500 text-xs font-mono uppercase">Circle member ID</dt>
+            <dd class="text-gray-300 font-mono text-xs">{{ ambassador.circle_member_id }}</dd>
+          </div>
+          {% endif %}
+          {% if ambassador.instagram_handle %}
+          <div>
+            <dt class="text-gray-500 text-xs font-mono uppercase">Instagram</dt>
+            <dd><a href="https://instagram.com/{{ ambassador.instagram_handle }}" target="_blank" rel="noopener" class="text-brand-400 hover:underline">@{{ ambassador.instagram_handle }}</a></dd>
+          </div>
+          {% endif %}
+          {% if ambassador.phone_number %}
+          <div>
+            <dt class="text-gray-500 text-xs font-mono uppercase">Phone</dt>
+            <dd class="text-gray-300 font-mono">{{ ambassador.phone_number }}</dd>
+          </div>
+          {% endif %}
+          {% if ambassador.dance_level %}
+          <div>
+            <dt class="text-gray-500 text-xs font-mono uppercase">Dance level</dt>
+            <dd class="text-white">{{ ambassador.dance_level }}</dd>
+          </div>
+          {% endif %}
+          <div>
+            <a href="{{ url_for('admin.ambassador_detail', ambassador_id=ambassador.id) }}"
+               class="inline-block mt-2 text-xs font-mono uppercase tracking-wider text-brand-400 hover:underline">
+              Open ambassador detail →
+            </a>
+          </div>
+        </dl>
+      </div>
+      {% else %}
+      <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5">
+        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-2">▌ Circle</p>
+        <p class="text-sm text-gray-600 italic">Not registered as Circle member yet.</p>
+      </div>
+      {% endif %}
+
+      <!-- Partner invite -->
+      {% if partner_invite_as_buyer or partner_invite_as_partner %}
+      <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5">
+        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-3">▌ Partner invite</p>
+        {% if partner_invite_as_buyer %}
+          <p class="text-sm text-white mb-1">Invited:</p>
+          <p class="text-sm text-gray-300">
+            <a href="{{ url_for('admin.buyer_detail', email=partner_invite_as_buyer.partner_email) }}" class="hover:text-brand-400 transition">
+              {{ partner_invite_as_buyer.partner_name }} <span class="text-gray-500 text-xs">{{ partner_invite_as_buyer.partner_email }}</span>
+            </a>
+          </p>
+          <p class="text-xs text-gray-500 mt-1 font-mono">
+            Status: {{ partner_invite_as_buyer.circle_status or 'pending' }}
+            {% if partner_invite_as_buyer.target_group %} · {{ partner_invite_as_buyer.target_group }}{% endif %}
+          </p>
+        {% endif %}
+        {% if partner_invite_as_partner %}
+          <p class="text-sm text-white mt-3 mb-1">Invited by:</p>
+          <p class="text-sm text-gray-300">
+            <a href="{{ url_for('admin.buyer_detail', email=partner_invite_as_partner.buyer_email) }}" class="hover:text-brand-400 transition">
+              {{ partner_invite_as_partner.buyer_name }} <span class="text-gray-500 text-xs">{{ partner_invite_as_partner.buyer_email }}</span>
+            </a>
+          </p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- Stripe IDs (debug-ish) -->
+      {% if reservation and (reservation.stripe_session_id or reservation.stripe_payment_intent_id or reservation.refund_id) %}
+      <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5">
+        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-3">▌ Stripe IDs</p>
+        <dl class="space-y-2 text-xs font-mono">
+          {% if reservation.stripe_session_id %}
+          <div>
+            <dt class="text-gray-500 uppercase text-[10px]">Checkout session</dt>
+            <dd class="text-gray-300 break-all">{{ reservation.stripe_session_id }}</dd>
+          </div>
+          {% endif %}
+          {% if reservation.stripe_payment_intent_id %}
+          <div>
+            <dt class="text-gray-500 uppercase text-[10px]">Payment intent</dt>
+            <dd class="text-gray-300 break-all">{{ reservation.stripe_payment_intent_id }}</dd>
+          </div>
+          {% endif %}
+          {% if reservation.refund_id %}
+          <div>
+            <dt class="text-gray-500 uppercase text-[10px]">Refund ID</dt>
+            <dd class="text-gray-300 break-all">{{ reservation.refund_id }}</dd>
+          </div>
+          {% endif %}
+          {% if reservation.circle_payment_id %}
+          <div>
+            <dt class="text-gray-500 uppercase text-[10px]">Trigger Circle charge</dt>
+            <dd class="text-gray-300 break-all">{{ reservation.circle_payment_id }}</dd>
+          </div>
+          {% endif %}
+        </dl>
+      </div>
+      {% endif %}
+
+      <!-- Admin notes -->
+      {% if reservation %}
+      <div class="bg-gray-900/40 border border-gray-800 rounded-2xl p-5">
+        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-3">▌ Admin note</p>
+        {% if reservation.admin_notes %}
+          <p class="text-sm text-gray-300 italic whitespace-pre-wrap">{{ reservation.admin_notes }}</p>
+        {% else %}
+          <p class="text-sm text-gray-600 italic">No admin notes yet.</p>
+        {% endif %}
+        <p class="text-[10px] text-gray-600 font-mono mt-3">Edit this from the main reservations table.</p>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}
