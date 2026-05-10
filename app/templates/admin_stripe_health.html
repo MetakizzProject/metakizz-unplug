@@ -1,0 +1,80 @@
+{% extends "admin_base.html" %}
+
+{% block admin_content %}
+<div class="px-4 lg:px-6 py-5">
+
+  <div class="mb-5">
+    <h1 class="font-display font-bold text-2xl text-white">Stripe Health Check</h1>
+    <p class="text-xs text-gray-500 font-mono uppercase tracking-widest mt-1">
+      // Validating API keys against Stripe
+    </p>
+  </div>
+
+  <div class="space-y-4">
+    {% for r in results %}
+      {% if r.status == 'ok' %}
+        <div class="bg-brand-900/20 border border-brand-700/40 rounded-xl px-5 py-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50">● OK</span>
+            <h2 class="text-lg font-bold text-white">{{ r.label }} account</h2>
+            <span class="text-xs text-gray-500 font-mono">{{ r.env_name }}</span>
+          </div>
+          <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div>
+              <dt class="text-gray-500 text-xs uppercase tracking-wider font-mono">Key</dt>
+              <dd class="text-white font-mono text-xs">{{ r.masked_key }}</dd>
+            </div>
+            <div>
+              <dt class="text-gray-500 text-xs uppercase tracking-wider font-mono">Account name</dt>
+              <dd class="text-white">{{ r.account_name }}</dd>
+            </div>
+            <div>
+              <dt class="text-gray-500 text-xs uppercase tracking-wider font-mono">Account ID</dt>
+              <dd class="text-gray-300 font-mono text-xs">{{ r.account_id }}</dd>
+            </div>
+            <div>
+              <dt class="text-gray-500 text-xs uppercase tracking-wider font-mono">Country</dt>
+              <dd class="text-gray-300">{{ r.country or '—' }}</dd>
+            </div>
+            <div class="md:col-span-2">
+              <dt class="text-gray-500 text-xs uppercase tracking-wider font-mono">Most recent charge (read test)</dt>
+              <dd class="text-white">{{ r.last_charge }}</dd>
+            </div>
+          </dl>
+        </div>
+      {% elif r.status == 'missing' %}
+        <div class="bg-yellow-900/20 border border-yellow-700/40 rounded-xl px-5 py-4">
+          <div class="flex items-center gap-3 mb-2">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/40 text-yellow-300 border border-yellow-700/50">● MISSING</span>
+            <h2 class="text-lg font-bold text-white">{{ r.label }} account</h2>
+          </div>
+          <p class="text-yellow-200 text-sm">{{ r.detail }}</p>
+          <p class="text-gray-400 text-xs mt-2 font-mono">Add <strong>{{ r.env_name }}</strong> in Render → Environment.</p>
+        </div>
+      {% else %}
+        <div class="bg-red-900/20 border border-red-700/40 rounded-xl px-5 py-4">
+          <div class="flex items-center gap-3 mb-2">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-red-900/40 text-red-300 border border-red-700/50">● {{ r.status|upper }}</span>
+            <h2 class="text-lg font-bold text-white">{{ r.label }} account</h2>
+            <span class="text-xs text-gray-500 font-mono">{{ r.env_name }}</span>
+          </div>
+          {% if r.masked_key %}
+            <p class="text-gray-400 text-xs font-mono mb-2">Key: {{ r.masked_key }}</p>
+          {% endif %}
+          <p class="text-red-200 text-sm font-mono break-all">{{ r.detail }}</p>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="mt-6 bg-gray-900/40 border border-gray-800 rounded-xl px-5 py-4 text-sm text-gray-400">
+    <p class="font-mono uppercase tracking-widest text-xs text-gray-500 mb-2">▌ What this checks</p>
+    <ul class="space-y-1 list-disc list-inside text-gray-400">
+      <li>The env var exists and is non-empty</li>
+      <li>The key authenticates against Stripe (Account.retrieve)</li>
+      <li>The key has read permission on Charges (sample charge fetched)</li>
+    </ul>
+  </div>
+
+</div>
+{% endblock %}

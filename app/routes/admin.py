@@ -1,6 +1,7 @@
 import csv
 import io
 import logging
+import os
 import threading
 from collections import defaultdict
 from flask import (
@@ -6845,3 +6846,82 @@ def import_zoom_participants():
         "success",
     )
     return redirect(url_for("admin.emails"))
+
+
+@admin_bp.route("/stripe-health")
+def stripe_health():
+    """Quick validation that both Stripe API keys are configured + working.
+
+    Calls stripe.Account.retrieve() with each key (lightweight, free) and
+    pulls the most recent charge as a sanity check. Returns a small HTML
+    page with the result for each account.
+    """
+    try:
+        import stripe
+    except ImportError:
+        return ("stripe package not installed", 500)
+
+    keys_to_check = [
+        ("CIRCLE", "STRIPE_CIRCLE_API_KEY"),
+        ("DEPOSIT", "STRIPE_DEPOSIT_API_KEY"),
+    ]
+
+    results = []
+    for label, env_name in keys_to_check:
+        key = os.getenv(env_name, "").strip()
+        entry = {"label": label, "env_name": env_name}
+        if not key:
+            entry["status"] = "missing"
+            entry["detail"] = f"{env_name} is not set in env"
+            results.append(entry)
+            continue
+
+        # Mask key for display (show first 7 + last 4 chars).
+        entry["masked_key"] = (key[:7] + "..." + key[-4:]) if len(key) > 12 else "***"
+
+        try:
+            account = stripe.Account.retrieve(api_key=key)
+            entry["account_id"] = account.get("id", "")
+            entry["account_name"] = (
+                account.get("settings", {}).get("dashboard", {}).get("display_name")
+                or account.get("business_profile", {}).get("name")
+                or account.get("email")
+                or "(no name)"
+            )
+            entry["country"] = account.get("country", "")
+
+            # Try to pull the most recent charge to confirm read permission.
+            charges = stripe.Charge.list(api_key=key, limit=1)
+            if charges.get("data"):
+                last = charges["data"][0]
+                amt = last.get("amount", 0) / 100
+                cur = (last.get("currency") or "").upper()
+                created = last.get("created")
+                from datetime import datetime
+                created_str = (
+                    datetime.fromtimestamp(created).strftime("%Y-%m-%d %H:%M")
+                    if created else "?"
+                )
+                entry["last_charge"] = f"{amt:.2f} {cur} on {created_str}"
+            else:
+                entry["last_charge"] = "(no charges yet in this account)"
+
+            entry["status"] = "ok"
+        except stripe.error.AuthenticationError as e:
+            entry["status"] = "auth_error"
+            entry["detail"] = str(e)
+        except stripe.error.PermissionError as e:
+            entry["status"] = "permission_error"
+            entry["detail"] = str(e)
+        except Exception as e:
+            entry["status"] = "error"
+            entry["detail"] = f"{type(e).__name__}: {e}"
+
+        results.append(entry)
+
+    return render_template(
+        "admin_stripe_health.html",
+        results=results,
+        active_section="stripe_health",
+        **_admin_layout_context(),
+    )
