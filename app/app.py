@@ -207,12 +207,14 @@ def _ensure_unsubscribe_columns(db):
 
         # BuddyPost.looking_to_socialize (added 2026-05-10). Tracks the
         # "going dancing socials together" intent — different from the
-        # serious training partner one.
+        # serious training partner one. Postgres needs FALSE; SQLite is
+        # happy with either FALSE or 0.
         if "buddy_posts" in inspector.get_table_names():
             bp_cols = {c["name"] for c in inspector.get_columns("buddy_posts")}
             if "looking_to_socialize" not in bp_cols:
+                default_lit = "FALSE" if engine.dialect.name == "postgresql" else "0"
                 conn.execute(text(
-                    "ALTER TABLE buddy_posts ADD COLUMN looking_to_socialize BOOLEAN DEFAULT 0 NOT NULL"
+                    f"ALTER TABLE buddy_posts ADD COLUMN looking_to_socialize BOOLEAN DEFAULT {default_lit} NOT NULL"
                 ))
                 logger.info("added column buddy_posts.looking_to_socialize")
 
