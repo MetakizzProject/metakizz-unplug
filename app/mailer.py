@@ -205,6 +205,7 @@ def _wrap(content_html, app_url, preview_text=None, unsubscribe_url=None, unsubs
 <!-- Footer -->
 <tr><td align="center" style="padding-top:24px;">
     <p style="color:#4B5563;font-size:12px;margin:0;">MetaKizz &middot; The Unplugging Protocol</p>
+    <p style="color:#4B5563;font-size:11px;margin:6px 0 0 0;">Need anything? <a href="mailto:info@metakizzproject.com" style="color:#6B7280;text-decoration:underline;">info@metakizzproject.com</a></p>
 </td></tr>
 
 </table>
