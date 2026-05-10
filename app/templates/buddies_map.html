@@ -30,6 +30,10 @@
               class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-400 hover:bg-brand-300 text-black font-semibold rounded-lg transition">
         📍 See dancers near me
       </button>
+      <a href="{{ url_for('buddies.buddy_start') }}"
+         class="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white font-semibold rounded-lg transition">
+        ✎ Publish my profile
+      </a>
       <p class="text-xs text-gray-500 self-center font-mono">
         <span class="text-brand-400 font-bold">{{ post_count }}</span> dancers published
         {% set total_country_dancers = country_aggregates|sum(attribute='count') %}
@@ -108,8 +112,11 @@
 
   <!-- CTA AT BOTTOM -->
   <div class="text-center mt-10 pt-8 border-t border-gray-800">
-    <p class="text-gray-300 text-sm mb-3">Are you a committed dancer? Put yourself on the map.</p>
-    <p class="text-xs text-gray-600 mb-3">Use your dashboard URL (the one you got when you joined).</p>
+    <p class="text-gray-300 text-sm mb-4">Want to be on the map? Connect with the Urbankiz dancers near you.</p>
+    <a href="{{ url_for('buddies.buddy_start') }}"
+       class="inline-block px-6 py-3 bg-brand-400 hover:bg-brand-300 text-black font-semibold rounded-lg">
+      ✎ Publish my profile →
+    </a>
   </div>
 
 </div>

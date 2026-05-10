@@ -166,6 +166,28 @@ def buddy_map():
     )
 
 
+@buddies_bp.route("/buddies/start", methods=["GET", "POST"])
+def buddy_start():
+    """Email-lookup landing for ambassadors who don't remember their
+    personal dashboard URL. Enter your email → we redirect to your
+    /buddies/<code>/edit. If the email isn't in the Ambassador table
+    we tell you to register first.
+    """
+    error = None
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        if not email or not EMAIL_RE.match(email):
+            error = "Please enter a valid email."
+        else:
+            amb = Ambassador.query.filter(Ambassador.email.ilike(email)).first()
+            if amb is None:
+                error = ("We couldn't find this email in our community. "
+                         "Sign up for the next free training first.")
+            else:
+                return redirect(url_for("buddies.buddy_edit", code=amb.dashboard_code))
+    return render_template("buddies_start.html", error=error)
+
+
 @buddies_bp.route("/buddies/<code>/edit", methods=["GET"])
 def buddy_edit(code):
     """Form for a specific ambassador to publish/edit their post.
