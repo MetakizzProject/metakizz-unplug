@@ -40,6 +40,12 @@
          {% if not pending_refund_emails %}disabled{% endif %}>
         📧 Refund emails <span id="kpi-pending-refund-emails" class="ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] {{ 'bg-yellow-500 text-black' if pending_refund_emails else 'bg-gray-700 text-gray-400' }} font-bold">{{ pending_refund_emails }}</span>
       </button>
+      <button id="send-invoices-btn" type="button"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-900/40 hover:bg-emerald-800/60 border border-emerald-700/50 text-emerald-200 font-display font-bold uppercase tracking-wider rounded-lg text-xs transition disabled:opacity-50 disabled:cursor-wait"
+         title="Generate and email the PDF invoice to every paying customer (current edition) that hasn't been invoiced yet."
+         {% if not pending_invoices %}disabled{% endif %}>
+        📄 Send invoices <span id="kpi-pending-invoices" class="ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] {{ 'bg-yellow-500 text-black' if pending_invoices else 'bg-gray-700 text-gray-400' }} font-bold">{{ pending_invoices }}</span>
+      </button>
       <a href="{{ url_for('admin.raffle') }}" target="_blank" rel="noopener"
          class="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-400 hover:bg-brand-300 text-black font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
         🎰 Open raffle stage ↗
@@ -482,15 +488,17 @@
             </td>
             <td class="px-4 py-3 whitespace-nowrap">
               {% if cp and cp.invoice_sent_at %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50"
-                      title="Sent {{ cp.invoice_sent_at.strftime('%Y-%m-%d %H:%M') }}{% if cp.invoice_id %} · {{ cp.invoice_id }}{% endif %}">
-                  📄 sent
-                </span>
+                <a href="{{ url_for('admin.preview_invoice_pdf', cp_id=cp.id) }}" target="_blank" rel="noopener"
+                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 hover:bg-brand-800/60 text-brand-400 border border-brand-700/50"
+                   title="Sent {{ cp.invoice_sent_at.strftime('%Y-%m-%d %H:%M') }} · {{ cp.invoice_id or '' }} — click to preview PDF">
+                  📄 {{ cp.invoice_id or 'sent' }}
+                </a>
               {% elif cp %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/30 text-yellow-300 border border-yellow-700/50"
-                      title="Buyer paid the full plan but no invoice has been generated yet (invoice system pending)">
-                  📭 not yet
-                </span>
+                <button type="button"
+                        class="invoice-send-btn inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/30 hover:bg-yellow-800/40 text-yellow-300 border border-yellow-700/50 cursor-pointer"
+                        data-cpid="{{ cp.id }}"
+                        title="Click to generate + email invoice now"
+                  >📤 send invoice</button>
               {% else %}
                 <span class="text-gray-600 text-xs">—</span>
               {% endif %}
@@ -590,11 +598,16 @@
             <td class="px-4 py-3"><span class="text-gray-700 text-xs" title="No deposit on file — nothing to refund">—</span></td>
             <td class="px-4 py-3 whitespace-nowrap">
               {% if cp.invoice_sent_at %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50"
-                      title="Sent {{ cp.invoice_sent_at.strftime('%Y-%m-%d %H:%M') }}">📄 sent</span>
+                <a href="{{ url_for('admin.preview_invoice_pdf', cp_id=cp.id) }}" target="_blank" rel="noopener"
+                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 hover:bg-brand-800/60 text-brand-400 border border-brand-700/50"
+                   title="Sent {{ cp.invoice_sent_at.strftime('%Y-%m-%d %H:%M') }} · {{ cp.invoice_id or '' }}">
+                  📄 {{ cp.invoice_id or 'sent' }}
+                </a>
               {% else %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/30 text-yellow-300 border border-yellow-700/50"
-                      title="Buyer paid the full plan but no invoice has been generated yet">📭 not yet</span>
+                <button type="button"
+                        class="invoice-send-btn inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/30 hover:bg-yellow-800/40 text-yellow-300 border border-yellow-700/50 cursor-pointer"
+                        data-cpid="{{ cp.id }}"
+                        title="Click to generate + email invoice now">📤 send invoice</button>
               {% endif %}
             </td>
             <td class="px-4 py-3 text-[10px] text-gray-600 font-mono">{{ (cp.stripe_charge_id or '')[:14] }}…</td>
@@ -816,11 +829,12 @@
 
   function invoiceBadge(cp) {
     if (cp && cp.invoice_sent_at) {
-      const tt = 'Sent ' + new Date(cp.invoice_sent_at).toLocaleString() + (cp.invoice_id ? ' · ' + cp.invoice_id : '');
-      return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50" title="' + escapeHtml(tt) + '">📄 sent</span>';
+      const tt = 'Sent ' + new Date(cp.invoice_sent_at).toLocaleString() + (cp.invoice_id ? ' · ' + cp.invoice_id : '') + ' — click to preview PDF';
+      const label = cp.invoice_id ? cp.invoice_id : 'sent';
+      return '<a href="/admin/circle-payments/' + cp.id + '/preview-invoice" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 hover:bg-brand-800/60 text-brand-400 border border-brand-700/50" title="' + escapeHtml(tt) + '">📄 ' + escapeHtml(label) + '</a>';
     }
     if (cp) {
-      return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/30 text-yellow-300 border border-yellow-700/50" title="Buyer paid the full plan but no invoice has been generated yet">📭 not yet</span>';
+      return '<button type="button" class="invoice-send-btn inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/30 hover:bg-yellow-800/40 text-yellow-300 border border-yellow-700/50 cursor-pointer" data-cpid="' + cp.id + '" title="Click to generate + email invoice now">📤 send invoice</button>';
     }
     return '<span class="text-gray-600 text-xs">—</span>';
   }
@@ -854,6 +868,19 @@
       if (kpiNot && data.full_paid_total !== undefined) {
         kpiNot.textContent = Math.max(0, data.paid_total - data.full_paid_total);
       }
+      // Pending invoices counter + button enabled state
+      if (data.pending_invoices !== undefined) {
+        const c = document.getElementById('kpi-pending-invoices');
+        const b = document.getElementById('send-invoices-btn');
+        if (c) {
+          c.textContent = data.pending_invoices;
+          c.className = 'ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] '
+                      + (data.pending_invoices > 0 ? 'bg-yellow-500 text-black' : 'bg-gray-700 text-gray-400')
+                      + ' font-bold';
+        }
+        if (b) b.disabled = !data.pending_invoices;
+      }
+
       // Pending refund emails counter + button enabled state
       if (data.pending_refund_emails !== undefined) {
         const counter = document.getElementById('kpi-pending-refund-emails');
@@ -1216,6 +1243,68 @@
       btn.innerHTML = orig;
     }
   });
+
+  // Per-row invoice send button — generates + emails the PDF invoice.
+  document.body.addEventListener('click', async function(ev) {
+    const btn = ev.target.closest('.invoice-send-btn');
+    if (!btn) return;
+    ev.preventDefault();
+    const cpid = btn.dataset.cpid;
+    if (!cpid) return;
+    if (!confirm('Generar factura PDF y enviarla por email a este cliente?')) return;
+    btn.disabled = true;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '⏳';
+    try {
+      const r = await fetch('/admin/circle-payments/' + cpid + '/send-invoice', { method: 'POST' });
+      const data = await r.json();
+      if (!data.ok) {
+        alert('Failed: ' + (data.error || 'unknown'));
+      } else if (data.sent) {
+        alert('Factura enviada: ' + (data.invoice_id || ''));
+        await poll();
+      } else {
+        alert('No se envió. ' + (data.reason || ''));
+      }
+    } catch (e) {
+      alert('Request failed: ' + e);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  });
+
+  // Invoice batch — generates + sends invoices for every paid customer
+  // (current edition) without an invoice yet.
+  const sendInvoicesBtn = document.getElementById('send-invoices-btn');
+  if (sendInvoicesBtn) {
+    sendInvoicesBtn.addEventListener('click', async function() {
+      const count = parseInt(document.getElementById('kpi-pending-invoices').textContent || '0', 10);
+      if (!count) {
+        alert('No hay facturas pendientes.');
+        return;
+      }
+      if (!confirm('Generar y enviar PDF de factura a ' + count + ' clientes que pagaron pero no han recibido factura todavía?\n\nNo se vuelve a enviar a quien ya recibió la suya.')) return;
+      sendInvoicesBtn.disabled = true;
+      const orig = sendInvoicesBtn.innerHTML;
+      sendInvoicesBtn.innerHTML = '⏳ Enviando...';
+      try {
+        const r = await fetch('/admin/circle-payments/send-pending-invoices', { method: 'POST' });
+        const data = await r.json();
+        if (!data.ok) {
+          alert('Failed: ' + (data.error || 'unknown'));
+        } else {
+          alert('Candidates: ' + data.candidates + '\nSent: ' + data.sent + '\nFailed: ' + data.failed);
+          await poll();
+        }
+      } catch (e) {
+        alert('Request failed: ' + e);
+      } finally {
+        sendInvoicesBtn.disabled = false;
+        sendInvoicesBtn.innerHTML = orig;
+      }
+    });
+  }
 
   // Refund email batch — sends the "your refund is on its way back" email
   // to every refunded reservation that has not been notified yet.

@@ -155,10 +155,11 @@ def stripe_circle_webhook():
     # Upsert a CirclePayment row so the admin sees ALL paid customers in
     # /admin/reservations (even ones without a deposit). Idempotent on
     # stripe_charge_id.
+    new_circle_payment = None
     if circle_charge_id:
         existing_payment = CirclePayment.query.filter_by(stripe_charge_id=circle_charge_id).first()
         if existing_payment is None:
-            db.session.add(CirclePayment(
+            new_circle_payment = CirclePayment(
                 stripe_charge_id=circle_charge_id,
                 stripe_payment_intent_id=payment_intent_id,
                 email=email,
@@ -168,12 +169,28 @@ def stripe_circle_webhook():
                 paid_at=_utcnow(),
                 description=description,
                 raw_event_type=event_type,
-            ))
+            )
+            db.session.add(new_circle_payment)
             db.session.commit()
             logger.info(
                 "circle webhook: persisted CirclePayment charge=%s email=%s amount=%s",
                 circle_charge_id, email, amount,
             )
+
+    # Auto-send invoice if enabled and we have a fresh CirclePayment.
+    # Safety flag: INVOICE_AUTO_SEND=1 to enable, anything else = off.
+    if new_circle_payment is not None and os.getenv("INVOICE_AUTO_SEND", "").strip() in ("1", "true", "True", "yes"):
+        try:
+            from app.routes.admin import _generate_and_send_invoice
+            _generate_and_send_invoice(new_circle_payment)
+        except Exception:
+            logger.exception("circle webhook: auto-invoice failed for CirclePayment %s", new_circle_payment.id)
+    elif new_circle_payment is not None:
+        logger.info(
+            "circle webhook: invoice NOT sent (INVOICE_AUTO_SEND off). "
+            "CirclePayment id=%s — set INVOICE_AUTO_SEND=1 to enable.",
+            new_circle_payment.id,
+        )
 
     # Idempotency: have we already processed THIS Circle charge?
     already = (

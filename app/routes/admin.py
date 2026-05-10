@@ -15,6 +15,7 @@ from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotificati
 from app.services.temperature import bucket_from_event_set
 from app.mailer import (
     build_refund_confirmation_html,
+    send_invoice_email,
     send_refund_confirmation_email,
     send_welcome_email,
     send_activation_nudge_email,
@@ -46,6 +47,64 @@ from app.mailer import (
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 logger = logging.getLogger(__name__)
+
+
+def _generate_and_send_invoice(circle_payment, force=False):
+    """Generate the invoice PDF for a CirclePayment and email it to the
+    customer. Idempotent — returns False (without re-sending) if already
+    sent unless force=True.
+
+    Returns True on success, False otherwise. On success, stamps
+    invoice_id (correlative) and invoice_sent_at on the row.
+    """
+    from app.services.invoice_pdf import generate_invoice_pdf
+    from app.services.invoice_numbering import assign_invoice_number
+
+    if not circle_payment or not circle_payment.email:
+        return False
+    if circle_payment.invoice_sent_at and not force:
+        return False
+
+    invoice_number = assign_invoice_number(circle_payment, commit=True)
+
+    line_description = circle_payment.description or "Digital services — MetaKizz Project"
+    amount = circle_payment.amount_cents or 0
+
+    try:
+        pdf_bytes = generate_invoice_pdf(
+            invoice_number=invoice_number,
+            customer_email=circle_payment.email,
+            customer_name=circle_payment.customer_name,
+            line_items=[{
+                "description": line_description,
+                "qty": 1,
+                "unit_price_cents": amount,
+            }],
+            currency=(circle_payment.currency or "usd").upper(),
+            stripe_charge_id=circle_payment.stripe_charge_id,
+            issue_date=circle_payment.paid_at or datetime.now(timezone.utc),
+        )
+    except Exception:
+        logger.exception("invoice PDF generation failed for CirclePayment %s", circle_payment.id)
+        return False
+
+    try:
+        sent = bool(send_invoice_email(circle_payment, invoice_number, pdf_bytes))
+    except Exception:
+        logger.exception("invoice email send failed for CirclePayment %s", circle_payment.id)
+        return False
+
+    if sent:
+        circle_payment.invoice_sent_at = datetime.now(timezone.utc)
+        db.session.commit()
+        logger.info(
+            "invoice sent: cp=%s invoice_number=%s email=%s",
+            circle_payment.id, invoice_number, circle_payment.email,
+        )
+        return True
+
+    logger.warning("invoice email returned False for CirclePayment %s", circle_payment.id)
+    return False
 
 
 def _send_refund_email_and_stamp(reservation):
@@ -6182,6 +6241,12 @@ def reservations():
         if r.refund_status == "success" and not r.refund_email_sent_at
     )
 
+    # Count CirclePayments (current edition) that haven't been invoiced.
+    pending_invoices = sum(
+        1 for cp in ordered_cps
+        if not cp.invoice_sent_at
+    )
+
     return render_template(
         "admin_reservations.html",
         page_title="Reservas",
@@ -6204,6 +6269,7 @@ def reservations():
         cash_gross_cents=cash_gross_cents,
         refunds_out_cents=refunds_out_cents,
         pending_refund_emails=pending_refund_emails,
+        pending_invoices=pending_invoices,
         **_admin_layout_context(),
     )
 
@@ -6259,6 +6325,7 @@ def reservations_json():
         1 for r in rows
         if r.refund_status == "success" and not r.refund_email_sent_at
     )
+    pending_invoices = sum(1 for cp in ordered_cps if not cp.invoice_sent_at)
 
     # Orphans for the JSON payload (emails that paid full but no Reservation).
     reservation_emails = {r.email.lower() for r in rows if r.email}
@@ -6341,6 +6408,7 @@ def reservations_json():
         "cash_gross_cents": cash_gross_cents,
         "refunds_out_cents": refunds_out_cents,
         "pending_refund_emails": pending_refund_emails,
+        "pending_invoices": pending_invoices,
         "top_n_video": TOP_N_VIDEO,
         "revenue": {
             "estimated_total": rev["estimated_total"],
@@ -6417,6 +6485,82 @@ def unmark_reservation_refunded(reservation_id):
     db.session.commit()
     logger.info("unmarked refund on reservation %s", r.id)
     return jsonify(ok=True, reservation_id=r.id)
+
+
+@admin_bp.route("/circle-payments/<int:cp_id>/preview-invoice")
+def preview_invoice_pdf(cp_id):
+    """Render the invoice PDF inline so admin can review before sending."""
+    from flask import Response
+    from app.services.invoice_pdf import generate_invoice_pdf
+    cp = CirclePayment.query.get_or_404(cp_id)
+    invoice_number = cp.invoice_id or "INV-PREVIEW"
+    line_description = cp.description or "Digital services — MetaKizz Project"
+    pdf = generate_invoice_pdf(
+        invoice_number=invoice_number,
+        customer_email=cp.email,
+        customer_name=cp.customer_name,
+        line_items=[{
+            "description": line_description,
+            "qty": 1,
+            "unit_price_cents": cp.amount_cents or 0,
+        }],
+        currency=(cp.currency or "usd").upper(),
+        stripe_charge_id=cp.stripe_charge_id,
+        issue_date=cp.paid_at or datetime.now(timezone.utc),
+    )
+    return Response(
+        pdf,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f"inline; filename={invoice_number}_preview.pdf"},
+    )
+
+
+@admin_bp.route("/circle-payments/<int:cp_id>/send-invoice", methods=["POST"])
+def send_invoice_for_circle_payment(cp_id):
+    """Generate + send the invoice for one CirclePayment. Idempotent
+    unless force=1 (regenerates and resends, keeping the same number)."""
+    from flask import jsonify
+    cp = CirclePayment.query.get_or_404(cp_id)
+    force = (request.form.get("force") or request.args.get("force") or "").strip().lower() in ("1", "true", "yes")
+    if cp.invoice_sent_at and not force:
+        return jsonify(ok=True, sent=False, reason="already_sent",
+                       sent_at=cp.invoice_sent_at.isoformat(), invoice_id=cp.invoice_id)
+    if force:
+        cp.invoice_sent_at = None
+        db.session.commit()
+    sent = _generate_and_send_invoice(cp, force=force)
+    return jsonify(
+        ok=True,
+        sent=sent,
+        invoice_id=cp.invoice_id,
+        sent_at=cp.invoice_sent_at.isoformat() if cp.invoice_sent_at else None,
+    )
+
+
+@admin_bp.route("/circle-payments/send-pending-invoices", methods=["POST"])
+def send_pending_invoices():
+    """Bulk-generate + send invoices for every CirclePayment in the
+    current edition that has not been invoiced yet."""
+    from flask import jsonify
+    candidates = [
+        cp for cp in
+        CirclePayment.query
+            .filter(CirclePayment.invoice_sent_at.is_(None))
+            .all()
+        if _is_current_edition(cp)
+    ]
+    sent = 0
+    failed = 0
+    for cp in candidates:
+        if _generate_and_send_invoice(cp):
+            sent += 1
+        else:
+            failed += 1
+    logger.info(
+        "send_pending_invoices: candidates=%d sent=%d failed=%d",
+        len(candidates), sent, failed,
+    )
+    return jsonify(ok=True, candidates=len(candidates), sent=sent, failed=failed)
 
 
 @admin_bp.route("/preview-refund-email")

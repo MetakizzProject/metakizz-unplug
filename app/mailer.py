@@ -43,6 +43,62 @@ def is_unsubscribed(ambassador):
     return getattr(ambassador, "unsubscribed_at", None) is not None
 
 
+def _send_with_attachment(to, subject, html, attachment_bytes, attachment_filename,
+                           from_name="MetaKizz Project"):
+    """Send an email via Resend with a single PDF attachment.
+
+    Resend wants attachments as base64 strings under the `attachments`
+    field of the API payload. Returns True on success.
+    """
+    import base64
+
+    api_key = os.getenv("RESEND_API_KEY")
+    default_from = os.getenv("EMAIL_FROM", "MetaKizz <noreply@metakizzproject.com>")
+    if from_name:
+        addr = default_from.split("<", 1)[-1].rstrip(">").strip() if "<" in default_from else default_from
+        email_from = f"{from_name} <{addr}>"
+    else:
+        email_from = default_from
+
+    if not api_key:
+        logger.warning("RESEND_API_KEY not set, skipping email to %s", to)
+        return False
+
+    if not attachment_bytes or not attachment_filename:
+        logger.error("send_with_attachment called without attachment bytes/filename")
+        return False
+
+    payload = {
+        "from": email_from,
+        "to": [to],
+        "subject": subject,
+        "html": html,
+        "attachments": [{
+            "filename": attachment_filename,
+            "content": base64.b64encode(attachment_bytes).decode("ascii"),
+        }],
+    }
+
+    try:
+        resp = http_requests.post(
+            RESEND_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=15,
+        )
+        if resp.status_code < 300:
+            logger.info("Email + attachment sent to %s: %s", to, subject)
+            return True
+        logger.error("Email+attach failed (%s) to %s: %s", resp.status_code, to, resp.text[:500])
+        return False
+    except Exception as e:
+        logger.error("Email+attach exception to %s: %s", to, e)
+        return False
+
+
 def _send(to, subject, html, from_name="MetaKizz Project", *, template_key=None, ambassador=None):
     """Send an email via Resend. Returns True on success.
 
@@ -1475,4 +1531,99 @@ def send_refund_confirmation_email(reservation, app_url=None):
         reservation.email,
         f"Your €{amount:.0f} deposit is on its way back 🟢",
         html,
+    )
+
+
+# ─── INVOICES ─────────────────────────────────────────────────────
+
+def build_invoice_email_html(circle_payment, invoice_number, app_url=None):
+    """Branded HTML body for the email that delivers the invoice PDF."""
+    if app_url is None:
+        from flask import current_app
+        try:
+            app_url = current_app.config.get("APP_URL", "")
+        except Exception:
+            app_url = ""
+
+    biz_name = os.getenv("INVOICE_BUSINESS_NAME", "Virtual Flow LLC").strip()
+    contact_email = os.getenv("INVOICE_BUSINESS_EMAIL", "info@metakizzproject.com").strip()
+
+    first_name = "there"
+    if circle_payment.customer_name and circle_payment.customer_name.strip():
+        first_name = circle_payment.customer_name.strip().split()[0]
+
+    amount = (circle_payment.amount_cents or 0) / 100
+    currency = (circle_payment.currency or "usd").upper()
+    description = circle_payment.description or "Digital services"
+
+    safe_desc = description.replace("<", "&lt;").replace(">", "&gt;")
+
+    content = f"""
+<table cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;">
+<tr><td style="background-color:#0A0A0A;border:1px solid #2EDB99;border-radius:999px;padding:6px 14px;">
+    <span style="color:#2EDB99;font-family:'Share Tech Mono','Courier New',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;">📄 INVOICE ATTACHED</span>
+</td></tr>
+</table>
+
+<h1 style="color:#FFFFFF;font-size:22px;line-height:1.25;margin:0 0 12px 0;">
+    Invoice {invoice_number}
+</h1>
+
+<p style="color:#9CA3AF;font-size:15px;line-height:1.7;margin:0 0 22px 0;">
+    Hi {first_name} — your receipt and invoice for the payment below are
+    attached as a PDF for your records.
+</p>
+
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0A0F0A;border:1px solid #1F2937;border-radius:14px;margin:0 0 24px 0;">
+<tr><td style="padding:18px 20px;">
+    <p style="color:#6B7280;font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:0 0 10px 0;">▌ Receipt</p>
+    <p style="color:#FFFFFF;font-size:22px;font-weight:bold;margin:0 0 4px 0;">{currency} {amount:,.2f}</p>
+    <p style="color:#9CA3AF;font-size:14px;margin:0;">{safe_desc}</p>
+</td></tr>
+</table>
+
+<p style="color:#9CA3AF;font-size:13px;line-height:1.6;margin:0 0 8px 0;">
+    Issued by {biz_name}.<br>
+    Status: <strong style="color:#2EDB99;">PAID</strong>
+</p>
+
+<p style="color:#6B7280;font-size:13px;line-height:1.6;margin:24px 0 0 0;">
+    Questions? Reply to this email or write to <a href="mailto:{contact_email}" style="color:#2EDB99;">{contact_email}</a>.
+</p>
+"""
+    return _wrap(content, app_url)
+
+
+def send_invoice_email(circle_payment, invoice_number, pdf_bytes, app_url=None):
+    """Send the invoice PDF as an attachment via Resend.
+
+    Returns True on success, False otherwise. Does NOT stamp invoice_sent_at —
+    the caller is responsible (so we can keep that single source of truth in
+    the admin route).
+    """
+    from app.services.invoice_pdf import safe_pdf_filename
+
+    if not circle_payment or not circle_payment.email:
+        return False
+    if not invoice_number:
+        return False
+    if not pdf_bytes:
+        return False
+
+    biz_name = os.getenv("INVOICE_BUSINESS_NAME", "Virtual Flow LLC").strip()
+    subject = f"Your invoice from {biz_name} — {invoice_number}"
+    html = build_invoice_email_html(circle_payment, invoice_number, app_url=app_url)
+    filename = safe_pdf_filename(
+        invoice_number,
+        customer_name=circle_payment.customer_name,
+        customer_email=circle_payment.email,
+    )
+
+    return _send_with_attachment(
+        to=circle_payment.email,
+        subject=subject,
+        html=html,
+        attachment_bytes=pdf_bytes,
+        attachment_filename=filename,
+        from_name=biz_name,
     )
