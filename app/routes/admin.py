@@ -6864,6 +6864,7 @@ def stripe_health():
     keys_to_check = [
         ("CIRCLE", "STRIPE_CIRCLE_API_KEY"),
         ("DEPOSIT", "STRIPE_DEPOSIT_API_KEY"),
+        ("LEGACY (unknown origin)", "STRIPE_API_KEY"),
     ]
 
     results = []
