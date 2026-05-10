@@ -197,6 +197,25 @@ def _ensure_unsubscribe_columns(db):
                     conn.execute(text("ALTER TABLE circle_payments ADD COLUMN invoice_pdf_bytes BLOB"))
                 logger.info("added column circle_payments.invoice_pdf_bytes")
 
+        # Reservation.no_phone_email_sent_at (added 2026-05-10). Tracks
+        # the "tried to reach you on WhatsApp but no phone on file" email.
+        if "reservations" in inspector.get_table_names():
+            rsv_cols = {c["name"] for c in inspector.get_columns("reservations")}
+            if "no_phone_email_sent_at" not in rsv_cols:
+                conn.execute(text("ALTER TABLE reservations ADD COLUMN no_phone_email_sent_at TIMESTAMP"))
+                logger.info("added column reservations.no_phone_email_sent_at")
+
+        # BuddyPost.looking_to_socialize (added 2026-05-10). Tracks the
+        # "going dancing socials together" intent — different from the
+        # serious training partner one.
+        if "buddy_posts" in inspector.get_table_names():
+            bp_cols = {c["name"] for c in inspector.get_columns("buddy_posts")}
+            if "looking_to_socialize" not in bp_cols:
+                conn.execute(text(
+                    "ALTER TABLE buddy_posts ADD COLUMN looking_to_socialize BOOLEAN DEFAULT 0 NOT NULL"
+                ))
+                logger.info("added column buddy_posts.looking_to_socialize")
+
         # Webinar attendance enrichment columns on lead_events. Populated by
         # /admin/zoom/import-participants — sums duration across rejoins,
         # captures country / device / first-join / last-leave from the Zoom

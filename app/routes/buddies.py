@@ -28,7 +28,7 @@ from threading import Lock
 from flask import Blueprint, render_template, request, jsonify, abort, redirect, url_for
 
 from app.models import db, Ambassador, BuddyPost, BuddyContact
-from app.services.geocoding import geocode_city
+from app.services.geocoding import geocode_city, country_center
 from app.services.email_validation import is_valid_email_syntax, is_disposable_email
 from app.mailer import send_buddy_contact_relay
 
@@ -92,6 +92,7 @@ def _post_to_dict(post, include_email=False):
         "role": post.role,
         "looking_for_partner": post.looking_for_partner,
         "looking_to_train": post.looking_to_train,
+        "looking_to_socialize": post.looking_to_socialize,
         "looking_for_mkot_buddy": post.looking_for_mkot_buddy,
         "festivals_per_year": post.festivals_per_year,
         "dance_level": post.dance_level,
@@ -129,6 +130,30 @@ def buddy_map():
     """Public map page — no auth, anyone can view."""
     posts = _public_posts()
     posts_json = [_post_to_dict(p) for p in posts]
+
+    # Aggregate "Ambassadors per country" so the map never looks empty
+    # even before published BuddyPosts catch up. We only show counts —
+    # never names or emails — so this is privacy-safe.
+    from sqlalchemy import func
+    country_rows = (
+        db.session.query(Ambassador.country_code, func.count(Ambassador.id))
+        .filter(Ambassador.country_code.isnot(None))
+        .filter(Ambassador.country_code != "")
+        .group_by(Ambassador.country_code)
+        .all()
+    )
+    country_aggregates = []
+    for cc, count in country_rows:
+        center = country_center(cc)
+        if center is None:
+            continue
+        country_aggregates.append({
+            "country_code": cc.upper(),
+            "count": int(count),
+            "lat": center[0],
+            "lng": center[1],
+        })
+
     # `?ref=<dashboard_code>` tracks viral attribution for the next publisher.
     ref = (request.args.get("ref") or "").strip()
     return render_template(
@@ -136,6 +161,7 @@ def buddy_map():
         posts=posts,
         posts_json=posts_json,
         post_count=len(posts),
+        country_aggregates=country_aggregates,
         ref=ref,
     )
 
@@ -185,8 +211,9 @@ def buddy_save(code):
 
     looking_for_partner = bool(payload.get("looking_for_partner"))
     looking_to_train = bool(payload.get("looking_to_train"))
+    looking_to_socialize = bool(payload.get("looking_to_socialize"))
     looking_for_mkot_buddy = bool(payload.get("looking_for_mkot_buddy"))
-    if not (looking_for_partner or looking_to_train or looking_for_mkot_buddy):
+    if not (looking_for_partner or looking_to_train or looking_to_socialize or looking_for_mkot_buddy):
         return jsonify(ok=False, message="Pick at least one of the 'looking for' options."), 400
 
     festivals = (payload.get("festivals_per_year") or "").strip().lower() or None
@@ -234,6 +261,7 @@ def buddy_save(code):
     post.role = role
     post.looking_for_partner = looking_for_partner
     post.looking_to_train = looking_to_train
+    post.looking_to_socialize = looking_to_socialize
     post.looking_for_mkot_buddy = looking_for_mkot_buddy
     post.festivals_per_year = festivals
     post.dance_level = dance_level

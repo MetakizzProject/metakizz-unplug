@@ -456,6 +456,12 @@ class Reservation(db.Model):
     refund_email_sent_at = db.Column(db.DateTime, nullable=True)
     circle_payment_id = db.Column(db.String(120), nullable=True, index=True)
 
+    # "I tried to reach you on WhatsApp but couldn't" outreach. Sent when
+    # the buyer paid the deposit but we have no phone on file (no
+    # Ambassador match, or Ambassador with empty phone_number). Email
+    # gives them WhatsApp/SMS/email CTAs to reach back.
+    no_phone_email_sent_at = db.Column(db.DateTime, nullable=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     ambassador = db.relationship("Ambassador", foreign_keys=[ambassador_id])
@@ -524,6 +530,7 @@ class BuddyPost(db.Model):
     role = db.Column(db.String(20), nullable=False)  # lead | follower | ambi
     looking_for_partner = db.Column(db.Boolean, default=False, nullable=False)
     looking_to_train = db.Column(db.Boolean, default=False, nullable=False)
+    looking_to_socialize = db.Column(db.Boolean, default=False, nullable=False)
     looking_for_mkot_buddy = db.Column(db.Boolean, default=False, nullable=False)
 
     # Matching filters — solve the "weekend dancer vs committed" mismatch.

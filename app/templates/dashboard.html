@@ -42,10 +42,10 @@
         <span class="text-gray-500">STATUS: <span class="text-brand-400">CONNECTED</span></span>
     </div>
 
-    <!-- ─── BUDDY FINDER (Phase 1 / MVP) ─── -->
+    <!-- ─── COMMITTED — Find your tribe (Phase 1 / MVP) ─── -->
     {% if buddy_post %}
     <div class="bg-gradient-to-br from-brand-900/30 via-black/60 to-brand-950/30 border border-brand-700/40 rounded-2xl p-5 mb-5">
-      <p class="text-[10px] uppercase tracking-[0.3em] text-brand-400 font-mono mb-2">🤝  // ON THE BUDDY MAP</p>
+      <p class="text-[10px] uppercase tracking-[0.3em] text-brand-400 font-mono mb-2">🤝  // COMMITTED · ON THE MAP</p>
       <h2 class="text-xl font-display font-bold mb-2">You're on the map.</h2>
       <p class="text-sm text-gray-400 mb-3">
         <strong class="text-white">{{ buddy_post.city }}</strong>{% if buddy_post.country_code %} · {{ buddy_post.country_code }}{% endif %}
@@ -64,17 +64,18 @@
         <button type="button" id="share-friend-btn"
                 data-share-url="{{ request.host_url.rstrip('/') }}/buddies?ref={{ ambassador.dashboard_code }}"
                 class="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white rounded-md text-sm font-mono uppercase tracking-wider">
-          📤 Share with a serious friend
+          📤 Share with a friend
         </button>
       </div>
       <p id="share-friend-feedback" class="hidden text-xs text-brand-400 mt-2">Link copied. WhatsApp opening...</p>
     </div>
     {% else %}
     <div class="bg-gradient-to-br from-brand-900/30 via-black/60 to-brand-950/30 border-2 border-brand-700/50 rounded-2xl p-5 mb-5">
-      <p class="text-[10px] uppercase tracking-[0.3em] text-brand-400 font-mono mb-2">🔥  // NEW · For dancers who actually train</p>
-      <h2 class="text-xl md:text-2xl font-display font-bold mb-2">Find committed Urbankiz dancers near you.</h2>
+      <p class="text-[10px] uppercase tracking-[0.3em] text-brand-400 font-mono mb-2">🤝  // COMMITTED · NEW</p>
+      <h2 class="text-xl md:text-2xl font-display font-bold mb-2">Find your Urbankiz tribe.</h2>
       <p class="text-sm text-gray-400 mb-1 leading-relaxed">
-        Festivals, daily training, real progress. <span class="text-gray-500">Not for casual social dancers.</span>
+        Connect with other Urbankiz dancers near you — to train, to dance socials,
+        to find a partner, or to do MKOT online together.
       </p>
       <div class="flex flex-wrap gap-2 mt-4">
         <a href="{{ url_for('buddies.buddy_edit', code=ambassador.dashboard_code) }}"
@@ -97,7 +98,7 @@
       if (!btn) return;
       btn.addEventListener('click', async () => {
         const url = btn.dataset.shareUrl;
-        const text = `Hey, mira esto: estoy en este mapa de bailarines de Urbankiz que entrenan en serio. Te invito a unirte si vas en serio: ${url}`;
+        const text = `Mira esto: hay un mapa de bailarines de Urbankiz para encontrar gente cerca con quien entrenar, salir a bailar o buscar partner. Únete: ${url}`;
         try { await navigator.clipboard.writeText(text); } catch (e) {}
         feedback.classList.remove('hidden');
         window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');

@@ -1,25 +1,29 @@
 {% extends "base.html" %}
 {% set embed = false %}
 
-{% block title %}Publish your buddy profile — MetaKizz{% endblock %}
+{% block title %}Committed — Edit your profile — MetaKizz{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto px-4 pt-8 pb-16">
 
   <div id="form-wrapper">
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-xs uppercase tracking-widest text-brand-400 font-mono">▌ METAKIZZ // COMMITTED</p>
+      <a href="{{ url_for('dashboard.show', code=ambassador.dashboard_code) }}"
+         class="text-xs font-mono uppercase tracking-widest text-gray-500 hover:text-brand-400">← Back to my dashboard</a>
+    </div>
     <div class="mb-6">
-      <p class="text-xs uppercase tracking-widest text-brand-400 font-mono mb-3">▌ METAKIZZ // BUDDY MAP</p>
       <h1 class="text-2xl md:text-3xl font-display font-bold mb-3">
-        {% if post %}Edit your buddy profile{% else %}Publish your buddy profile{% endif %}
+        {% if post %}Edit your profile{% else %}Publish your profile{% endif %}
       </h1>
       <p class="text-gray-400 text-sm leading-relaxed">
-        You're putting yourself on a map for committed Urbankiz dancers.
-        Other serious dancers in your area will see you and reach out to
-        train.
+        You're putting yourself on the Metakizz map. Other Urbankiz dancers
+        in your area will see you and reach out — to train, dance socials
+        together, find a partner, or do MKOT online together.
       </p>
       <p class="text-gray-500 text-xs leading-relaxed mt-2">
-        This is <strong class="text-gray-300">not</strong> a social/dating profile.
-        It's for dancers who train multiple days a week and want to grow.
+        Pick your level of commitment honestly. The filters help people
+        find a real match, not waste each other's time.
       </p>
     </div>
 
@@ -69,6 +73,7 @@
         {% for fname, label, hint in [
           ('looking_for_partner', '💃 A dance partner (recurring)', 'A regular partner to train + dance with'),
           ('looking_to_train', '🥋 People to train with', 'Casual training sessions, drills, practice'),
+          ('looking_to_socialize', '🪩 People to go dancing socials with', 'Hit social parties together, meet at festivals'),
           ('looking_for_mkot_buddy', '🟢 Pareja para MKOT online training', 'Sign up to MKOT online together as a duo')
         ] %}
         <label class="flex items-start gap-3 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
@@ -141,7 +146,7 @@
         </label>
         {% endfor %}
       </div>
-      <p class="text-xs text-gray-600 -mt-1">Casual social dancers, this isn't for you.</p>
+      <p class="text-xs text-gray-600 -mt-1">Be honest. The filters help match you with the right people.</p>
 
       {# AVAILABILITY #}
       <p class="text-xs uppercase tracking-widest text-gray-500 font-mono pt-2">When do you train?</p>
@@ -250,6 +255,7 @@
       role: fd.get('role') || '',
       looking_for_partner: !!fd.get('looking_for_partner'),
       looking_to_train: !!fd.get('looking_to_train'),
+      looking_to_socialize: !!fd.get('looking_to_socialize'),
       looking_for_mkot_buddy: !!fd.get('looking_for_mkot_buddy'),
       festivals_per_year: fd.get('festivals_per_year') || '',
       dance_level: fd.get('dance_level') || '',
@@ -298,7 +304,7 @@
 
   if (shareBtn) {
     const shareUrl = window.location.origin + '/buddies?ref={{ ambassador.dashboard_code }}';
-    const shareText = `Hey, mira esto: estoy en este mapa de bailarines de Urbankiz que entrenan en serio. Te invito a unirte si vas en serio: ${shareUrl}`;
+    const shareText = `Mira esto: hay un mapa de bailarines de Urbankiz para encontrar gente cerca con quien entrenar, salir a bailar o buscar partner. Únete: ${shareUrl}`;
     shareBtn.addEventListener('click', async function () {
       try {
         await navigator.clipboard.writeText(shareText);

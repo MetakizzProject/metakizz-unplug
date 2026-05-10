@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% set embed = false %}
 
-{% block title %}Buddy Map — Find Urbankiz dancers near you{% endblock %}
+{% block title %}Committed — Find Urbankiz dancers near you{% endblock %}
 
 {% block meta %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -15,16 +15,14 @@
 
   <!-- HERO -->
   <div class="text-center mb-6">
-    <p class="text-xs uppercase tracking-widest text-brand-400 font-mono mb-3">▌ METAKIZZ // BUDDY MAP</p>
+    <p class="text-xs uppercase tracking-widest text-brand-400 font-mono mb-3">▌ METAKIZZ // COMMITTED</p>
     <h1 class="text-3xl md:text-4xl font-display font-bold mb-3">
-      Find Urbankiz dancers <span class="text-brand-400">who actually train</span>.
+      Find your Urbankiz <span class="text-brand-400">tribe</span>.
     </h1>
     <p class="text-gray-400 text-base md:text-lg leading-relaxed max-w-2xl mx-auto">
-      For committed dancers — people who train multiple days a week, go to festivals,
-      and want to grow.
-    </p>
-    <p class="text-gray-600 text-sm mt-2">
-      If you only dance to socialize on Saturdays, this isn't for you. No hard feelings.
+      Connect with other Urbankiz dancers near you — to train, to dance socials,
+      to find a partner, or to do MKOT together. Pick your level of commitment
+      and find your people.
     </p>
 
     <div class="flex flex-wrap gap-3 justify-center mt-6">
@@ -33,7 +31,11 @@
         📍 See dancers near me
       </button>
       <p class="text-xs text-gray-500 self-center font-mono">
-        <span class="text-brand-400 font-bold">{{ post_count }}</span> committed dancers on the map
+        <span class="text-brand-400 font-bold">{{ post_count }}</span> dancers published
+        {% set total_country_dancers = country_aggregates|sum(attribute='count') %}
+        {% if total_country_dancers %}
+          · <span class="text-gray-400 font-bold">{{ total_country_dancers }}</span> registered worldwide
+        {% endif %}
       </p>
     </div>
   </div>
@@ -69,9 +71,10 @@
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Looking for:</span>
-      <button data-filter="lf:partner" class="filter-btn">💃 Partner</button>
-      <button data-filter="lf:train"   class="filter-btn">🥋 Training</button>
-      <button data-filter="lf:mkot"    class="filter-btn">🟢 MKOT buddy</button>
+      <button data-filter="lf:partner"   class="filter-btn">💃 Partner</button>
+      <button data-filter="lf:train"     class="filter-btn">🥋 Training</button>
+      <button data-filter="lf:socialize" class="filter-btn">🪩 Socials</button>
+      <button data-filter="lf:mkot"      class="filter-btn">🟢 MKOT buddy</button>
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Commitment:</span>
@@ -170,11 +173,23 @@
     width: 16px; height: 16px; border-radius: 50%;
     box-shadow: 0 0 8px rgba(46,219,153,0.6);
   }
+  .country-agg-marker {
+    background: rgba(124,58,237,0.45);
+    border: 2px solid rgba(167,139,250,0.7);
+    color: #fff; font-weight: 700;
+    font-family: 'Share Tech Mono', monospace; font-size: 11px;
+    border-radius: 999px; min-width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 12px rgba(124,58,237,0.4);
+    cursor: pointer;
+  }
+  .country-agg-marker:hover { background: rgba(124,58,237,0.7); }
 </style>
 
 <script>
 (function () {
   const POSTS = {{ posts_json|tojson|safe }};
+  const COUNTRY_AGG = {{ country_aggregates|tojson|safe }};
 
   // Filter state
   const filters = new Set();   // 'role:lead', 'festivals:6_plus', etc
@@ -199,6 +214,30 @@
     attribution: '© OpenStreetMap',
     maxZoom: 19,
   }).addTo(map);
+
+  // Country aggregates layer — purple bubbles with the count of registered
+  // Metakizz dancers per country. Visible only at low zoom (zoomed-out)
+  // so it doesn't clash with individual pins when you zoom into a city.
+  const countryAggLayer = L.layerGroup().addTo(map);
+  COUNTRY_AGG.forEach(c => {
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="country-agg-marker" title="${c.count} Metakizz dancers in ${c.country_code}">${c.count}</div>`,
+      iconSize: [36, 36], iconAnchor: [18, 18],
+    });
+    const m = L.marker([c.lat, c.lng], {icon, interactive: true})
+      .bindPopup(`<div style="color:#0a0a0a;text-align:center;">
+        <p style="font-weight:700;margin:0 0 4px 0;">${c.count} Metakizz dancers in ${c.country_code}</p>
+        <p style="font-size:11px;color:#6b7280;margin:0;">Be the first to publish a profile in your area.</p>
+      </div>`);
+    m.addTo(countryAggLayer);
+  });
+  // Hide aggregates when user zooms in past 6 (city level), so individual
+  // pins take over.
+  map.on('zoomend', () => {
+    if (map.getZoom() >= 6) countryAggLayer.removeFrom(map);
+    else if (!map.hasLayer(countryAggLayer)) countryAggLayer.addTo(map);
+  });
 
   const markersLayer = L.layerGroup().addTo(map);
   const markerByPostId = new Map();
@@ -232,6 +271,7 @@
       if (cat === 'lf') {
         if (val === 'partner' && !p.looking_for_partner) return false;
         if (val === 'train' && !p.looking_to_train) return false;
+        if (val === 'socialize' && !p.looking_to_socialize) return false;
         if (val === 'mkot' && !p.looking_for_mkot_buddy) return false;
       }
     }
@@ -287,6 +327,7 @@
       const lf = [];
       if (p.looking_for_partner) lf.push('💃');
       if (p.looking_to_train) lf.push('🥋');
+      if (p.looking_to_socialize) lf.push('🪩');
       if (p.looking_for_mkot_buddy) lf.push('🟢');
       const lvl = p.dance_level ? `<span class="text-[10px] text-gray-500 font-mono">· ${p.dance_level}</span>` : '';
       const commit = p.commitment ? `<span class="text-[10px] text-gray-500 font-mono">· ${p.commitment.replace('_to_','-')}×/wk</span>` : '';
