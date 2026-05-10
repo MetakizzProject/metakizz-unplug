@@ -47,6 +47,27 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 logger = logging.getLogger(__name__)
 
 
+def _send_refund_email_and_stamp(reservation):
+    """Send the refund confirmation email and stamp refund_email_sent_at
+    on the reservation row. Idempotent: if already sent, skip. Returns
+    True if a new email was sent, False otherwise.
+    """
+    if not reservation or not reservation.email:
+        return False
+    if reservation.refund_email_sent_at:
+        return False
+    try:
+        ok = bool(send_refund_confirmation_email(reservation))
+    except Exception:
+        logger.exception("send_refund_confirmation_email failed for reservation %s", reservation.id)
+        return False
+    if ok:
+        reservation.refund_email_sent_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return True
+    return False
+
+
 def _is_current_edition(circle_payment):
     """True if a CirclePayment belongs to the current MKOT edition.
 
@@ -6077,6 +6098,12 @@ def reservations():
     cash_gross_cents = deposits_in_cents + full_in_cents
     cash_net_cents = cash_gross_cents - refunds_out_cents
 
+    # Count refunded reservations whose buyer hasn't been notified yet.
+    pending_refund_emails = sum(
+        1 for r in all_rows
+        if r.refund_status == "success" and not r.refund_email_sent_at
+    )
+
     return render_template(
         "admin_reservations.html",
         page_title="Reservas",
@@ -6098,6 +6125,7 @@ def reservations():
         cash_net_cents=cash_net_cents,
         cash_gross_cents=cash_gross_cents,
         refunds_out_cents=refunds_out_cents,
+        pending_refund_emails=pending_refund_emails,
         **_admin_layout_context(),
     )
 
@@ -6149,6 +6177,10 @@ def reservations_json():
     )
     cash_gross_cents = deposits_in_cents + full_in_cents
     cash_net_cents = cash_gross_cents - refunds_out_cents
+    pending_refund_emails = sum(
+        1 for r in rows
+        if r.refund_status == "success" and not r.refund_email_sent_at
+    )
 
     # Orphans for the JSON payload (emails that paid full but no Reservation).
     reservation_emails = {r.email.lower() for r in rows if r.email}
@@ -6202,6 +6234,7 @@ def reservations_json():
             "refunded_at": r.refunded_at.isoformat() if r.refunded_at else None,
             "refund_id": r.refund_id or "",
             "refund_error": r.refund_error or "",
+            "refund_email_sent_at": r.refund_email_sent_at.isoformat() if r.refund_email_sent_at else None,
             # CirclePayment join (full plan paid)
             "circle_payment": ({
                 "amount_cents": cp.amount_cents or 0,
@@ -6229,6 +6262,7 @@ def reservations_json():
         "cash_net_cents": cash_net_cents,
         "cash_gross_cents": cash_gross_cents,
         "refunds_out_cents": refunds_out_cents,
+        "pending_refund_emails": pending_refund_emails,
         "top_n_video": TOP_N_VIDEO,
         "revenue": {
             "estimated_total": rev["estimated_total"],
@@ -6276,10 +6310,7 @@ def mark_reservation_refunded(reservation_id):
 
     email_sent = False
     if send_email:
-        try:
-            email_sent = bool(send_refund_confirmation_email(r))
-        except Exception:
-            logger.exception("failed to send refund confirmation for reservation %s", r.id)
+        email_sent = _send_refund_email_and_stamp(r)
 
     logger.info(
         "manually marked reservation %s refunded (email_sent=%s)", r.id, email_sent,
@@ -6304,9 +6335,65 @@ def unmark_reservation_refunded(reservation_id):
     r.refund_amount_cents = None
     r.refund_attempted_at = None
     r.refund_error = None
+    r.refund_email_sent_at = None
     db.session.commit()
     logger.info("unmarked refund on reservation %s", r.id)
     return jsonify(ok=True, reservation_id=r.id)
+
+
+@admin_bp.route("/reservations/<int:reservation_id>/send-refund-email", methods=["POST"])
+def send_refund_email_for_reservation(reservation_id):
+    """Send (or re-send) the refund confirmation email for a single
+    reservation. Honors ?force=1 to override the refund_email_sent_at
+    guard, otherwise it skips if already sent.
+    """
+    from flask import jsonify
+    r = Reservation.query.get_or_404(reservation_id)
+    if r.refund_status != "success":
+        return jsonify(ok=False, error="reservation not refunded"), 400
+
+    force = (request.form.get("force") or request.args.get("force") or "").strip().lower() in ("1", "true", "yes")
+    if r.refund_email_sent_at and not force:
+        return jsonify(ok=True, sent=False, reason="already_sent",
+                       sent_at=r.refund_email_sent_at.isoformat())
+
+    if force:
+        r.refund_email_sent_at = None  # so the helper sends again
+        db.session.commit()
+
+    sent = _send_refund_email_and_stamp(r)
+    return jsonify(
+        ok=True,
+        sent=sent,
+        sent_at=r.refund_email_sent_at.isoformat() if r.refund_email_sent_at else None,
+    )
+
+
+@admin_bp.route("/reservations/send-pending-refund-emails", methods=["POST"])
+def send_pending_refund_emails():
+    """Bulk-send the refund confirmation email to every reservation that
+    has refund_status='success' but no refund_email_sent_at yet. Useful
+    after a backfill of manual refunds. Returns count sent + skipped.
+    """
+    from flask import jsonify
+    targets = (
+        Reservation.query
+        .filter(Reservation.refund_status == "success")
+        .filter(Reservation.refund_email_sent_at.is_(None))
+        .all()
+    )
+    sent = 0
+    failed = 0
+    for r in targets:
+        if _send_refund_email_and_stamp(r):
+            sent += 1
+        else:
+            failed += 1
+    logger.info(
+        "send_pending_refund_emails: candidates=%d sent=%d failed=%d",
+        len(targets), sent, failed,
+    )
+    return jsonify(ok=True, candidates=len(targets), sent=sent, failed=failed)
 
 
 @admin_bp.route("/buyer/<path:email>")

@@ -315,9 +315,12 @@ def stripe_circle_webhook():
     db.session.commit()
 
     # Notify the buyer that their deposit is on the way back. Best-effort:
-    # a failed email here does NOT undo the refund.
+    # a failed email here does NOT undo the refund. Stamp the timestamp so
+    # we don't double-send if the admin batch endpoint fires later.
     try:
-        send_refund_confirmation_email(reservation)
+        if send_refund_confirmation_email(reservation):
+            reservation.refund_email_sent_at = _utcnow()
+            db.session.commit()
     except Exception:
         logger.exception(
             "circle webhook: refund issued OK but confirmation email failed for reservation %s",

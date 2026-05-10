@@ -167,6 +167,7 @@ def _ensure_unsubscribe_columns(db):
                 ("refund_status",          "VARCHAR(20)"),
                 ("refund_attempted_at",    "TIMESTAMP"),
                 ("refund_error",           "TEXT"),
+                ("refund_email_sent_at",   "TIMESTAMP"),
                 ("circle_payment_id",      "VARCHAR(120)"),
             ]:
                 if col_name not in res_cols:

@@ -453,6 +453,7 @@ class Reservation(db.Model):
     refund_status = db.Column(db.String(20), nullable=True)
     refund_attempted_at = db.Column(db.DateTime, nullable=True)
     refund_error = db.Column(db.Text, nullable=True)
+    refund_email_sent_at = db.Column(db.DateTime, nullable=True)
     circle_payment_id = db.Column(db.String(120), nullable=True, index=True)
 
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)

@@ -34,6 +34,12 @@
          title="Delete payments that don't match MKOT_EDITION_KEYWORDS (default: MKOT 3.0 / MKOT3 / MKOT 3). Useful after syncing brought in old editions.">
         🧹 Limpiar antiguos
       </button>
+      <button id="send-refund-emails-btn" type="button"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-900/40 hover:bg-blue-800/60 border border-blue-700/50 text-blue-200 font-display font-bold uppercase tracking-wider rounded-lg text-xs transition disabled:opacity-50 disabled:cursor-wait"
+         title="Send the 'your €100 deposit is on its way back' email to every refunded reservation that hasn't been notified yet."
+         {% if not pending_refund_emails %}disabled{% endif %}>
+        📧 Refund emails <span id="kpi-pending-refund-emails" class="ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] {{ 'bg-yellow-500 text-black' if pending_refund_emails else 'bg-gray-700 text-gray-400' }} font-bold">{{ pending_refund_emails }}</span>
+      </button>
       <a href="{{ url_for('admin.raffle') }}" target="_blank" rel="noopener"
          class="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-400 hover:bg-brand-300 text-black font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
         🎰 Open raffle stage ↗
@@ -440,11 +446,20 @@
             </td>
             <td class="px-4 py-3 whitespace-nowrap">
               {% if r.refund_status == 'success' %}
-                <button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 hover:bg-brand-800/60 text-brand-400 border border-brand-700/50 cursor-pointer"
-                        data-rid="{{ r.id }}" data-state="success"
-                        title="Refunded {{ r.refunded_at.strftime('%Y-%m-%d %H:%M') if r.refunded_at else '' }} · {{ r.refund_id or '' }} — click to undo">
-                  ✓ refunded
-                </button>
+                <div class="flex items-center gap-1">
+                  <button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 hover:bg-brand-800/60 text-brand-400 border border-brand-700/50 cursor-pointer"
+                          data-rid="{{ r.id }}" data-state="success"
+                          title="Refunded {{ r.refunded_at.strftime('%Y-%m-%d %H:%M') if r.refunded_at else '' }} · {{ r.refund_id or '' }} — click to undo">
+                    ✓ refunded
+                  </button>
+                  {% if r.refund_email_sent_at %}
+                    <span class="text-brand-300/70 text-[10px]" title="Email sent {{ r.refund_email_sent_at.strftime('%Y-%m-%d %H:%M') }}">📧</span>
+                  {% else %}
+                    <button type="button" class="refund-email-btn text-yellow-400 hover:text-yellow-200 text-[10px]"
+                            data-rid="{{ r.id }}"
+                            title="No refund email sent yet — click to send">📧&nbsp;send</button>
+                  {% endif %}
+                </div>
               {% elif r.refund_status == 'dry_run' %}
                 <button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 border border-blue-700/50 cursor-pointer"
                         data-rid="{{ r.id }}" data-state="dry_run"
@@ -774,7 +789,14 @@
   function refundBadge(r) {
     if (r.refund_status === 'success') {
       const tt = 'Refunded' + (r.refunded_at ? ' on ' + new Date(r.refunded_at).toLocaleString() : '') + (r.refund_id ? ' · ' + r.refund_id : '') + ' — click to undo';
-      return '<button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 hover:bg-brand-800/60 text-brand-400 border border-brand-700/50 cursor-pointer" data-rid="' + r.id + '" data-state="success" title="' + escapeHtml(tt) + '">✓ refunded</button>';
+      const pill = '<button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 hover:bg-brand-800/60 text-brand-400 border border-brand-700/50 cursor-pointer" data-rid="' + r.id + '" data-state="success" title="' + escapeHtml(tt) + '">✓ refunded</button>';
+      let emailIcon;
+      if (r.refund_email_sent_at) {
+        emailIcon = '<span class="text-brand-300/70 text-[10px]" title="Email sent ' + new Date(r.refund_email_sent_at).toLocaleString() + '">📧</span>';
+      } else {
+        emailIcon = '<button type="button" class="refund-email-btn text-yellow-400 hover:text-yellow-200 text-[10px]" data-rid="' + r.id + '" title="No refund email sent yet — click to send">📧&nbsp;send</button>';
+      }
+      return '<div class="flex items-center gap-1">' + pill + emailIcon + '</div>';
     }
     if (r.refund_status === 'dry_run') {
       return '<button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 border border-blue-700/50 cursor-pointer" data-rid="' + r.id + '" data-state="dry_run" title="Dry run — click to mark as refunded">⏸ dry-run</button>';
@@ -825,6 +847,23 @@
       if (kpiNot && data.full_paid_total !== undefined) {
         kpiNot.textContent = Math.max(0, data.paid_total - data.full_paid_total);
       }
+      // Pending refund emails counter + button enabled state
+      if (data.pending_refund_emails !== undefined) {
+        const counter = document.getElementById('kpi-pending-refund-emails');
+        const btn = document.getElementById('send-refund-emails-btn');
+        if (counter) {
+          counter.textContent = data.pending_refund_emails;
+          if (data.pending_refund_emails > 0) {
+            counter.className = 'ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] bg-yellow-500 text-black font-bold';
+          } else {
+            counter.className = 'ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] bg-gray-700 text-gray-400 font-bold';
+          }
+        }
+        if (btn) {
+          btn.disabled = !data.pending_refund_emails;
+        }
+      }
+
       // Cash KPIs
       if (data.cash_net_cents !== undefined) {
         const $$ = id => document.getElementById(id);
@@ -1107,6 +1146,71 @@
       btn.disabled = false;
     }
   });
+
+  // Per-row refund email button — sends to one buyer.
+  document.body.addEventListener('click', async function(ev) {
+    const btn = ev.target.closest('.refund-email-btn');
+    if (!btn) return;
+    ev.preventDefault();
+    const rid = btn.dataset.rid;
+    if (!rid) return;
+    if (!confirm('Enviar email "tu €100 está en camino" a este cliente?')) return;
+    btn.disabled = true;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '⏳';
+    try {
+      const r = await fetch('/admin/reservations/' + rid + '/send-refund-email', { method: 'POST' });
+      const data = await r.json();
+      if (!data.ok) {
+        alert('Failed: ' + (data.error || 'unknown'));
+      } else if (data.sent) {
+        await poll();
+      } else {
+        alert('No se envió. Razón: ' + (data.reason || 'unknown') + (data.sent_at ? ' (' + data.sent_at + ')' : ''));
+      }
+    } catch (e) {
+      alert('Request failed: ' + e);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  });
+
+  // Refund email batch — sends the "your refund is on its way back" email
+  // to every refunded reservation that has not been notified yet.
+  const refundEmailsBtn = document.getElementById('send-refund-emails-btn');
+  if (refundEmailsBtn) {
+    refundEmailsBtn.addEventListener('click', async function() {
+      const count = parseInt(document.getElementById('kpi-pending-refund-emails').textContent || '0', 10);
+      if (!count) {
+        alert('No hay emails de reembolso pendientes.');
+        return;
+      }
+      if (!confirm('Enviar email de "tu depósito está en camino" a ' + count + ' clientes refundeados que aún no han sido notificados?\n\nNo se vuelve a enviar a quien ya recibió el email.')) return;
+      refundEmailsBtn.disabled = true;
+      const orig = refundEmailsBtn.innerHTML;
+      refundEmailsBtn.innerHTML = '⏳ Enviando...';
+      try {
+        const r = await fetch('/admin/reservations/send-pending-refund-emails', { method: 'POST' });
+        const data = await r.json();
+        if (!data.ok) {
+          alert('Failed: ' + (data.error || 'unknown'));
+        } else {
+          alert(
+            'Candidates: ' + data.candidates + '\n' +
+            'Sent: ' + data.sent + '\n' +
+            'Failed: ' + data.failed
+          );
+          await poll();
+        }
+      } catch (e) {
+        alert('Request failed: ' + e);
+      } finally {
+        refundEmailsBtn.disabled = false;
+        refundEmailsBtn.innerHTML = orig;
+      }
+    });
+  }
 
   // Cleanup button — permanently deletes payments that aren't MKOT 3.0.
   const cleanupBtn = document.getElementById('cleanup-old-btn');
