@@ -14,6 +14,7 @@ from sqlalchemy.orm import joinedload
 from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent, Reservation, RaffleState, PartnerInvite, CirclePayment
 from app.services.temperature import bucket_from_event_set
 from app.mailer import (
+    send_refund_confirmation_email,
     send_welcome_email,
     send_activation_nudge_email,
     send_activation_push_email,
@@ -6121,6 +6122,200 @@ def reservations_json():
         },
         "rows": rows_payload,
     })
+
+
+@admin_bp.route("/reservations/<int:reservation_id>/mark-refunded", methods=["POST"])
+def mark_reservation_refunded(reservation_id):
+    """Manually mark a Reservation as refunded (no Stripe call).
+
+    Used by the admin to record refunds done by hand directly in Stripe
+    Dashboard. Optional `send_email=1` query/body param emails the buyer
+    a confirmation that their deposit is on its way.
+    """
+    from flask import jsonify
+    r = Reservation.query.get_or_404(reservation_id)
+
+    send_email_raw = (
+        request.form.get("send_email")
+        or request.args.get("send_email")
+        or ""
+    )
+    if not send_email_raw and request.is_json:
+        send_email_raw = str((request.get_json(silent=True) or {}).get("send_email", ""))
+    send_email = send_email_raw.strip().lower() in ("1", "true", "yes", "on")
+
+    now = datetime.now(timezone.utc)
+    r.refunded_at = now
+    r.refund_status = "success"
+    r.refund_attempted_at = r.refund_attempted_at or now
+    if not r.refund_id:
+        r.refund_id = "MANUAL"
+    if not r.refund_amount_cents:
+        r.refund_amount_cents = r.amount_cents or 10000
+    db.session.commit()
+
+    email_sent = False
+    if send_email:
+        try:
+            email_sent = bool(send_refund_confirmation_email(r))
+        except Exception:
+            logger.exception("failed to send refund confirmation for reservation %s", r.id)
+
+    logger.info(
+        "manually marked reservation %s refunded (email_sent=%s)", r.id, email_sent,
+    )
+    return jsonify(
+        ok=True,
+        reservation_id=r.id,
+        refund_status=r.refund_status,
+        refunded_at=r.refunded_at.isoformat(),
+        email_sent=email_sent,
+    )
+
+
+@admin_bp.route("/reservations/<int:reservation_id>/unmark-refunded", methods=["POST"])
+def unmark_reservation_refunded(reservation_id):
+    """Roll back a manual refund mark. Does NOT touch Stripe."""
+    from flask import jsonify
+    r = Reservation.query.get_or_404(reservation_id)
+    r.refunded_at = None
+    r.refund_status = None
+    r.refund_id = None
+    r.refund_amount_cents = None
+    r.refund_attempted_at = None
+    r.refund_error = None
+    db.session.commit()
+    logger.info("unmarked refund on reservation %s", r.id)
+    return jsonify(ok=True, reservation_id=r.id)
+
+
+@admin_bp.route("/circle-payments/sync", methods=["POST"])
+def sync_circle_payments():
+    """Pull recent payments from the Circle Stripe account and upsert
+    CirclePayment rows. Catches up on payments that arrived before the
+    webhook was wired (or any webhook misfire in the future).
+
+    Reads STRIPE_CIRCLE_API_KEY. Idempotent on stripe_charge_id —
+    re-running is safe.
+    """
+    from flask import jsonify
+    api_key = os.getenv("STRIPE_CIRCLE_API_KEY", "").strip()
+    if not api_key:
+        return jsonify(ok=False, error="STRIPE_CIRCLE_API_KEY not configured"), 400
+    try:
+        import stripe
+    except ImportError:
+        return jsonify(ok=False, error="stripe package missing"), 500
+
+    limit = int(request.args.get("limit") or 100)
+    limit = max(1, min(100, limit))
+
+    created = 0
+    skipped = 0
+    errors = []
+
+    try:
+        # Pull both checkout sessions (richer data, used by Payment Links)
+        # AND succeeded charges (covers any one-off charges that don't go
+        # through Checkout). Idempotent on stripe_charge_id.
+        sessions = stripe.checkout.Session.list(
+            api_key=api_key,
+            limit=limit,
+            status="complete",
+            expand=["data.payment_intent", "data.customer_details"],
+        )
+        for s in sessions.get("data") or []:
+            try:
+                charge_id = (
+                    (s.get("payment_intent") or {}).get("id")
+                    if isinstance(s.get("payment_intent"), dict)
+                    else (s.get("payment_intent") or s.get("id"))
+                )
+                if not charge_id:
+                    skipped += 1
+                    continue
+                if CirclePayment.query.filter_by(stripe_charge_id=charge_id).first():
+                    skipped += 1
+                    continue
+                customer_details = s.get("customer_details") or {}
+                email = (customer_details.get("email") or s.get("customer_email") or "").strip().lower()
+                if not email:
+                    skipped += 1
+                    continue
+                created_ts = s.get("created")
+                paid_at = (
+                    datetime.fromtimestamp(created_ts, tz=timezone.utc)
+                    if created_ts else datetime.now(timezone.utc)
+                )
+                pi = s.get("payment_intent")
+                pi_id = pi.get("id") if isinstance(pi, dict) else pi
+                db.session.add(CirclePayment(
+                    stripe_charge_id=charge_id,
+                    stripe_payment_intent_id=pi_id,
+                    email=email,
+                    customer_name=customer_details.get("name"),
+                    amount_cents=s.get("amount_total"),
+                    currency=(s.get("currency") or "eur").lower(),
+                    paid_at=paid_at,
+                    description=None,
+                    raw_event_type="manual_sync_session",
+                ))
+                created += 1
+            except Exception as e:
+                errors.append(f"session {s.get('id')}: {e}")
+
+        # Also pull recent succeeded charges for safety.
+        charges = stripe.Charge.list(api_key=api_key, limit=limit)
+        for c in charges.get("data") or []:
+            try:
+                if c.get("status") != "succeeded":
+                    continue
+                charge_id = c.get("id")
+                if not charge_id:
+                    continue
+                if CirclePayment.query.filter_by(stripe_charge_id=charge_id).first():
+                    skipped += 1
+                    continue
+                billing = c.get("billing_details") or {}
+                email = (billing.get("email") or c.get("receipt_email") or "").strip().lower()
+                if not email:
+                    skipped += 1
+                    continue
+                created_ts = c.get("created")
+                paid_at = (
+                    datetime.fromtimestamp(created_ts, tz=timezone.utc)
+                    if created_ts else datetime.now(timezone.utc)
+                )
+                db.session.add(CirclePayment(
+                    stripe_charge_id=charge_id,
+                    stripe_payment_intent_id=c.get("payment_intent"),
+                    email=email,
+                    customer_name=billing.get("name"),
+                    amount_cents=c.get("amount"),
+                    currency=(c.get("currency") or "eur").lower(),
+                    paid_at=paid_at,
+                    description=c.get("description"),
+                    raw_event_type="manual_sync_charge",
+                ))
+                created += 1
+            except Exception as e:
+                errors.append(f"charge {c.get('id')}: {e}")
+
+        db.session.commit()
+    except Exception as e:
+        logger.exception("sync_circle_payments failed")
+        return jsonify(ok=False, error=f"{type(e).__name__}: {e}"), 500
+
+    logger.info(
+        "sync_circle_payments: created=%d skipped=%d errors=%d",
+        created, skipped, len(errors),
+    )
+    return jsonify(
+        ok=True,
+        created=created,
+        skipped=skipped,
+        errors=errors[:5],
+    )
 
 
 @admin_bp.route("/raffle")

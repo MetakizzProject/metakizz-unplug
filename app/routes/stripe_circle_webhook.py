@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
 
 from app.models import db, Reservation, CirclePayment
-from app.mailer import send_refund_admin_alert
+from app.mailer import send_refund_admin_alert, send_refund_confirmation_email
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +290,16 @@ def stripe_circle_webhook():
     reservation.refund_status = "success"
     reservation.refunded_at = _utcnow()
     db.session.commit()
+
+    # Notify the buyer that their deposit is on the way back. Best-effort:
+    # a failed email here does NOT undo the refund.
+    try:
+        send_refund_confirmation_email(reservation)
+    except Exception:
+        logger.exception(
+            "circle webhook: refund issued OK but confirmation email failed for reservation %s",
+            reservation.id,
+        )
 
     logger.info(
         "circle webhook: REFUND OK reservation=%s amount=%s refund_id=%s email=%s",

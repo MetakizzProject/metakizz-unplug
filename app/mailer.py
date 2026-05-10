@@ -1375,3 +1375,92 @@ Open <strong style="color:#FFFFFF;">/admin/reservations</strong> to review and r
 
     subject = f"⚠️ Refund needs review — {safe_email}"
     return _send(admin_email, subject, _wrap(content, app_url), from_name="MetaKizz Alerts")
+
+
+def send_refund_confirmation_email(reservation, app_url=None):
+    """Notify the buyer that their €100 deposit refund is on the way.
+
+    Triggered:
+      - automatically when /api/webhook/stripe-circle issues a real refund
+      - manually when admin clicks "Mark as refunded + send email" on a row
+    """
+    if not reservation or not reservation.email:
+        return False
+
+    if app_url is None:
+        from flask import current_app
+        try:
+            app_url = current_app.config.get("APP_URL", "")
+        except Exception:
+            app_url = ""
+
+    first_name = "there"
+    if reservation.name and reservation.name.strip():
+        first_name = reservation.name.strip().split()[0]
+    elif reservation.ambassador and reservation.ambassador.name:
+        first_name = reservation.ambassador.name.strip().split()[0]
+
+    amount = (reservation.refund_amount_cents or reservation.amount_cents or 10000) / 100
+    whatsapp_url = "https://wa.me/34623960962"
+
+    content = f"""
+<!-- Status badge -->
+<table cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;">
+<tr><td style="background-color:#0A2A1F;border:1px solid #1a7a55;border-radius:999px;padding:6px 14px;">
+    <span style="color:#2EDB99;font-family:'Share Tech Mono','Courier New',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;">● REFUND ON THE WAY</span>
+</td></tr>
+</table>
+
+<h1 style="color:#FFFFFF;font-size:24px;line-height:1.25;margin:0 0 10px 0;">
+    Your €{amount:.0f} deposit is on its way back. <span style="color:#2EDB99;">🟢</span>
+</h1>
+
+<p style="color:#9CA3AF;font-size:15px;line-height:1.7;margin:0 0 24px 0;">
+    Hi {first_name} — thanks for going all-in with us on MKOT 3.0.
+</p>
+
+<!-- Amount card -->
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0A0F0A;border:1px solid #1F2937;border-radius:14px;margin:0 0 24px 0;">
+<tr><td style="padding:18px 20px;">
+    <p style="color:#6B7280;font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:0 0 10px 0;">▌ Refund details</p>
+    <p style="color:#FFFFFF;font-size:22px;font-weight:bold;margin:0 0 4px 0;">€{amount:.2f}</p>
+    <p style="color:#9CA3AF;font-size:13px;margin:0;">Your reservation deposit, returned automatically now that you've completed your full enrollment.</p>
+</td></tr>
+</table>
+
+<p style="color:#E5E7EB;font-size:15px;line-height:1.7;margin:0 0 8px 0;">
+    The refund has been issued to the same card you paid with. Most banks show it within
+    <strong style="color:#FFFFFF;">5–10 business days</strong>.
+</p>
+<p style="color:#9CA3AF;font-size:13px;line-height:1.6;margin:0 0 24px 0;">
+    Don't see it after 10 days? Check with your bank first, then ping us.
+</p>
+
+<!-- WhatsApp CTA -->
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0A1A0F;border:1px solid #1a7a55;border-radius:14px;margin:0 0 8px 0;">
+<tr><td style="padding:20px;">
+    <p style="color:#2EDB99;font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:0 0 8px 0;">▌ Questions?</p>
+    <p style="color:#FFFFFF;font-size:15px;line-height:1.5;margin:0 0 14px 0;">
+        WhatsApp me directly — fastest way to reach me.
+    </p>
+    <table cellpadding="0" cellspacing="0">
+    <tr><td style="background-color:#25D366;border-radius:10px;">
+        <a href="{whatsapp_url}" style="display:inline-block;padding:12px 22px;color:#FFFFFF;text-decoration:none;font-weight:bold;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            💬&nbsp;&nbsp;Chat on WhatsApp
+        </a>
+    </td></tr>
+    </table>
+</td></tr>
+</table>
+
+<p style="color:#6B7280;font-size:13px;line-height:1.6;margin:28px 0 0 0;">
+    See you on the other side.<br>
+    <span style="color:#9CA3AF;">— Álvaro</span>
+</p>
+"""
+
+    return _send(
+        reservation.email,
+        f"Your €{amount:.0f} deposit is on its way back 🟢",
+        _wrap(content, app_url),
+    )

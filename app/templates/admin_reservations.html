@@ -24,6 +24,11 @@
          class="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
         ✉ Preview email ↗
       </a>
+      <button id="sync-circle-btn" type="button"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-purple-700 hover:bg-purple-600 text-white font-display font-bold uppercase tracking-wider rounded-lg text-xs transition disabled:opacity-50 disabled:cursor-wait"
+         title="Pull recent payments from the Circle Stripe account into the dashboard">
+        🔄 Sync Stripe Circle
+      </button>
       <a href="{{ url_for('admin.raffle') }}" target="_blank" rel="noopener"
          class="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-400 hover:bg-brand-300 text-black font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
         🎰 Open raffle stage ↗
@@ -360,22 +365,29 @@
             </td>
             <td class="px-4 py-3 whitespace-nowrap">
               {% if r.refund_status == 'success' %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50"
-                      title="Refunded {{ r.refunded_at.strftime('%Y-%m-%d %H:%M') if r.refunded_at else '' }} · {{ r.refund_id or '' }}">
+                <button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 hover:bg-brand-800/60 text-brand-400 border border-brand-700/50 cursor-pointer"
+                        data-rid="{{ r.id }}" data-state="success"
+                        title="Refunded {{ r.refunded_at.strftime('%Y-%m-%d %H:%M') if r.refunded_at else '' }} · {{ r.refund_id or '' }} — click to undo">
                   ✓ refunded
-                </span>
+                </button>
               {% elif r.refund_status == 'dry_run' %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-blue-900/40 text-blue-300 border border-blue-700/50"
-                      title="Dry run: webhook matched but STRIPE_REFUND_ENABLED is OFF. Set STRIPE_REFUND_ENABLED=1 to issue real refunds.">
+                <button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 border border-blue-700/50 cursor-pointer"
+                        data-rid="{{ r.id }}" data-state="dry_run"
+                        title="Dry run — click to mark as refunded (and optionally send confirmation email)">
                   ⏸ dry-run
-                </span>
+                </button>
               {% elif r.refund_status == 'failed' %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-red-900/40 text-red-300 border border-red-700/50"
-                      title="{{ r.refund_error or 'Refund failed — check logs' }}">
+                <button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-red-900/40 hover:bg-red-800/60 text-red-300 border border-red-700/50 cursor-pointer"
+                        data-rid="{{ r.id }}" data-state="failed"
+                        title="{{ r.refund_error or 'Refund failed' }} — click to mark refunded manually">
                   ⚠ failed
-                </span>
+                </button>
               {% else %}
-                <span class="text-gray-600 text-xs">—</span>
+                <button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-gray-800/60 hover:bg-brand-900/40 text-gray-500 hover:text-brand-300 border border-gray-700/60 hover:border-brand-700/50 cursor-pointer"
+                        data-rid="{{ r.id }}" data-state="none"
+                        title="No refund yet — click to mark as refunded">
+                  + mark refunded
+                </button>
               {% endif %}
             </td>
             <td class="px-4 py-3 whitespace-nowrap">
@@ -581,16 +593,16 @@
 
   function refundBadge(r) {
     if (r.refund_status === 'success') {
-      const tt = 'Refunded' + (r.refunded_at ? ' on ' + new Date(r.refunded_at).toLocaleString() : '') + (r.refund_id ? ' · ' + r.refund_id : '');
-      return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50" title="' + escapeHtml(tt) + '">✓ refunded</span>';
+      const tt = 'Refunded' + (r.refunded_at ? ' on ' + new Date(r.refunded_at).toLocaleString() : '') + (r.refund_id ? ' · ' + r.refund_id : '') + ' — click to undo';
+      return '<button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 hover:bg-brand-800/60 text-brand-400 border border-brand-700/50 cursor-pointer" data-rid="' + r.id + '" data-state="success" title="' + escapeHtml(tt) + '">✓ refunded</button>';
     }
     if (r.refund_status === 'dry_run') {
-      return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-blue-900/40 text-blue-300 border border-blue-700/50" title="Dry run: webhook matched but STRIPE_REFUND_ENABLED is OFF">⏸ dry-run</span>';
+      return '<button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 border border-blue-700/50 cursor-pointer" data-rid="' + r.id + '" data-state="dry_run" title="Dry run — click to mark as refunded">⏸ dry-run</button>';
     }
     if (r.refund_status === 'failed') {
-      return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-red-900/40 text-red-300 border border-red-700/50" title="' + escapeHtml(r.refund_error || 'Refund failed') + '">⚠ failed</span>';
+      return '<button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-red-900/40 hover:bg-red-800/60 text-red-300 border border-red-700/50 cursor-pointer" data-rid="' + r.id + '" data-state="failed" title="' + escapeHtml(r.refund_error || 'Refund failed') + ' — click to mark refunded manually">⚠ failed</button>';
     }
-    return '<span class="text-gray-600 text-xs">—</span>';
+    return '<button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-gray-800/60 hover:bg-brand-900/40 text-gray-500 hover:text-brand-300 border border-gray-700/60 hover:border-brand-700/50 cursor-pointer" data-rid="' + r.id + '" data-state="none" title="No refund yet — click to mark as refunded">+ mark refunded</button>';
   }
 
   function invoiceBadge(cp) {
@@ -793,6 +805,91 @@
   document.querySelectorAll('.admin-note-input').forEach(ta => {
     ta.dataset.savedValue = ta.value;
   });
+
+  // Refund pill — click toggles refunded state.
+  // Delegated so it keeps working after the table is re-rendered by poll().
+  document.body.addEventListener('click', async function(ev) {
+    const btn = ev.target.closest('.refund-toggle');
+    if (!btn) return;
+    ev.preventDefault();
+    const rid = btn.dataset.rid;
+    const state = btn.dataset.state;
+    if (!rid) return;
+
+    if (state === 'success') {
+      // Toggle off (admin made a mistake)
+      if (!confirm('Undo the refund mark for this reservation? (this does NOT touch Stripe — only removes the flag in the dashboard)')) return;
+      btn.disabled = true;
+      try {
+        const r = await fetch('/admin/reservations/' + rid + '/unmark-refunded', { method: 'POST' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        // Force a refresh next poll cycle
+        await poll();
+      } catch (e) {
+        alert('Could not undo refund mark: ' + e);
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    // Mark as refunded — ask whether to send confirmation email
+    const sendEmail = confirm(
+      'Mark this reservation as REFUNDED?\n\n' +
+      'OK = send confirmation email to the buyer (recommended if you just refunded them in Stripe)\n' +
+      'Cancel/Esc = silent — only update the dashboard, no email\n\n' +
+      'Click OK to send email, or Cancel to skip email but still mark as refunded.'
+    );
+
+    btn.disabled = true;
+    try {
+      const fd = new FormData();
+      fd.append('send_email', sendEmail ? '1' : '0');
+      const r = await fetch('/admin/reservations/' + rid + '/mark-refunded', {
+        method: 'POST', body: fd,
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      if (data.email_sent) {
+        // Tiny visual ack
+        btn.textContent = '✓ refunded · email sent';
+      }
+      await poll();
+    } catch (e) {
+      alert('Could not mark as refunded: ' + e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // Sync button — pulls historical payments from the Circle Stripe account.
+  const syncBtn = document.getElementById('sync-circle-btn');
+  if (syncBtn) {
+    syncBtn.addEventListener('click', async function() {
+      syncBtn.disabled = true;
+      const original = syncBtn.innerHTML;
+      syncBtn.innerHTML = '⏳ Syncing...';
+      try {
+        const r = await fetch('/admin/circle-payments/sync', { method: 'POST' });
+        const data = await r.json();
+        if (!data.ok) {
+          alert('Sync failed: ' + (data.error || 'unknown'));
+        } else {
+          let msg = 'Synced. ' + data.created + ' new payments imported, ' + data.skipped + ' already in DB.';
+          if (data.errors && data.errors.length) {
+            msg += '\n\nSome errors:\n' + data.errors.join('\n');
+          }
+          alert(msg);
+          await poll();
+        }
+      } catch (e) {
+        alert('Sync request failed: ' + e);
+      } finally {
+        syncBtn.disabled = false;
+        syncBtn.innerHTML = original;
+      }
+    });
+  }
 
   applyFilter();
   setInterval(poll, 3000);
