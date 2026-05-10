@@ -84,11 +84,15 @@
             </div>
           {% endif %}
           {% for cp in circle_payments %}
-            <div class="flex items-baseline gap-3 text-sm">
-              <span class="text-purple-300 font-mono text-xs whitespace-nowrap">{{ cp.paid_at.strftime('%Y-%m-%d %H:%M') if cp.paid_at else '—' }}</span>
-              <span class="text-white">€{{ '%.2f'|format((cp.amount_cents or 0)/100) }} <span class="text-gray-500 text-xs">full plan (Circle)</span></span>
+            <div class="bg-gray-900/40 border border-gray-800/60 rounded-lg p-3">
+              <div class="flex items-baseline justify-between gap-3 flex-wrap">
+                <span class="text-purple-300 font-mono text-xs whitespace-nowrap">{{ cp.paid_at.strftime('%Y-%m-%d %H:%M') if cp.paid_at else '—' }}</span>
+                <span class="text-white font-bold">€{{ '%.2f'|format((cp.amount_cents or 0)/100) }} <span class="text-gray-500 text-xs font-normal">full plan</span></span>
+              </div>
               {% if cp.description %}
-                <span class="ml-auto text-gray-500 text-xs italic truncate max-w-[40%]" title="{{ cp.description }}">{{ cp.description }}</span>
+                <p class="text-sm text-brand-300 mt-1.5 break-words">📦 {{ cp.description }}</p>
+              {% else %}
+                <p class="text-xs text-gray-600 italic mt-1.5">📦 sin nombre — sincroniza con "Sync Stripe Circle" para refrescar</p>
               {% endif %}
             </div>
           {% endfor %}

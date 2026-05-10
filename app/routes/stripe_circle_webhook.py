@@ -85,19 +85,42 @@ def stripe_circle_webhook():
         email = _extract_email(session)
         amount = session.get("amount_total")
         currency = (session.get("currency") or "eur").lower()
+        session_id = session.get("id")
         circle_charge_id = (
             session.get("payment_intent")
-            or session.get("id")
+            or session_id
             or event_id
         )
         payment_intent_id = session.get("payment_intent")
         customer_name = ((session.get("customer_details") or {}).get("name") or None)
-        # Try to read the line item description if present (Payment Links include it).
-        line_items = session.get("line_items") or {}
-        if isinstance(line_items, dict):
-            data = line_items.get("data") or []
+        # Try the inline payload first (rarely populated).
+        inline_items = session.get("line_items") or {}
+        if isinstance(inline_items, dict):
+            data = inline_items.get("data") or []
             if data and isinstance(data[0], dict):
                 description = (data[0].get("description") or None)
+        # Pull line items from the API to get the real product name. The
+        # webhook payload doesn't include line_items by default; we have
+        # to expand them ourselves.
+        api_key = os.getenv("STRIPE_CIRCLE_API_KEY", "").strip()
+        if not description and api_key and session_id:
+            try:
+                full_session = stripe.checkout.Session.retrieve(
+                    session_id,
+                    api_key=api_key,
+                    expand=["line_items", "line_items.data.price.product"],
+                )
+                items = (full_session.get("line_items") or {}).get("data") or []
+                if items:
+                    first = items[0]
+                    description = first.get("description") or None
+                    if not description:
+                        price = first.get("price") or {}
+                        product = price.get("product") or {}
+                        if isinstance(product, dict):
+                            description = product.get("name") or None
+            except Exception:
+                logger.exception("circle webhook: failed to expand line_items for session %s", session_id)
     elif event_type == "charge.succeeded":
         charge = event["data"]["object"]
         billing = charge.get("billing_details") or {}

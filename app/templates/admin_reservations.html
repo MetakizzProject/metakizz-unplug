@@ -29,6 +29,11 @@
          title="Pull recent payments from the Circle Stripe account into the dashboard">
         🔄 Sync Stripe Circle
       </button>
+      <button id="cleanup-old-btn" type="button"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-red-900/40 hover:bg-red-800/60 border border-red-700/50 text-red-200 font-display font-bold uppercase tracking-wider rounded-lg text-xs transition disabled:opacity-50 disabled:cursor-wait"
+         title="Delete payments that don't match MKOT_EDITION_KEYWORDS (default: MKOT 3.0 / MKOT3 / MKOT 3). Useful after syncing brought in old editions.">
+        🧹 Limpiar antiguos
+      </button>
       <a href="{{ url_for('admin.raffle') }}" target="_blank" rel="noopener"
          class="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-400 hover:bg-brand-300 text-black font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
         🎰 Open raffle stage ↗
@@ -298,6 +303,7 @@
             <th class="text-left px-4 py-3">Buyer notes</th>
             <th class="text-left px-4 py-3 whitespace-nowrap">#</th>
             <th class="text-left px-4 py-3 whitespace-nowrap">💰 Plan completo</th>
+            <th class="text-left px-4 py-3 whitespace-nowrap">📦 Producto</th>
             <th class="text-left px-4 py-3 whitespace-nowrap">€100 Refund</th>
             <th class="text-left px-4 py-3 whitespace-nowrap">📄 Factura</th>
             <th class="text-left px-4 py-3">Stripe</th>
@@ -423,6 +429,15 @@
                 </span>
               {% endif %}
             </td>
+            <td class="px-4 py-3 text-xs whitespace-nowrap max-w-[180px]">
+              {% if cp and cp.description %}
+                <span class="text-gray-200 truncate inline-block max-w-full align-bottom" title="{{ cp.description }}">{{ cp.description if cp.description|length <= 26 else cp.description[:26] ~ '…' }}</span>
+              {% elif cp %}
+                <span class="text-gray-600 italic" title="Pagó pero falta sincronizar el nombre del producto. Click 'Sync Stripe Circle' para refrescar.">sin nombre</span>
+              {% else %}
+                <span class="text-gray-700">—</span>
+              {% endif %}
+            </td>
             <td class="px-4 py-3 whitespace-nowrap">
               {% if r.refund_status == 'success' %}
                 <button type="button" class="refund-toggle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 hover:bg-brand-800/60 text-brand-400 border border-brand-700/50 cursor-pointer"
@@ -493,7 +508,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="17" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
+          <tr><td colspan="18" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
           {% endfor %}
 
           {# Orphan buyers: paid the full plan in Circle but never went through reservation. #}
@@ -549,6 +564,13 @@
                     title="Pagó €{{ '%.2f'|format((cp.amount_cents or 0)/100) }}{% if cp.paid_at %} el {{ cp.paid_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}{% if cp.description %} · {{ cp.description }}{% endif %}">
                 💰 €{{ ((cp.amount_cents or 0)/100)|round|int }}
               </span>
+            </td>
+            <td class="px-4 py-3 text-xs whitespace-nowrap max-w-[180px]">
+              {% if cp.description %}
+                <span class="text-gray-200 truncate inline-block max-w-full align-bottom" title="{{ cp.description }}">{{ cp.description if cp.description|length <= 26 else cp.description[:26] ~ '…' }}</span>
+              {% else %}
+                <span class="text-gray-600 italic" title="Pagó pero falta sincronizar el nombre del producto">sin nombre</span>
+              {% endif %}
             </td>
             <td class="px-4 py-3"><span class="text-gray-700 text-xs" title="No deposit on file — nothing to refund">—</span></td>
             <td class="px-4 py-3 whitespace-nowrap">
@@ -727,6 +749,17 @@
     return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-gray-800/40 text-gray-500 border border-gray-700/50" title="Aún no ha pagado el plan completo">⏳ pendiente</span>';
   }
 
+  function productCell(cp) {
+    if (cp && cp.description) {
+      const trunc = cp.description.length <= 26 ? cp.description : (cp.description.substring(0, 26) + '…');
+      return '<td class="px-4 py-3 text-xs whitespace-nowrap max-w-[180px]"><span class="text-gray-200 truncate inline-block max-w-full align-bottom" title="' + escapeHtml(cp.description) + '">' + escapeHtml(trunc) + '</span></td>';
+    }
+    if (cp) {
+      return '<td class="px-4 py-3 text-xs whitespace-nowrap"><span class="text-gray-600 italic" title="Pagó pero falta sincronizar el nombre del producto">sin nombre</span></td>';
+    }
+    return '<td class="px-4 py-3 text-xs whitespace-nowrap"><span class="text-gray-700">—</span></td>';
+  }
+
   function orderBadge(orderIdx, isTop50) {
     if (!orderIdx) return '<span class="text-gray-700 text-xs">—</span>';
     let html = '<div class="flex flex-col items-center gap-0.5">'
@@ -843,7 +876,7 @@
         const refunded = r.refund_status === 'success';
         const needsRefund = paidFull && !refunded;
         const invoiceSent = !!(cp && cp.invoice_sent_at);
-        const search = ((r.name || '') + ' ' + (r.surname || '') + ' ' + (r.email || '')).toLowerCase();
+        const search = ((r.name || '') + ' ' + (r.surname || '') + ' ' + (r.email || '') + ' ' + ((cp && cp.description) || '')).toLowerCase();
         return '<tr data-row-id="' + r.id + '" '
           + 'data-eligible="' + (isEligible ? '1' : '0') + '" '
           + 'data-pending="' + (isPending ? '1' : '0') + '" '
@@ -873,6 +906,7 @@
           + '<td class="px-4 py-3 text-xs text-gray-400 max-w-[260px] truncate" title="' + escapeHtml(r.notes) + '">' + (r.notes ? escapeHtml(r.notes) : '—') + '</td>'
           + '<td class="px-4 py-3 whitespace-nowrap text-center">' + orderBadge(r.order_index, r.is_top_50) + '</td>'
           + '<td class="px-4 py-3 whitespace-nowrap">' + fullPlanBadge(cp) + '</td>'
+          + productCell(cp)
           + '<td class="px-4 py-3 whitespace-nowrap">' + refundBadge(r) + '</td>'
           + '<td class="px-4 py-3 whitespace-nowrap">' + invoiceBadge(cp) + '</td>'
           + '<td class="px-4 py-3 text-[10px] text-gray-600 font-mono">' + escapeHtml((r.stripe_session_id || '').substring(0, 14)) + '…</td>'
@@ -892,7 +926,7 @@
       // Orphan buyers (paid full plan without going through the reservation flow)
       const orphans = data.orphan_rows || [];
       const orphanHtml = orphans.map(function(cp) {
-        const search = ((cp.name || '') + ' ' + (cp.email || '')).toLowerCase();
+        const search = ((cp.name || '') + ' ' + (cp.email || '') + ' ' + (cp.description || '')).toLowerCase();
         return '<tr data-row-id="orphan-' + cp.id + '" '
           + 'data-eligible="0" data-pending="0" data-paid="0" '
           + 'data-doubts="0" data-contacted="0" data-has-note="0" '
@@ -915,6 +949,7 @@
           + '<td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>'
           + '<td class="px-4 py-3 whitespace-nowrap text-center">' + orderBadge(cp.order_index, cp.is_top_50) + '</td>'
           + '<td class="px-4 py-3 whitespace-nowrap"><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-purple-900/40 text-purple-300 border border-purple-700/50">💰 €' + Math.round((cp.amount_cents || 0) / 100) + '</span></td>'
+          + productCell(cp)
           + '<td class="px-4 py-3"><span class="text-gray-700 text-xs" title="No deposit on file — nothing to refund">—</span></td>'
           + '<td class="px-4 py-3 whitespace-nowrap">' + (cp.invoice_sent_at
               ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50">📄 sent</span>'
@@ -927,7 +962,7 @@
           + '</tr>';
       }).join('');
 
-      tbody.innerHTML = (html + orphanHtml) || '<tr><td colspan="17" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>';
+      tbody.innerHTML = (html + orphanHtml) || '<tr><td colspan="18" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>';
 
       // Re-seed savedValue on the freshly-rendered textareas so blur-detect works.
       tbody.querySelectorAll('.admin-note-input').forEach(ta => {
@@ -1073,6 +1108,38 @@
     }
   });
 
+  // Cleanup button — permanently deletes payments that aren't MKOT 3.0.
+  const cleanupBtn = document.getElementById('cleanup-old-btn');
+  if (cleanupBtn) {
+    cleanupBtn.addEventListener('click', async function() {
+      if (!confirm('Borrar permanentemente los CirclePayments que NO son MKOT 3.0?\n\nEsto NO se puede deshacer (puedes re-sync después si te equivocas).')) return;
+      cleanupBtn.disabled = true;
+      const orig = cleanupBtn.innerHTML;
+      cleanupBtn.innerHTML = '⏳ Borrando...';
+      try {
+        const r = await fetch('/admin/circle-payments/cleanup-non-mkot3', { method: 'POST' });
+        const data = await r.json();
+        if (!data.ok) {
+          alert('Cleanup failed: ' + (data.error || 'unknown'));
+        } else {
+          let msg = 'Borrados ' + data.deleted + ' CirclePayments antiguos.';
+          if (data.samples && data.samples.length) {
+            msg += '\n\nMuestra:\n' + data.samples.map(s =>
+              '· ' + s.email + ' — €' + Math.round((s.amount_cents || 0) / 100) + ' — ' + s.description
+            ).join('\n');
+          }
+          alert(msg);
+          await poll();
+        }
+      } catch (e) {
+        alert('Cleanup request failed: ' + e);
+      } finally {
+        cleanupBtn.disabled = false;
+        cleanupBtn.innerHTML = orig;
+      }
+    });
+  }
+
   // Sync button — pulls historical payments from the Circle Stripe account.
   const syncBtn = document.getElementById('sync-circle-btn');
   if (syncBtn) {
@@ -1086,7 +1153,7 @@
         if (!data.ok) {
           alert('Sync failed: ' + (data.error || 'unknown'));
         } else {
-          let msg = 'Synced. ' + data.created + ' new payments imported, ' + data.skipped + ' already in DB.';
+          let msg = 'Synced. ' + data.created + ' new payments imported, ' + (data.backfilled || 0) + ' backfilled (description / customer name), ' + data.skipped + ' already up-to-date.';
           if (data.errors && data.errors.length) {
             msg += '\n\nSome errors:\n' + data.errors.join('\n');
           }

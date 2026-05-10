@@ -47,6 +47,26 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 logger = logging.getLogger(__name__)
 
 
+def _is_current_edition(circle_payment):
+    """True if a CirclePayment belongs to the current MKOT edition.
+
+    Filters out payments from previous editions (last year's MKOT 2.0 etc.)
+    that came in via the historical sync. Uses the MKOT_EDITION_KEYWORDS
+    env var (case-insensitive, comma-separated). Default keywords match
+    "MKOT 3.0", "MKOT3", "MKOT 3" — change the env var without redeploy if
+    Stripe product names ever change.
+
+    Payments with no description are treated as NOT current — defensive
+    so unknowns don't pollute Top 50 / Cash collected.
+    """
+    if not circle_payment or not circle_payment.description:
+        return False
+    raw = os.getenv("MKOT_EDITION_KEYWORDS", "MKOT 3.0,MKOT3,MKOT 3")
+    keywords = [kw.strip().lower() for kw in raw.split(",") if kw.strip()]
+    desc = circle_payment.description.lower()
+    return any(kw in desc for kw in keywords)
+
+
 def _safe(fn, default, *args, **kwargs):
     """Wrap a heavy helper call so a single failure doesn't 500 the page.
     Logs the exception and returns `default`. Used inside Overview /
@@ -6003,12 +6023,13 @@ def reservations():
     revenue = _revenue_breakdown(all_rows)
 
     # Latest CirclePayment per email (descending) — used to render the
-    # "Plan completo" column for each Reservation row.
+    # "Plan completo" column for each Reservation row. Only counts the
+    # current edition (filters out historical MKOT 2.0 etc.).
     circle_by_email = {}
     full_paid_total = 0
     full_paid_amount_cents = 0
     for cp in CirclePayment.query.order_by(CirclePayment.paid_at.desc().nullslast()).all():
-        if not cp.email:
+        if not cp.email or not _is_current_edition(cp):
             continue
         key = cp.email.lower()
         if key not in circle_by_email:
@@ -6017,12 +6038,13 @@ def reservations():
             full_paid_amount_cents += (cp.amount_cents or 0)
 
     # Order index by Circle paid_at ASC — earliest payer = #1. Used to
-    # award the "video feedback" gift to the first 50.
-    ordered_cps = (
-        CirclePayment.query
-        .order_by(CirclePayment.paid_at.asc().nullslast())
-        .all()
-    )
+    # award the "video feedback" gift to the first 50. Same filter so
+    # last year's payments don't get a #N rank.
+    ordered_cps = [
+        cp for cp in
+        CirclePayment.query.order_by(CirclePayment.paid_at.asc().nullslast()).all()
+        if _is_current_edition(cp)
+    ]
     order_index_by_email = {}
     for idx, cp in enumerate(ordered_cps):
         if cp.email and cp.email.lower() not in order_index_by_email:
@@ -6094,11 +6116,12 @@ def reservations_json():
     rev = _revenue_breakdown(rows)
 
     # Same join as /admin/reservations — latest CirclePayment per email.
+    # Filter out historical/non-current-edition payments.
     circle_by_email = {}
     full_paid_total = 0
     full_paid_amount_cents = 0
     for cp in CirclePayment.query.order_by(CirclePayment.paid_at.desc().nullslast()).all():
-        if not cp.email:
+        if not cp.email or not _is_current_edition(cp):
             continue
         key = cp.email.lower()
         if key not in circle_by_email:
@@ -6106,12 +6129,12 @@ def reservations_json():
             full_paid_total += 1
             full_paid_amount_cents += (cp.amount_cents or 0)
 
-    # Order index by Circle paid_at ASC.
-    ordered_cps = (
-        CirclePayment.query
-        .order_by(CirclePayment.paid_at.asc().nullslast())
-        .all()
-    )
+    # Order index by Circle paid_at ASC (current edition only).
+    ordered_cps = [
+        cp for cp in
+        CirclePayment.query.order_by(CirclePayment.paid_at.asc().nullslast()).all()
+        if _is_current_edition(cp)
+    ]
     order_index_by_email = {}
     for idx, cp in enumerate(ordered_cps):
         if cp.email and cp.email.lower() not in order_index_by_email:
@@ -6302,12 +6325,14 @@ def buyer_detail(email):
         .order_by(Reservation.paid_at.desc().nullslast())
         .first()
     )
-    circle_payments = (
+    circle_payments = [
+        cp for cp in
         CirclePayment.query
-        .filter(CirclePayment.email.ilike(email))
-        .order_by(CirclePayment.paid_at.desc().nullslast())
-        .all()
-    )
+            .filter(CirclePayment.email.ilike(email))
+            .order_by(CirclePayment.paid_at.desc().nullslast())
+            .all()
+        if _is_current_edition(cp)
+    ]
     ambassador = Ambassador.query.filter(Ambassador.email.ilike(email)).first()
     partner_invite_as_buyer = (
         PartnerInvite.query
@@ -6339,17 +6364,16 @@ def buyer_detail(email):
             .all()
         )
 
-    # Order index (for the "Top 50" badge)
+    # Order index (for the "Top 50" badge) — current-edition only.
     order_index = None
     is_top_50 = False
     TOP_N_VIDEO = 50
     if circle_payments and circle_payments[0].paid_at:
-        # Recompute the global order to find this buyer's rank.
-        ordered = (
-            CirclePayment.query
-            .order_by(CirclePayment.paid_at.asc().nullslast())
-            .all()
-        )
+        ordered = [
+            cp for cp in
+            CirclePayment.query.order_by(CirclePayment.paid_at.asc().nullslast()).all()
+            if _is_current_edition(cp)
+        ]
         for idx, cp in enumerate(ordered):
             if cp.email and cp.email.lower() == email:
                 order_index = idx + 1
@@ -6519,18 +6543,36 @@ def sync_circle_payments():
     limit = max(1, min(100, limit))
 
     created = 0
+    backfilled = 0
     skipped = 0
     errors = []
 
+    def _extract_session_description(s):
+        """Pull the product/line item name from an expanded checkout session."""
+        items = (s.get("line_items") or {}).get("data") or []
+        if not items:
+            return None
+        first = items[0]
+        desc = first.get("description") or None
+        if not desc:
+            price = first.get("price") or {}
+            product = price.get("product") or {}
+            if isinstance(product, dict):
+                desc = product.get("name") or None
+        return desc
+
     try:
-        # Pull both checkout sessions (richer data, used by Payment Links)
-        # AND succeeded charges (covers any one-off charges that don't go
-        # through Checkout). Idempotent on stripe_charge_id.
+        # Checkout sessions with full expansion so we capture the product name.
         sessions = stripe.checkout.Session.list(
             api_key=api_key,
             limit=limit,
             status="complete",
-            expand=["data.payment_intent", "data.customer_details"],
+            expand=[
+                "data.payment_intent",
+                "data.customer_details",
+                "data.line_items",
+                "data.line_items.data.price.product",
+            ],
         )
         for s in sessions.get("data") or []:
             try:
@@ -6542,14 +6584,30 @@ def sync_circle_payments():
                 if not charge_id:
                     skipped += 1
                     continue
-                if CirclePayment.query.filter_by(stripe_charge_id=charge_id).first():
-                    skipped += 1
-                    continue
                 customer_details = s.get("customer_details") or {}
                 email = (customer_details.get("email") or s.get("customer_email") or "").strip().lower()
                 if not email:
                     skipped += 1
                     continue
+                description = _extract_session_description(s)
+
+                existing = CirclePayment.query.filter_by(stripe_charge_id=charge_id).first()
+                if existing is not None:
+                    # Backfill any missing fields (description, customer_name) but
+                    # never overwrite existing data.
+                    updated = False
+                    if not existing.description and description:
+                        existing.description = description
+                        updated = True
+                    if not existing.customer_name and customer_details.get("name"):
+                        existing.customer_name = customer_details.get("name")
+                        updated = True
+                    if updated:
+                        backfilled += 1
+                    else:
+                        skipped += 1
+                    continue
+
                 created_ts = s.get("created")
                 paid_at = (
                     datetime.fromtimestamp(created_ts, tz=timezone.utc)
@@ -6565,7 +6623,7 @@ def sync_circle_payments():
                     amount_cents=s.get("amount_total"),
                     currency=(s.get("currency") or "eur").lower(),
                     paid_at=paid_at,
-                    description=None,
+                    description=description,
                     raw_event_type="manual_sync_session",
                 ))
                 created += 1
@@ -6581,14 +6639,28 @@ def sync_circle_payments():
                 charge_id = c.get("id")
                 if not charge_id:
                     continue
-                if CirclePayment.query.filter_by(stripe_charge_id=charge_id).first():
-                    skipped += 1
-                    continue
                 billing = c.get("billing_details") or {}
                 email = (billing.get("email") or c.get("receipt_email") or "").strip().lower()
                 if not email:
                     skipped += 1
                     continue
+                description = c.get("description") or None
+
+                existing = CirclePayment.query.filter_by(stripe_charge_id=charge_id).first()
+                if existing is not None:
+                    updated = False
+                    if not existing.description and description:
+                        existing.description = description
+                        updated = True
+                    if not existing.customer_name and billing.get("name"):
+                        existing.customer_name = billing.get("name")
+                        updated = True
+                    if updated:
+                        backfilled += 1
+                    else:
+                        skipped += 1
+                    continue
+
                 created_ts = c.get("created")
                 paid_at = (
                     datetime.fromtimestamp(created_ts, tz=timezone.utc)
@@ -6602,7 +6674,7 @@ def sync_circle_payments():
                     amount_cents=c.get("amount"),
                     currency=(c.get("currency") or "eur").lower(),
                     paid_at=paid_at,
-                    description=c.get("description"),
+                    description=description,
                     raw_event_type="manual_sync_charge",
                 ))
                 created += 1
@@ -6615,15 +6687,44 @@ def sync_circle_payments():
         return jsonify(ok=False, error=f"{type(e).__name__}: {e}"), 500
 
     logger.info(
-        "sync_circle_payments: created=%d skipped=%d errors=%d",
-        created, skipped, len(errors),
+        "sync_circle_payments: created=%d backfilled=%d skipped=%d errors=%d",
+        created, backfilled, skipped, len(errors),
     )
     return jsonify(
         ok=True,
         created=created,
+        backfilled=backfilled,
         skipped=skipped,
         errors=errors[:5],
     )
+
+
+@admin_bp.route("/circle-payments/cleanup-non-mkot3", methods=["POST"])
+def cleanup_non_mkot3_payments():
+    """Permanently delete CirclePayments that don't match the current MKOT
+    edition keywords (set via MKOT_EDITION_KEYWORDS env var, defaults to
+    "MKOT 3.0,MKOT3,MKOT 3"). Useful after a sync brought in historical
+    payments from previous editions. Returns the deleted count plus a
+    sample of affected emails so the admin can sanity-check.
+    """
+    from flask import jsonify
+    all_cps = CirclePayment.query.all()
+    to_delete = [cp for cp in all_cps if not _is_current_edition(cp)]
+    count = len(to_delete)
+    samples = [
+        {
+            "email": cp.email,
+            "amount_cents": cp.amount_cents or 0,
+            "description": cp.description or "(none)",
+            "paid_at": cp.paid_at.isoformat() if cp.paid_at else None,
+        }
+        for cp in to_delete[:5]
+    ]
+    for cp in to_delete:
+        db.session.delete(cp)
+    db.session.commit()
+    logger.info("cleanup_non_mkot3: deleted %d CirclePayments", count)
+    return jsonify(ok=True, deleted=count, samples=samples)
 
 
 @admin_bp.route("/raffle")
