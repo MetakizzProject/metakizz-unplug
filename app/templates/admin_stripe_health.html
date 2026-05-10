@@ -6,8 +6,45 @@
   <div class="mb-5">
     <h1 class="font-display font-bold text-2xl text-white">Stripe Health Check</h1>
     <p class="text-xs text-gray-500 font-mono uppercase tracking-widest mt-1">
-      // Validating API keys against Stripe
+      // Validating API keys, webhook secret, and refund flag
     </p>
+  </div>
+
+  <!-- Auto-refund system status -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+    <div class="bg-gray-900/40 border border-gray-800 rounded-xl px-5 py-4">
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono mb-2">▌ Circle webhook secret</p>
+      {% if circle_webhook_secret_set %}
+        <p class="text-brand-400 text-sm font-bold flex items-center gap-2">
+          <span class="inline-block w-2 h-2 rounded-full bg-brand-400"></span>
+          Configured
+        </p>
+        <p class="text-gray-500 text-xs mt-1">STRIPE_CIRCLE_WEBHOOK_SECRET is set in env. Stripe webhooks can be verified.</p>
+      {% else %}
+        <p class="text-yellow-400 text-sm font-bold flex items-center gap-2">
+          <span class="inline-block w-2 h-2 rounded-full bg-yellow-400"></span>
+          Missing
+        </p>
+        <p class="text-gray-500 text-xs mt-1">Add STRIPE_CIRCLE_WEBHOOK_SECRET in Render — webhooks will fail signature check.</p>
+      {% endif %}
+    </div>
+
+    <div class="bg-gray-900/40 border border-gray-800 rounded-xl px-5 py-4">
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono mb-2">▌ Refund mode</p>
+      {% if refund_enabled %}
+        <p class="text-red-400 text-sm font-bold flex items-center gap-2">
+          <span class="inline-block w-2 h-2 rounded-full bg-red-400 animate-pulse"></span>
+          LIVE — real refunds will execute
+        </p>
+        <p class="text-gray-500 text-xs mt-1">STRIPE_REFUND_ENABLED=1. Next matching webhook = real €100 refund on Stripe.</p>
+      {% else %}
+        <p class="text-blue-300 text-sm font-bold flex items-center gap-2">
+          <span class="inline-block w-2 h-2 rounded-full bg-blue-300"></span>
+          DRY-RUN (safe)
+        </p>
+        <p class="text-gray-500 text-xs mt-1">STRIPE_REFUND_ENABLED is OFF. Webhooks log a "dry-run" status but never call Stripe Refund.</p>
+      {% endif %}
+    </div>
   </div>
 
   <div class="space-y-4">

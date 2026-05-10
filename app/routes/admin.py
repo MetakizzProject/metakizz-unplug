@@ -6920,9 +6920,14 @@ def stripe_health():
 
         results.append(entry)
 
+    refund_enabled = os.getenv("STRIPE_REFUND_ENABLED", "").strip() in ("1", "true", "True", "yes")
+    circle_webhook_secret_set = bool(os.getenv("STRIPE_CIRCLE_WEBHOOK_SECRET", "").strip())
+
     return render_template(
         "admin_stripe_health.html",
         results=results,
+        refund_enabled=refund_enabled,
+        circle_webhook_secret_set=circle_webhook_secret_set,
         active_section="stripe_health",
         **_admin_layout_context(),
     )
