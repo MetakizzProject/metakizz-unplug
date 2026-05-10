@@ -71,37 +71,54 @@ def _send_refund_email_and_stamp(reservation):
 def _is_current_edition(circle_payment):
     """True if a CirclePayment belongs to the current MKOT edition.
 
-    Default behavior is **permissive** — include unless the description
-    explicitly mentions a past edition. Payments with empty description
-    are included (assumed current; sync will eventually fill them in).
+    Primary filter is by **payment date**: anything paid before
+    MKOT3_START_AT (ISO 8601 in env, default 2026-04-01) is treated as
+    a past-edition payment and excluded. This is the most reliable
+    filter because product names from old editions are unpredictable.
 
-    Modes:
-      - MKOT_EDITION_KEYWORDS (whitelist, optional): if set, ONLY include
-        payments whose description matches one of these. Strict mode —
-        use it once all your products are correctly named in Stripe.
-      - MKOT_EDITION_EXCLUDE (blacklist, default in use): exclude
-        payments whose description matches one of these. Default:
-        "MKOT 2.0,MKOT 1.0,MKOT2,MKOT1".
-
-    Both env vars accept comma-separated, case-insensitive substrings.
+    Optional secondary filters by description (mostly for legacy):
+      - MKOT_EDITION_KEYWORDS (whitelist): if set, ALSO require
+        description match. Strict mode.
+      - MKOT_EDITION_EXCLUDE (blacklist): exclude descriptions matching
+        these keywords (in addition to the date filter).
     """
     if not circle_payment:
         return False
+
+    # Primary: date filter.
+    cutoff_iso = os.getenv("MKOT3_START_AT", "2026-04-01T00:00:00+00:00")
+    try:
+        cutoff = datetime.fromisoformat(cutoff_iso)
+    except Exception:
+        cutoff = datetime(2026, 4, 1, tzinfo=timezone.utc)
+    paid_at = circle_payment.paid_at
+    if paid_at is None:
+        return False  # no date = can't trust it, exclude
+    # Make timezone-aware for comparison.
+    if paid_at.tzinfo is None:
+        paid_at = paid_at.replace(tzinfo=timezone.utc)
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.replace(tzinfo=timezone.utc)
+    if paid_at < cutoff:
+        return False
+
     desc = (circle_payment.description or "").lower()
 
-    # Strict (whitelist) mode — only when the operator explicitly opts in.
+    # Secondary: optional description blacklist.
+    exclude_raw = os.getenv("MKOT_EDITION_EXCLUDE", "").strip()
+    if exclude_raw:
+        excludes = [kw.strip().lower() for kw in exclude_raw.split(",") if kw.strip()]
+        if desc and any(kw in desc for kw in excludes):
+            return False
+
+    # Optional: description whitelist (strict mode).
     whitelist_raw = os.getenv("MKOT_EDITION_KEYWORDS", "").strip()
     if whitelist_raw:
         keywords = [kw.strip().lower() for kw in whitelist_raw.split(",") if kw.strip()]
         if not desc:
-            return False  # in strict mode, no description = excluded
+            return False
         return any(kw in desc for kw in keywords)
 
-    # Permissive default — exclude only known past editions.
-    exclude_raw = os.getenv("MKOT_EDITION_EXCLUDE", "MKOT 2.0,MKOT 1.0,MKOT2,MKOT1")
-    excludes = [kw.strip().lower() for kw in exclude_raw.split(",") if kw.strip()]
-    if desc and any(kw in desc for kw in excludes):
-        return False
     return True
 
 
