@@ -71,21 +71,38 @@ def _send_refund_email_and_stamp(reservation):
 def _is_current_edition(circle_payment):
     """True if a CirclePayment belongs to the current MKOT edition.
 
-    Filters out payments from previous editions (last year's MKOT 2.0 etc.)
-    that came in via the historical sync. Uses the MKOT_EDITION_KEYWORDS
-    env var (case-insensitive, comma-separated). Default keywords match
-    "MKOT 3.0", "MKOT3", "MKOT 3" — change the env var without redeploy if
-    Stripe product names ever change.
+    Default behavior is **permissive** — include unless the description
+    explicitly mentions a past edition. Payments with empty description
+    are included (assumed current; sync will eventually fill them in).
 
-    Payments with no description are treated as NOT current — defensive
-    so unknowns don't pollute Top 50 / Cash collected.
+    Modes:
+      - MKOT_EDITION_KEYWORDS (whitelist, optional): if set, ONLY include
+        payments whose description matches one of these. Strict mode —
+        use it once all your products are correctly named in Stripe.
+      - MKOT_EDITION_EXCLUDE (blacklist, default in use): exclude
+        payments whose description matches one of these. Default:
+        "MKOT 2.0,MKOT 1.0,MKOT2,MKOT1".
+
+    Both env vars accept comma-separated, case-insensitive substrings.
     """
-    if not circle_payment or not circle_payment.description:
+    if not circle_payment:
         return False
-    raw = os.getenv("MKOT_EDITION_KEYWORDS", "MKOT 3.0,MKOT3,MKOT 3")
-    keywords = [kw.strip().lower() for kw in raw.split(",") if kw.strip()]
-    desc = circle_payment.description.lower()
-    return any(kw in desc for kw in keywords)
+    desc = (circle_payment.description or "").lower()
+
+    # Strict (whitelist) mode — only when the operator explicitly opts in.
+    whitelist_raw = os.getenv("MKOT_EDITION_KEYWORDS", "").strip()
+    if whitelist_raw:
+        keywords = [kw.strip().lower() for kw in whitelist_raw.split(",") if kw.strip()]
+        if not desc:
+            return False  # in strict mode, no description = excluded
+        return any(kw in desc for kw in keywords)
+
+    # Permissive default — exclude only known past editions.
+    exclude_raw = os.getenv("MKOT_EDITION_EXCLUDE", "MKOT 2.0,MKOT 1.0,MKOT2,MKOT1")
+    excludes = [kw.strip().lower() for kw in exclude_raw.split(",") if kw.strip()]
+    if desc and any(kw in desc for kw in excludes):
+        return False
+    return True
 
 
 def _safe(fn, default, *args, **kwargs):
