@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Publish your buddy profile — MetaKizz{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 pt-8 pb-16">
+
+  <div id="form-wrapper">
+    <div class="mb-6">
+      <p class="text-xs uppercase tracking-widest text-brand-400 font-mono mb-3">▌ METAKIZZ // BUDDY MAP</p>
+      <h1 class="text-2xl md:text-3xl font-display font-bold mb-3">
+        {% if post %}Edit your buddy profile{% else %}Publish your buddy profile{% endif %}
+      </h1>
+      <p class="text-gray-400 text-sm leading-relaxed">
+        You're putting yourself on a map for committed Urbankiz dancers.
+        Other serious dancers in your area will see you and reach out to
+        train.
+      </p>
+      <p class="text-gray-500 text-xs leading-relaxed mt-2">
+        This is <strong class="text-gray-300">not</strong> a social/dating profile.
+        It's for dancers who train multiple days a week and want to grow.
+      </p>
+    </div>
+
+    <div id="error-banner" class="hidden rounded-lg px-4 py-3 mb-4 text-sm bg-red-900/50 text-red-200 border border-red-800"></div>
+
+    <form id="buddy-form" class="space-y-5" novalidate>
+      {# Honeypot #}
+      <input type="text" name="website" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true">
+      {% if ref %}<input type="hidden" name="invited_by_dashboard_code" value="{{ ref }}">{% endif %}
+
+      {# CITY + COUNTRY #}
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono mt-2">Where do you train?</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label for="city" class="block text-sm text-gray-400 mb-1">City</label>
+          <input type="text" id="city" name="city" required maxlength="120"
+                 value="{{ post.city if post else '' }}"
+                 placeholder="Madrid, Berlin, Lisbon..."
+                 class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+          <p class="text-xs text-gray-600 mt-1">We'll geocode this to drop a pin on the map. Don't put your exact address.</p>
+        </div>
+        <div>
+          <label for="country_code" class="block text-sm text-gray-400 mb-1">Country</label>
+          <input type="text" id="country_code" name="country_code" maxlength="2"
+                 value="{{ (post.country_code if post else ambassador.country_code) or '' }}"
+                 placeholder="ES" readonly
+                 class="w-full bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-3 text-gray-400 cursor-not-allowed">
+          <p class="text-xs text-gray-600 mt-1">From your account.</p>
+        </div>
+      </div>
+
+      {# ROLE #}
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono pt-2">Your role</p>
+      <div class="grid grid-cols-3 gap-2">
+        {% for opt, label in [('lead','Lead'),('follower','Follower'),('ambi','Ambi')] %}
+        <label class="flex items-center justify-center gap-2 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+          <input type="radio" name="role" value="{{ opt }}" required class="accent-brand-400"
+                 {% if (post and post.role == opt) %}checked{% endif %}>
+          <span class="text-sm font-medium">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      {# WHAT YOU'RE LOOKING FOR #}
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono pt-2">What you're looking for <span class="text-gray-700">(at least one)</span></p>
+      <div class="space-y-2">
+        {% for fname, label, hint in [
+          ('looking_for_partner', '💃 A dance partner (recurring)', 'A regular partner to train + dance with'),
+          ('looking_to_train', '🥋 People to train with', 'Casual training sessions, drills, practice'),
+          ('looking_for_mkot_buddy', '🟢 Pareja para MKOT online training', 'Sign up to MKOT online together as a duo')
+        ] %}
+        <label class="flex items-start gap-3 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+          <input type="checkbox" name="{{ fname }}" class="mt-1 accent-brand-400"
+                 {% if post and post[fname] %}checked{% endif %}>
+          <div>
+            <p class="text-sm font-medium text-white">{{ label }}</p>
+            <p class="text-xs text-gray-500">{{ hint }}</p>
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+
+      {# FESTIVALS — KEY commitment signal #}
+      <p class="text-xs uppercase tracking-widest text-brand-400 font-mono pt-2">▌ Festivals per year <span class="text-gray-600 normal-case">(commitment check)</span></p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {% for opt, label in [('zero_or_one','0-1'),('2_or_3','2-3'),('4_or_5','4-5'),('6_plus','6+')] %}
+        <label class="flex items-center justify-center bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+          <input type="radio" name="festivals_per_year" value="{{ opt }}" class="hidden"
+                 {% if post and post.festivals_per_year == opt %}checked{% endif %}>
+          <span class="text-sm font-medium">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      {# DANCE LEVEL #}
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono pt-2">Dance level</p>
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+        {% for opt, label in [('beginner','Beginner'),('improver','Improver'),('intermediate','Intermediate'),('advanced','Advanced'),('pro','Pro / Instructor')] %}
+        <label class="flex items-center justify-center bg-gray-900 border border-gray-700 rounded-lg px-2 py-2 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+          <input type="radio" name="dance_level" value="{{ opt }}" class="hidden"
+                 {% if post and post.dance_level == opt %}checked{% endif %}>
+          <span class="text-xs md:text-sm font-medium text-center">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      {# YEARS DANCING #}
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono pt-2">Years dancing</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {% for opt, label in [('less_than_1','<1 year'),('1_to_3','1-3'),('3_to_5','3-5'),('5_plus','5+')] %}
+        <label class="flex items-center justify-center bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+          <input type="radio" name="years_dancing" value="{{ opt }}" class="hidden"
+                 {% if post and post.years_dancing == opt %}checked{% endif %}>
+          <span class="text-sm font-medium">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      {# COMMITMENT (days/week) #}
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono pt-2">How often do you train? <span class="text-gray-700">(days/week)</span></p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {% for opt, label in [('once','1×'),('2_to_3','2-3×'),('4_to_5','4-5×'),('6_to_7','6-7×')] %}
+        <label class="flex items-center justify-center bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+          <input type="radio" name="commitment" value="{{ opt }}" class="hidden"
+                 {% if post and post.commitment == opt %}checked{% endif %}>
+          <span class="text-sm font-medium">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      {# GOAL #}
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono pt-2">Your goal</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {% for opt, label in [('improve','Improve technique'),('performance','Performance / festivals'),('compete','Compete'),('pro_track','Pro / instructor track')] %}
+        <label class="flex items-start justify-center bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+          <input type="radio" name="goal" value="{{ opt }}" class="hidden"
+                 {% if post and post.goal == opt %}checked{% endif %}>
+          <span class="text-xs md:text-sm font-medium text-center">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <p class="text-xs text-gray-600 -mt-1">Casual social dancers, this isn't for you.</p>
+
+      {# AVAILABILITY #}
+      <p class="text-xs uppercase tracking-widest text-gray-500 font-mono pt-2">When do you train?</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {% set current_avail = (post.availability.split(',') if (post and post.availability) else []) %}
+        {% for opt, label in [('mornings','Mornings'),('afternoons','Afternoons'),('evenings','Evenings'),('weekends','Weekends')] %}
+        <label class="flex items-center justify-center bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-900/30">
+          <input type="checkbox" name="availability" value="{{ opt }}" class="hidden"
+                 {% if opt in current_avail %}checked{% endif %}>
+          <span class="text-sm font-medium">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      {# MESSAGE #}
+      <div>
+        <div class="flex items-baseline justify-between mb-1 mt-2">
+          <label for="message" class="block text-sm text-gray-400">Message <span class="text-gray-600">(optional, max 300)</span></label>
+          <span id="msg-counter" class="text-xs text-gray-600 font-mono">0/300</span>
+        </div>
+        <textarea id="message" name="message" rows="3" maxlength="300"
+                  placeholder="What kind of training are you looking for? Festivals you're going to? What you'd love to practice..."
+                  class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">{{ post.message if post else '' }}</textarea>
+      </div>
+
+      {# CONTACT EMAIL OVERRIDE #}
+      <div>
+        <label for="contact_email_override" class="block text-sm text-gray-400 mb-1">Contact email <span class="text-gray-600">(optional)</span></label>
+        <input type="email" id="contact_email_override" name="contact_email_override"
+               value="{{ post.contact_email_override if post else '' }}"
+               placeholder="{{ ambassador.email }}"
+               class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+        <p class="text-xs text-gray-600 mt-1">Defaults to your account email. We'll relay messages here without exposing it publicly.</p>
+      </div>
+
+      <div class="flex flex-wrap gap-2 mt-2">
+        <button type="submit" id="submit-btn"
+                class="flex-1 bg-brand-400 hover:bg-brand-300 text-black font-semibold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-wait min-w-[200px]">
+          {% if post %}Save changes{% else %}Publish my profile →{% endif %}
+        </button>
+        {% if post %}
+        <button type="button" id="delete-btn"
+                class="px-5 py-3 bg-red-900/30 hover:bg-red-800/50 border border-red-800 text-red-200 rounded-lg font-mono uppercase tracking-wider text-xs transition">
+          Delete
+        </button>
+        {% endif %}
+      </div>
+
+      <p class="text-center text-xs text-gray-600 mt-2">
+        Your profile stays live for {{ ttl_days }} days. We'll email you to renew before it expires.
+      </p>
+    </form>
+  </div>
+
+  <div id="success-wrapper" class="hidden text-center pt-12">
+    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-900/40 border border-brand-700 mb-6">
+      <span class="text-3xl">🟢</span>
+    </div>
+    <h1 class="text-2xl font-display font-bold mb-3">You're on the map.</h1>
+    <p class="text-gray-300 text-base leading-relaxed">Other committed dancers in your area can now find you.</p>
+    <div class="flex flex-wrap gap-2 justify-center mt-6">
+      <a href="{{ url_for('buddies.buddy_map') }}" class="px-5 py-2.5 bg-brand-400 hover:bg-brand-300 text-black font-semibold rounded-lg">See the map →</a>
+      <button type="button" id="share-btn" class="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white rounded-lg">📤 Share with a serious friend</button>
+    </div>
+    <p id="share-feedback" class="text-xs text-gray-500 mt-3 hidden">Link copied to your clipboard.</p>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById('buddy-form');
+  const submitBtn = document.getElementById('submit-btn');
+  const errorBanner = document.getElementById('error-banner');
+  const formWrapper = document.getElementById('form-wrapper');
+  const successWrapper = document.getElementById('success-wrapper');
+  const msg = document.getElementById('message');
+  const counter = document.getElementById('msg-counter');
+  const deleteBtn = document.getElementById('delete-btn');
+  const shareBtn = document.getElementById('share-btn');
+  const shareFeedback = document.getElementById('share-feedback');
+
+  function updateCounter() { counter.textContent = (msg.value.length || 0) + '/300'; }
+  msg.addEventListener('input', updateCounter); updateCounter();
+
+  function showError(text) {
+    errorBanner.textContent = text;
+    errorBanner.classList.remove('hidden');
+    errorBanner.scrollIntoView({behavior:'smooth', block:'center'});
+  }
+  function hideError() { errorBanner.classList.add('hidden'); errorBanner.textContent = ''; }
+
+  form.addEventListener('submit', async function (ev) {
+    ev.preventDefault();
+    hideError();
+    submitBtn.disabled = true;
+    const orig = submitBtn.textContent;
+    submitBtn.textContent = 'Saving...';
+
+    const fd = new FormData(form);
+    // Build clean JSON.
+    const data = {
+      website: fd.get('website') || '',
+      city: fd.get('city') || '',
+      country_code: fd.get('country_code') || '',
+      role: fd.get('role') || '',
+      looking_for_partner: !!fd.get('looking_for_partner'),
+      looking_to_train: !!fd.get('looking_to_train'),
+      looking_for_mkot_buddy: !!fd.get('looking_for_mkot_buddy'),
+      festivals_per_year: fd.get('festivals_per_year') || '',
+      dance_level: fd.get('dance_level') || '',
+      years_dancing: fd.get('years_dancing') || '',
+      commitment: fd.get('commitment') || '',
+      goal: fd.get('goal') || '',
+      availability: fd.getAll('availability') || [],
+      message: fd.get('message') || '',
+      contact_email_override: fd.get('contact_email_override') || '',
+      invited_by_dashboard_code: fd.get('invited_by_dashboard_code') || '',
+    };
+
+    try {
+      const r = await fetch('/api/buddies/{{ ambassador.dashboard_code }}/save', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', 'Accept':'application/json'},
+        body: JSON.stringify(data),
+      });
+      const body = await r.json();
+      if (!body.ok) {
+        showError(body.message || 'Something went wrong.');
+        submitBtn.disabled = false; submitBtn.textContent = orig;
+        return;
+      }
+      formWrapper.classList.add('hidden');
+      successWrapper.classList.remove('hidden');
+      window.scrollTo({top: 0, behavior:'smooth'});
+    } catch (e) {
+      showError("We couldn't reach the server. Try again.");
+      submitBtn.disabled = false; submitBtn.textContent = orig;
+    }
+  });
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async function () {
+      if (!confirm('Delete your buddy profile? This will remove your pin from the map.')) return;
+      deleteBtn.disabled = true;
+      try {
+        const r = await fetch('/api/buddies/{{ ambassador.dashboard_code }}/delete', {method:'POST'});
+        const body = await r.json();
+        if (body.ok) { window.location.href = '/buddies'; }
+        else { alert('Could not delete: ' + (body.message || 'unknown')); deleteBtn.disabled = false; }
+      } catch (e) { alert('Request failed.'); deleteBtn.disabled = false; }
+    });
+  }
+
+  if (shareBtn) {
+    const shareUrl = window.location.origin + '/buddies?ref={{ ambassador.dashboard_code }}';
+    const shareText = `Hey, mira esto: estoy en este mapa de bailarines de Urbankiz que entrenan en serio. Te invito a unirte si vas en serio: ${shareUrl}`;
+    shareBtn.addEventListener('click', async function () {
+      try {
+        await navigator.clipboard.writeText(shareText);
+        shareFeedback.classList.remove('hidden');
+        setTimeout(()=> shareFeedback.classList.add('hidden'), 3000);
+        window.open('https://wa.me/?text=' + encodeURIComponent(shareText), '_blank');
+      } catch (e) {
+        window.open('https://wa.me/?text=' + encodeURIComponent(shareText), '_blank');
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

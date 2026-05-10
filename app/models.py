@@ -500,6 +500,82 @@ class PartnerInvite(db.Model):
     needs_followup = db.Column(db.Boolean, default=False, nullable=False, index=True)
 
 
+class BuddyPost(db.Model):
+    """A published "looking for training partner" profile from an Ambassador.
+
+    One post per ambassador (unique FK). Auth = the ambassador's
+    `dashboard_code` (same pattern as the existing /dashboard route).
+    Filters intentionally biased toward separating committed dancers
+    from weekend casuals — see "festivals_per_year" + "commitment".
+    """
+    __tablename__ = "buddy_posts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ambassador_id = db.Column(db.Integer, db.ForeignKey("ambassadors.id"),
+                              nullable=False, unique=True, index=True)
+
+    # Geo
+    city = db.Column(db.String(120), nullable=False)
+    country_code = db.Column(db.String(4), nullable=True, index=True)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+
+    # Profile
+    role = db.Column(db.String(20), nullable=False)  # lead | follower | ambi
+    looking_for_partner = db.Column(db.Boolean, default=False, nullable=False)
+    looking_to_train = db.Column(db.Boolean, default=False, nullable=False)
+    looking_for_mkot_buddy = db.Column(db.Boolean, default=False, nullable=False)
+
+    # Matching filters — solve the "weekend dancer vs committed" mismatch.
+    festivals_per_year = db.Column(db.String(20), nullable=True, index=True)
+    dance_level = db.Column(db.String(20), nullable=True, index=True)
+    years_dancing = db.Column(db.String(20), nullable=True, index=True)
+    commitment = db.Column(db.String(20), nullable=True, index=True)
+    goal = db.Column(db.String(30), nullable=True, index=True)
+    availability = db.Column(db.String(60), nullable=True)
+
+    # Viral attribution
+    invited_by_dashboard_code = db.Column(db.String(20), nullable=True, index=True)
+
+    message = db.Column(db.String(300), nullable=True)
+    contact_email_override = db.Column(db.String(200), nullable=True)
+
+    # Lifecycle
+    published_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                             nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)
+    hidden = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    renewal_reminder_sent_at = db.Column(db.DateTime, nullable=True)
+    contact_count = db.Column(db.Integer, default=0, nullable=False)
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    ambassador = db.relationship("Ambassador", foreign_keys=[ambassador_id])
+
+
+class BuddyContact(db.Model):
+    """One row per "send message" attempt on a BuddyPost. Used for the
+    daily quota (max 3 sent / 3 received per email) and for traceability
+    of who's hitting the system.
+    """
+    __tablename__ = "buddy_contacts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    target_post_id = db.Column(db.Integer, db.ForeignKey("buddy_posts.id"),
+                               nullable=False, index=True)
+    sender_email = db.Column(db.String(200), nullable=False, index=True)
+    sender_name = db.Column(db.String(120), nullable=True)
+    message = db.Column(db.String(1000), nullable=False)
+    sender_ip = db.Column(db.String(64), nullable=True)
+    relay_email_sent_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           nullable=False, index=True)
+
+    target_post = db.relationship("BuddyPost", foreign_keys=[target_post_id])
+
+
 class CirclePayment(db.Model):
     """One row per payment received in the Circle Stripe account.
 

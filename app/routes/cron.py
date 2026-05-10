@@ -100,3 +100,63 @@ def you_won():
     stats = cron_logic.dispatch_you_won()
     logger.info("cron/you-won result: %s", stats)
     return jsonify({"ok": True, "stats": stats}), 200
+
+
+@cron_bp.route("/buddy-cleanup", methods=["POST", "GET"])
+def buddy_cleanup():
+    """Daily: hide expired BuddyPosts + send 7-day-before-expiration
+    renewal reminders. Idempotent.
+    """
+    if not _auth_ok():
+        return jsonify({"error": "unauthorized"}), 401
+
+    from datetime import datetime, timedelta
+    from app.models import db, BuddyPost
+    from app.mailer import send_buddy_renewal_reminder
+
+    # Naive UTC: matches what BuddyPost stores in SQLite/Postgres without tz.
+    now = datetime.utcnow()
+
+    # 1. Hide expired posts.
+    hidden_count = 0
+    expired = (
+        BuddyPost.query
+        .filter(BuddyPost.hidden.is_(False))
+        .filter(BuddyPost.expires_at < now)
+        .all()
+    )
+    for p in expired:
+        p.hidden = True
+        hidden_count += 1
+    if expired:
+        db.session.commit()
+
+    # 2. Send renewal reminders (7d before expiration, only once per post).
+    if _kill_switch_active():
+        logger.info("cron/buddy-cleanup: skipping reminder emails (kill switch on)")
+        return jsonify({"ok": True, "hidden": hidden_count, "reminded": 0,
+                        "skipped_emails": True}), 200
+
+    cutoff_lo = now
+    cutoff_hi = now + timedelta(days=7)
+    candidates = (
+        BuddyPost.query
+        .filter(BuddyPost.hidden.is_(False))
+        .filter(BuddyPost.renewal_reminder_sent_at.is_(None))
+        .filter(BuddyPost.expires_at >= cutoff_lo)
+        .filter(BuddyPost.expires_at <= cutoff_hi)
+        .all()
+    )
+    reminded = 0
+    for p in candidates:
+        try:
+            if send_buddy_renewal_reminder(p):
+                p.renewal_reminder_sent_at = now
+                reminded += 1
+        except Exception:
+            logger.exception("buddy renewal reminder failed for post %s", p.id)
+    if candidates:
+        db.session.commit()
+
+    logger.info("cron/buddy-cleanup: hidden=%d reminded=%d", hidden_count, reminded)
+    return jsonify({"ok": True, "hidden": hidden_count, "reminded": reminded}), 200

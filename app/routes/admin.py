@@ -6571,42 +6571,51 @@ def invoices():
 def preview_invoice_pdf(cp_id):
     """Serve the invoice PDF for a CirclePayment.
 
-    If the invoice has already been sent, returns the immutable copy
-    that was emailed to the customer. Otherwise generates a fresh
-    preview from current data + current template.
+    If the invoice has already been sent AND the bytes were archived,
+    serve the exact copy the customer got. Otherwise regenerate from
+    current data so the link always works (older invoices sent before
+    archive-to-DB shipped don't have bytes on file).
     """
     from flask import Response
     from app.services.invoice_pdf import generate_invoice_pdf
     cp = CirclePayment.query.get_or_404(cp_id)
 
-    # Already-sent invoice → serve the exact bytes the customer got.
+    # Already-sent invoice with archived bytes → serve the immutable copy.
     if cp.invoice_pdf_bytes and cp.invoice_id:
+        filename = cp.invoice_id.replace('"', '')
         return Response(
             bytes(cp.invoice_pdf_bytes),
             mimetype="application/pdf",
-            headers={"Content-Disposition": f"inline; filename={cp.invoice_id}.pdf"},
+            headers={"Content-Disposition": f'inline; filename="{filename}.pdf"'},
         )
 
-    # Otherwise: live preview.
+    # Live regen: either invoice was never sent (preview) or it was sent
+    # before we started archiving the bytes. Either way the customer gets
+    # a working PDF when they click.
     invoice_number = cp.invoice_id or "INV-PREVIEW"
     line_description = cp.description or "Digital services — MetaKizz Project"
-    pdf = generate_invoice_pdf(
-        invoice_number=invoice_number,
-        customer_email=cp.email,
-        customer_name=cp.customer_name,
-        line_items=[{
-            "description": line_description,
-            "qty": 1,
-            "unit_price_cents": cp.amount_cents or 0,
-        }],
-        currency=(cp.currency or "usd").upper(),
-        stripe_charge_id=cp.stripe_charge_id,
-        issue_date=cp.paid_at or datetime.now(timezone.utc),
-    )
+    try:
+        pdf = generate_invoice_pdf(
+            invoice_number=invoice_number,
+            customer_email=cp.email,
+            customer_name=cp.customer_name,
+            line_items=[{
+                "description": line_description,
+                "qty": 1,
+                "unit_price_cents": cp.amount_cents or 0,
+            }],
+            currency=(cp.currency or "usd").upper(),
+            stripe_charge_id=cp.stripe_charge_id,
+            issue_date=cp.paid_at or datetime.now(timezone.utc),
+        )
+    except Exception:
+        logger.exception("preview_invoice_pdf: regen failed for cp=%s", cp.id)
+        return ("Failed to render invoice. Check server logs.", 500)
+    filename = invoice_number.replace('"', '')
     return Response(
         pdf,
         mimetype="application/pdf",
-        headers={"Content-Disposition": f"inline; filename={invoice_number}_preview.pdf"},
+        headers={"Content-Disposition": f'inline; filename="{filename}_preview.pdf"'},
     )
 
 

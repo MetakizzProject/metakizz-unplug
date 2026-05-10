@@ -122,6 +122,18 @@ def show(code):
 
     is_under_review = ambassador.under_review_at is not None
 
+    # Buddy Finder (Phase 1) — fetch the ambassador's published post if any.
+    from app.models import BuddyPost
+    buddy_post = BuddyPost.query.filter_by(ambassador_id=ambassador.id).first()
+    buddy_days_left = None
+    if buddy_post and buddy_post.expires_at:
+        # buddy_post.expires_at is naive UTC (stored without tz). Compare naive-naive.
+        exp = buddy_post.expires_at
+        if exp.tzinfo is not None:
+            exp = exp.replace(tzinfo=None)
+        delta = exp - datetime.utcnow()
+        buddy_days_left = max(0, delta.days)
+
     return render_template(
         "dashboard.html",
         ambassador=ambassador,
@@ -140,4 +152,6 @@ def show(code):
         progress_message=progress_message,
         leaderboard_top10=leaderboard_top10,
         is_under_review=is_under_review,
+        buddy_post=buddy_post,
+        buddy_days_left=buddy_days_left,
     )

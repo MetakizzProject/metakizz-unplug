@@ -177,20 +177,14 @@ def stripe_circle_webhook():
                 circle_charge_id, email, amount,
             )
 
-    # Auto-send invoice if enabled and we have a fresh CirclePayment.
-    # Safety flag: INVOICE_AUTO_SEND=1 to enable, anything else = off.
-    if new_circle_payment is not None and os.getenv("INVOICE_AUTO_SEND", "").strip() in ("1", "true", "True", "yes"):
+    # Auto-send invoice on every fresh CirclePayment. Opt out with
+    # INVOICE_AUTO_SEND=0 if we ever need to disable (e.g. debugging).
+    if new_circle_payment is not None and os.getenv("INVOICE_AUTO_SEND", "1").strip() not in ("0", "false", "False", "no"):
         try:
             from app.routes.admin import _generate_and_send_invoice
             _generate_and_send_invoice(new_circle_payment)
         except Exception:
             logger.exception("circle webhook: auto-invoice failed for CirclePayment %s", new_circle_payment.id)
-    elif new_circle_payment is not None:
-        logger.info(
-            "circle webhook: invoice NOT sent (INVOICE_AUTO_SEND off). "
-            "CirclePayment id=%s — set INVOICE_AUTO_SEND=1 to enable.",
-            new_circle_payment.id,
-        )
 
     # Idempotency: have we already processed THIS Circle charge?
     already = (

@@ -1,0 +1,452 @@
+{% extends "base.html" %}
+{% set embed = false %}
+
+{% block title %}Buddy Map — Find Urbankiz dancers near you{% endblock %}
+
+{% block meta %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 pt-6 pb-12">
+
+  <!-- HERO -->
+  <div class="text-center mb-6">
+    <p class="text-xs uppercase tracking-widest text-brand-400 font-mono mb-3">▌ METAKIZZ // BUDDY MAP</p>
+    <h1 class="text-3xl md:text-4xl font-display font-bold mb-3">
+      Find Urbankiz dancers <span class="text-brand-400">who actually train</span>.
+    </h1>
+    <p class="text-gray-400 text-base md:text-lg leading-relaxed max-w-2xl mx-auto">
+      For committed dancers — people who train multiple days a week, go to festivals,
+      and want to grow.
+    </p>
+    <p class="text-gray-600 text-sm mt-2">
+      If you only dance to socialize on Saturdays, this isn't for you. No hard feelings.
+    </p>
+
+    <div class="flex flex-wrap gap-3 justify-center mt-6">
+      <button id="near-me-btn" type="button"
+              class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-400 hover:bg-brand-300 text-black font-semibold rounded-lg transition">
+        📍 See dancers near me
+      </button>
+      <p class="text-xs text-gray-500 self-center font-mono">
+        <span class="text-brand-400 font-bold">{{ post_count }}</span> committed dancers on the map
+      </p>
+    </div>
+  </div>
+
+  <!-- NEAR-ME RADIUS CONTROL (hidden until user grants geolocation) -->
+  <div id="radius-control" class="hidden bg-gray-900/60 border border-brand-700/40 rounded-xl px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
+    <span class="text-[10px] uppercase tracking-widest text-brand-400 font-mono">▌ Near you within</span>
+    <div class="flex gap-2">
+      {% for km in [50, 100, 150, 200] %}
+        <button type="button" data-radius="{{ km }}"
+                class="radius-btn px-3 py-1.5 rounded-md font-mono text-xs uppercase tracking-wider border border-gray-700 hover:border-brand-500 transition {% if km == 150 %}bg-brand-900/40 text-brand-300 border-brand-700/50{% else %}text-gray-400{% endif %}">
+          {{ km }} km
+        </button>
+      {% endfor %}
+    </div>
+    <button id="clear-near-me" class="ml-auto text-xs text-gray-500 hover:text-gray-300 underline">Clear</button>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="space-y-2 mb-4">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Festivals/year:</span>
+      <button data-filter="festivals:6_plus"     class="filter-btn">🔥 6+</button>
+      <button data-filter="festivals:4_or_5"     class="filter-btn">4-5</button>
+      <button data-filter="festivals:2_or_3"     class="filter-btn">2-3</button>
+      <button data-filter="festivals:zero_or_one" class="filter-btn">0-1</button>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Role:</span>
+      <button data-filter="role:lead"     class="filter-btn">Lead</button>
+      <button data-filter="role:follower" class="filter-btn">Follower</button>
+      <button data-filter="role:ambi"     class="filter-btn">Ambi</button>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Looking for:</span>
+      <button data-filter="lf:partner" class="filter-btn">💃 Partner</button>
+      <button data-filter="lf:train"   class="filter-btn">🥋 Training</button>
+      <button data-filter="lf:mkot"    class="filter-btn">🟢 MKOT buddy</button>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Commitment:</span>
+      <button data-filter="commit:6_to_7" class="filter-btn">6-7×/week</button>
+      <button data-filter="commit:4_to_5" class="filter-btn">4-5×</button>
+      <button data-filter="commit:2_to_3" class="filter-btn">2-3×</button>
+      <button data-filter="commit:once"   class="filter-btn">1×</button>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Search:</span>
+      <input type="text" id="search-input" placeholder="name, city, message..."
+             class="bg-gray-900 border border-gray-800 rounded-md px-3 py-1.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-brand-500 flex-1 min-w-[200px]">
+      <button id="clear-filters" class="text-xs text-gray-500 hover:text-gray-300 underline">Clear all</button>
+    </div>
+  </div>
+
+  <!-- MAP + LIST -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="lg:col-span-2">
+      <div id="map" class="w-full h-[500px] rounded-2xl border border-gray-800 bg-gray-900"></div>
+    </div>
+    <div class="lg:col-span-1">
+      <div class="flex items-baseline justify-between mb-2">
+        <p class="text-xs uppercase tracking-widest text-gray-500 font-mono">Visible: <span id="visible-count" class="text-white">{{ post_count }}</span></p>
+      </div>
+      <div id="post-list" class="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+        <!-- rendered by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA AT BOTTOM -->
+  <div class="text-center mt-10 pt-8 border-t border-gray-800">
+    <p class="text-gray-300 text-sm mb-3">Are you a committed dancer? Put yourself on the map.</p>
+    <p class="text-xs text-gray-600 mb-3">Use your dashboard URL (the one you got when you joined).</p>
+  </div>
+
+</div>
+
+<!-- CONTACT MODAL -->
+<div id="contact-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-[1000] p-4">
+  <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-md w-full p-6">
+    <p class="text-xs uppercase tracking-widest text-brand-400 font-mono mb-1">▌ Send a message to</p>
+    <h2 id="contact-target" class="text-xl font-display font-bold mb-1 text-white">—</h2>
+    <p id="contact-target-city" class="text-xs text-gray-500 mb-4">—</p>
+    <div id="contact-error" class="hidden rounded-lg px-3 py-2 mb-3 text-sm bg-red-900/50 text-red-200 border border-red-800"></div>
+    <form id="contact-form" class="space-y-3" novalidate>
+      <input type="text" name="website" tabindex="-1" autocomplete="off" class="hidden">
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Your name</label>
+        <input type="text" name="name" required maxlength="120"
+               class="w-full bg-black/40 border border-gray-700 rounded-md px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Your email</label>
+        <input type="email" name="email" required
+               class="w-full bg-black/40 border border-gray-700 rounded-md px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500">
+        <p class="text-[10px] text-gray-600 mt-1">They'll see this only when they reply.</p>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Message</label>
+        <textarea name="message" rows="4" required maxlength="1000"
+                  placeholder="Hey! I'm in your area and I train regularly. Want to meet for a session?"
+                  class="w-full bg-black/40 border border-gray-700 rounded-md px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500"></textarea>
+      </div>
+      <div class="flex gap-2 pt-1">
+        <button type="submit" id="contact-submit"
+                class="flex-1 bg-brand-400 hover:bg-brand-300 text-black font-semibold py-2 rounded-md transition disabled:opacity-50">
+          Send message
+        </button>
+        <button type="button" id="contact-cancel" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 rounded-md text-sm">Cancel</button>
+      </div>
+      <p class="text-[10px] text-gray-600 mt-1">Max 3 messages per day.</p>
+    </form>
+    <div id="contact-success" class="hidden text-center py-4">
+      <div class="text-3xl mb-2">🟢</div>
+      <p class="text-white font-medium mb-1">Sent.</p>
+      <p class="text-xs text-gray-500">They'll reply when they're ready.</p>
+    </div>
+  </div>
+</div>
+
+<style>
+  .filter-btn {
+    color: #9ca3af; border: 1px solid rgba(46,219,153,0.18);
+    background: transparent; padding: 5px 12px; border-radius: 6px;
+    font-family: ui-monospace, monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.05em; transition: all .12s;
+  }
+  .filter-btn:hover { color: #fff; border-color: rgba(46,219,153,0.4); }
+  .filter-btn.active { background: rgba(46,219,153,0.12); color: #2EDB99; border-color: rgba(46,219,153,0.6); }
+  .radius-btn.active { background: rgba(46,219,153,0.18) !important; color: #2EDB99 !important; border-color: rgba(46,219,153,0.6) !important; }
+  #map .leaflet-container { background: #0a0a0a; }
+  .buddy-marker {
+    background: #2EDB99; border: 2px solid #fff;
+    width: 16px; height: 16px; border-radius: 50%;
+    box-shadow: 0 0 8px rgba(46,219,153,0.6);
+  }
+</style>
+
+<script>
+(function () {
+  const POSTS = {{ posts_json|tojson|safe }};
+
+  // Filter state
+  const filters = new Set();   // 'role:lead', 'festivals:6_plus', etc
+  let searchQuery = '';
+  let userPos = null;          // {lat, lng}
+  let radiusKm = 150;
+
+  // ---- MAP ----
+  const map = L.map('map', {
+    zoomControl: true,
+    worldCopyJump: true,
+  });
+  // Initial view: rough center of Europe (where Urbankiz lives)
+  if (POSTS.length && POSTS.some(p => p.lat && p.lng)) {
+    const withGeo = POSTS.filter(p => p.lat && p.lng);
+    const bounds = L.latLngBounds(withGeo.map(p => [p.lat, p.lng]));
+    map.fitBounds(bounds, {padding: [40, 40], maxZoom: 6});
+  } else {
+    map.setView([48, 10], 4);
+  }
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 19,
+  }).addTo(map);
+
+  const markersLayer = L.layerGroup().addTo(map);
+  const markerByPostId = new Map();
+
+  function buddyIcon() {
+    return L.divIcon({
+      className: '',
+      html: '<div class="buddy-marker"></div>',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+    });
+  }
+
+  function haversineKm(a, b) {
+    const R = 6371;
+    const toRad = x => x * Math.PI / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLng = toRad(b.lng - a.lng);
+    const lat1 = toRad(a.lat); const lat2 = toRad(b.lat);
+    const x = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+
+  function passesFilters(p) {
+    // Filter pills
+    for (const f of filters) {
+      const [cat, val] = f.split(':');
+      if (cat === 'festivals' && p.festivals_per_year !== val) return false;
+      if (cat === 'role' && p.role !== val) return false;
+      if (cat === 'commit' && p.commitment !== val) return false;
+      if (cat === 'lf') {
+        if (val === 'partner' && !p.looking_for_partner) return false;
+        if (val === 'train' && !p.looking_to_train) return false;
+        if (val === 'mkot' && !p.looking_for_mkot_buddy) return false;
+      }
+    }
+    // Search
+    if (searchQuery) {
+      const hay = ((p.name || '') + ' ' + (p.city || '') + ' ' + (p.message || '')).toLowerCase();
+      if (!hay.includes(searchQuery)) return false;
+    }
+    // Near me
+    if (userPos && p.lat && p.lng) {
+      const d = haversineKm(userPos, {lat: p.lat, lng: p.lng});
+      if (d > radiusKm) return false;
+    } else if (userPos && (!p.lat || !p.lng)) {
+      return false;
+    }
+    return true;
+  }
+
+  function render() {
+    markersLayer.clearLayers();
+    markerByPostId.clear();
+    const visible = POSTS.filter(passesFilters);
+
+    visible.forEach(p => {
+      if (p.lat && p.lng) {
+        const m = L.marker([p.lat, p.lng], {icon: buddyIcon()})
+          .addTo(markersLayer)
+          .on('click', () => openContactModal(p));
+        markerByPostId.set(p.id, m);
+      }
+    });
+
+    document.getElementById('visible-count').textContent = visible.length;
+    renderList(visible);
+  }
+
+  function badgeHtml(label, color) {
+    return `<span class="inline-block bg-${color}-900/40 text-${color}-300 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider mr-1">${label}</span>`;
+  }
+  function escapeHtml(s) {
+    return (s || '').replace(/[<>"&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'})[c]);
+  }
+
+  function renderList(visible) {
+    const list = document.getElementById('post-list');
+    if (!visible.length) {
+      list.innerHTML = '<div class="bg-gray-900/40 border border-gray-800 rounded-xl px-4 py-8 text-center text-sm text-gray-500">No committed dancers match your filters yet — but you can be the first.</div>';
+      return;
+    }
+    list.innerHTML = visible.map(p => {
+      const fest = p.festivals_per_year ? badgeHtml('🔥 ' + p.festivals_per_year.replace('_or_','/').replace('_plus','+'), 'brand') : '';
+      const role = p.role ? badgeHtml(p.role, 'purple') : '';
+      const lf = [];
+      if (p.looking_for_partner) lf.push('💃');
+      if (p.looking_to_train) lf.push('🥋');
+      if (p.looking_for_mkot_buddy) lf.push('🟢');
+      const lvl = p.dance_level ? `<span class="text-[10px] text-gray-500 font-mono">· ${p.dance_level}</span>` : '';
+      const commit = p.commitment ? `<span class="text-[10px] text-gray-500 font-mono">· ${p.commitment.replace('_to_','-')}×/wk</span>` : '';
+      return `
+      <div class="bg-gray-900/40 border border-gray-800 hover:border-brand-700/50 rounded-xl p-3 cursor-pointer transition" data-post-id="${p.id}">
+        <div class="flex items-baseline justify-between gap-2">
+          <p class="text-white font-medium text-sm">${escapeHtml(p.name)}</p>
+          <span class="text-xs text-gray-500">${lf.join(' ')}</span>
+        </div>
+        <p class="text-xs text-gray-400 mt-0.5">${escapeHtml(p.city)} ${p.country_code ? '· ' + p.country_code : ''}</p>
+        <div class="mt-2 flex flex-wrap gap-1 items-center">${fest}${role}${lvl}${commit}</div>
+        ${p.message ? `<p class="text-xs text-gray-300 italic mt-2 line-clamp-2">"${escapeHtml(p.message)}"</p>` : ''}
+      </div>`;
+    }).join('');
+
+    list.querySelectorAll('[data-post-id]').forEach(el => {
+      el.addEventListener('click', () => {
+        const pid = parseInt(el.dataset.postId, 10);
+        const post = POSTS.find(x => x.id === pid);
+        if (post) openContactModal(post);
+        const m = markerByPostId.get(pid);
+        if (m) {
+          map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 8));
+          m.openPopup();
+        }
+      });
+    });
+  }
+
+  // ---- FILTERS ----
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const f = btn.dataset.filter;
+      if (filters.has(f)) { filters.delete(f); btn.classList.remove('active'); }
+      else { filters.add(f); btn.classList.add('active'); }
+      render();
+    });
+  });
+  document.getElementById('search-input').addEventListener('input', e => {
+    searchQuery = (e.target.value || '').trim().toLowerCase();
+    render();
+  });
+  document.getElementById('clear-filters').addEventListener('click', () => {
+    filters.clear();
+    document.querySelectorAll('.filter-btn.active').forEach(b => b.classList.remove('active'));
+    document.getElementById('search-input').value = '';
+    searchQuery = '';
+    render();
+  });
+
+  // ---- NEAR ME ----
+  const radiusControl = document.getElementById('radius-control');
+  const nearMeBtn = document.getElementById('near-me-btn');
+  const radiusBtns = document.querySelectorAll('.radius-btn');
+  function setRadius(km) {
+    radiusKm = km;
+    radiusBtns.forEach(b => {
+      if (parseInt(b.dataset.radius, 10) === km) b.classList.add('active');
+      else b.classList.remove('active');
+    });
+    render();
+  }
+  nearMeBtn.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      alert("Your browser doesn't support geolocation.");
+      return;
+    }
+    nearMeBtn.disabled = true;
+    nearMeBtn.textContent = '📍 Locating...';
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        userPos = {lat: pos.coords.latitude, lng: pos.coords.longitude};
+        radiusControl.classList.remove('hidden');
+        radiusControl.classList.add('flex');
+        setRadius(150);
+        map.flyTo([userPos.lat, userPos.lng], 7);
+        nearMeBtn.disabled = false;
+        nearMeBtn.textContent = '📍 Recenter on me';
+      },
+      err => {
+        alert("Could not get your location: " + err.message);
+        nearMeBtn.disabled = false;
+        nearMeBtn.textContent = '📍 See dancers near me';
+      },
+      {timeout: 8000}
+    );
+  });
+  radiusBtns.forEach(b => b.addEventListener('click', () => setRadius(parseInt(b.dataset.radius, 10))));
+  document.getElementById('clear-near-me').addEventListener('click', () => {
+    userPos = null;
+    radiusControl.classList.add('hidden');
+    radiusControl.classList.remove('flex');
+    nearMeBtn.textContent = '📍 See dancers near me';
+    render();
+  });
+
+  // ---- CONTACT MODAL ----
+  const contactModal = document.getElementById('contact-modal');
+  const contactForm = document.getElementById('contact-form');
+  const contactSuccess = document.getElementById('contact-success');
+  const contactError = document.getElementById('contact-error');
+  let activePostId = null;
+
+  function openContactModal(post) {
+    activePostId = post.id;
+    document.getElementById('contact-target').textContent = post.name;
+    document.getElementById('contact-target-city').textContent =
+      (post.city || '') + (post.country_code ? ' · ' + post.country_code : '');
+    contactForm.reset();
+    contactForm.classList.remove('hidden');
+    contactSuccess.classList.add('hidden');
+    contactError.classList.add('hidden');
+    contactModal.classList.remove('hidden');
+    contactModal.classList.add('flex');
+  }
+  function closeContactModal() {
+    contactModal.classList.add('hidden');
+    contactModal.classList.remove('flex');
+    activePostId = null;
+  }
+  document.getElementById('contact-cancel').addEventListener('click', closeContactModal);
+  contactModal.addEventListener('click', e => { if (e.target === contactModal) closeContactModal(); });
+
+  contactForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    contactError.classList.add('hidden');
+    if (!activePostId) return;
+    const fd = new FormData(contactForm);
+    const data = {
+      website: fd.get('website') || '',
+      name: fd.get('name') || '',
+      email: fd.get('email') || '',
+      message: fd.get('message') || '',
+    };
+    const submitBtn = document.getElementById('contact-submit');
+    submitBtn.disabled = true; const orig = submitBtn.textContent;
+    submitBtn.textContent = 'Sending...';
+    try {
+      const r = await fetch('/api/buddies/' + activePostId + '/contact', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(data),
+      });
+      const body = await r.json();
+      if (!body.ok) {
+        contactError.textContent = body.message || 'Something went wrong.';
+        contactError.classList.remove('hidden');
+      } else {
+        contactForm.classList.add('hidden');
+        contactSuccess.classList.remove('hidden');
+      }
+    } catch (err) {
+      contactError.textContent = "We couldn't reach the server.";
+      contactError.classList.remove('hidden');
+    } finally {
+      submitBtn.disabled = false; submitBtn.textContent = orig;
+    }
+  });
+
+  // ---- INITIAL RENDER ----
+  render();
+})();
+</script>
+{% endblock %}

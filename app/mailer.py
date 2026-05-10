@@ -1627,3 +1627,167 @@ def send_invoice_email(circle_payment, invoice_number, pdf_bytes, app_url=None):
         attachment_filename=filename,
         from_name=biz_name,
     )
+
+
+# ─── BUDDY FINDER ─────────────────────────────────────────────────
+
+def send_buddy_contact_relay(post, contactor_name, contactor_email, message_text, app_url=None):
+    """Forward a contact-form message to the BuddyPost publisher.
+
+    The publisher's email is NOT exposed to the contactor; the contactor's
+    email IS the reply-to header so the publisher can reply directly if
+    they want to take the conversation off-platform.
+    """
+    if not post or not contactor_email:
+        return False
+    target_email = (post.contact_email_override or
+                    (post.ambassador.email if post.ambassador else None))
+    if not target_email:
+        logger.warning("buddy contact relay: no target email for post %s", post.id)
+        return False
+
+    if app_url is None:
+        from flask import current_app
+        try:
+            app_url = current_app.config.get("APP_URL", "")
+        except Exception:
+            app_url = ""
+
+    publisher_first = "there"
+    if post.ambassador and post.ambassador.name:
+        parts = post.ambassador.name.strip().split()
+        if parts:
+            publisher_first = parts[0]
+
+    safe_msg = (message_text or "").replace("<", "&lt;").replace(">", "&gt;")
+    safe_name = (contactor_name or "").replace("<", "&lt;").replace(">", "&gt;")
+    safe_city = (post.city or "").replace("<", "&lt;").replace(">", "&gt;")
+
+    content = f"""
+<table cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;">
+<tr><td style="background-color:#0A0A0A;border:1px solid #2EDB99;border-radius:999px;padding:6px 14px;">
+    <span style="color:#2EDB99;font-family:'Share Tech Mono','Courier New',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;">🤝 NEW BUDDY MESSAGE</span>
+</td></tr>
+</table>
+
+<h1 style="color:#FFFFFF;font-size:22px;line-height:1.25;margin:0 0 12px 0;">
+    Hi {publisher_first}, someone wants to train with you.
+</h1>
+
+<p style="color:#9CA3AF;font-size:15px;line-height:1.7;margin:0 0 20px 0;">
+    A dancer found your profile on the MetaKizz Buddy Map (you in {safe_city}) and sent you a message:
+</p>
+
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0A0F0A;border-left:3px solid #2EDB99;border-radius:6px;margin:0 0 24px 0;">
+<tr><td style="padding:18px 20px;">
+    <p style="color:#9CA3AF;font-size:11px;text-transform:uppercase;letter-spacing:2px;margin:0 0 8px 0;">From {safe_name}</p>
+    <p style="color:#FFFFFF;font-size:15px;line-height:1.6;margin:0;font-style:italic;">"{safe_msg}"</p>
+</td></tr>
+</table>
+
+<p style="color:#E5E7EB;font-size:14px;line-height:1.7;margin:0 0 12px 0;">
+    Reply directly to this email to talk to {safe_name}. Your reply goes to <strong style="color:#FFFFFF;">{contactor_email}</strong>.
+</p>
+<p style="color:#9CA3AF;font-size:13px;line-height:1.6;margin:0 0 24px 0;">
+    Your email stays hidden from them until you write back.
+</p>
+
+<p style="color:#6B7280;font-size:12px;line-height:1.6;margin:24px 0 0 0;">
+    — The MetaKizz Buddy Map<br>
+    <span style="color:#9CA3AF;">If you ever want to take your profile down, head to your dashboard.</span>
+</p>
+"""
+
+    subject = f"🤝 Someone wants to train with you in {post.city}"
+
+    # Use the regular _send but inject a Reply-To header so the publisher's
+    # reply lands directly in the contactor's inbox.
+    api_key = os.getenv("RESEND_API_KEY")
+    default_from = os.getenv("EMAIL_FROM", "MetaKizz <noreply@metakizzproject.com>")
+    addr = default_from.split("<", 1)[-1].rstrip(">").strip() if "<" in default_from else default_from
+    email_from = f"MetaKizz Buddy Map <{addr}>"
+    if not api_key:
+        logger.warning("RESEND_API_KEY not set, skipping buddy relay")
+        return False
+
+    payload = {
+        "from": email_from,
+        "to": [target_email],
+        "subject": subject,
+        "html": _wrap(content, app_url),
+        "reply_to": [contactor_email],
+    }
+    try:
+        resp = http_requests.post(
+            RESEND_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=10,
+        )
+        if resp.status_code < 300:
+            logger.info("buddy contact relay sent: post=%s to=%s from_addr=%s",
+                        post.id, target_email, contactor_email)
+            return True
+        logger.error("buddy contact relay failed (%s): %s", resp.status_code, resp.text[:300])
+        return False
+    except Exception:
+        logger.exception("buddy contact relay exception")
+        return False
+
+
+def send_buddy_renewal_reminder(post, app_url=None):
+    """Send the 7-day-before-expiration nudge with a magic re-publish link.
+
+    The link points to /buddies/<dashboard_code>/edit — when the
+    publisher hits Save the post is renewed automatically.
+    """
+    if not post or not post.ambassador or not post.ambassador.email:
+        return False
+    if app_url is None:
+        from flask import current_app
+        try:
+            app_url = current_app.config.get("APP_URL", "")
+        except Exception:
+            app_url = ""
+
+    first = "there"
+    if post.ambassador.name:
+        parts = post.ambassador.name.strip().split()
+        if parts:
+            first = parts[0]
+
+    edit_url = f"{(app_url or '').rstrip('/')}/buddies/{post.ambassador.dashboard_code}/edit"
+    if post.expires_at:
+        exp = post.expires_at
+        if exp.tzinfo is not None:
+            exp = exp.replace(tzinfo=None)
+        days_left = max(1, (exp - datetime.utcnow()).days)
+    else:
+        days_left = 7
+
+    content = f"""
+<h1 style="color:#FFFFFF;font-size:22px;line-height:1.25;margin:0 0 12px 0;">
+    Hi {first}, your buddy profile expires in {days_left} days.
+</h1>
+
+<p style="color:#9CA3AF;font-size:15px;line-height:1.7;margin:0 0 18px 0;">
+    Still looking for someone to train with? Renew your post on the
+    Metakizz Buddy Map in 1 click — same info, fresh 60 days.
+</p>
+
+{_button("Renew my profile →", edit_url)}
+
+<p style="color:#9CA3AF;font-size:13px;line-height:1.6;margin:24px 0 0 0;">
+    Already found someone? Cool — just ignore this and the post will
+    expire on its own.
+</p>
+
+<p style="color:#6B7280;font-size:12px;margin:18px 0 0 0;">
+    — The MetaKizz Buddy Map
+</p>
+"""
+    return _send(
+        post.ambassador.email,
+        "Your buddy profile expires soon — renew in 1 click",
+        _wrap(content, app_url),
+    )
