@@ -46,6 +46,17 @@
          {% if not pending_invoices %}disabled{% endif %}>
         📄 Send invoices <span id="kpi-pending-invoices" class="ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] {{ 'bg-yellow-500 text-black' if pending_invoices else 'bg-gray-700 text-gray-400' }} font-bold">{{ pending_invoices }}</span>
       </button>
+      <button id="send-no-phone-emails-btn" type="button"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-yellow-900/40 hover:bg-yellow-800/60 border border-yellow-700/50 text-yellow-200 font-display font-bold uppercase tracking-wider rounded-lg text-xs transition disabled:opacity-50 disabled:cursor-wait"
+         title="Email every paid buyer with no phone on file: 'I tried to reach you on WhatsApp — here are 3 ways to ping me back.'"
+         {% if not pending_no_phone_emails %}disabled{% endif %}>
+        📞 Sin teléfono <span id="kpi-pending-no-phone" class="ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] {{ 'bg-yellow-500 text-black' if pending_no_phone_emails else 'bg-gray-700 text-gray-400' }} font-bold">{{ pending_no_phone_emails }}</span>
+      </button>
+      <a href="{{ url_for('admin.preview_no_phone_email') }}" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-yellow-900/20 hover:bg-yellow-800/40 border border-yellow-700/30 text-yellow-300 font-display font-bold uppercase tracking-wider rounded-lg text-xs transition"
+         title="Open the no-phone outreach email in a new tab to preview the layout before sending.">
+        👁 Ver email sin-tel ↗
+      </a>
       <a href="{{ url_for('admin.raffle') }}" target="_blank" rel="noopener"
          class="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-400 hover:bg-brand-300 text-black font-display font-bold uppercase tracking-wider rounded-lg text-xs transition">
         🎰 Open raffle stage ↗
@@ -296,12 +307,50 @@
     </div>
   </div>
 
+  <!-- Sticky bulk-actions bar — appears when ≥1 row is selected -->
+  <div id="bulk-bar"
+       class="hidden sticky top-0 z-30 mb-3 px-4 py-3 rounded-xl bg-black/90 border border-brand-700/60 backdrop-blur-md shadow-2xl shadow-brand-900/40 flex flex-wrap items-center gap-2">
+    <span class="text-xs font-mono uppercase tracking-widest text-brand-400 mr-2">
+      <span id="bulk-count">0</span> seleccionados
+    </span>
+    <button id="bulk-clear-btn" type="button"
+            class="text-[11px] font-mono uppercase tracking-wider px-2 py-1 rounded-md bg-gray-800/60 hover:bg-gray-700 text-gray-300 border border-gray-700 transition">
+      ✕ Limpiar
+    </button>
+    <span class="text-gray-700 mx-1">·</span>
+    <button id="bulk-send-no-phone-btn" type="button"
+            class="text-[11px] font-mono font-bold uppercase tracking-wider px-3 py-1.5 rounded-md bg-yellow-900/40 hover:bg-yellow-800/60 text-yellow-200 border border-yellow-700/50 transition disabled:opacity-40">
+      📧 Email sin-tel
+    </button>
+    <button id="bulk-send-refund-email-btn" type="button"
+            class="text-[11px] font-mono font-bold uppercase tracking-wider px-3 py-1.5 rounded-md bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 border border-blue-700/50 transition disabled:opacity-40">
+      💸 Email reembolso
+    </button>
+    <button id="bulk-mark-refunded-btn" type="button"
+            class="text-[11px] font-mono font-bold uppercase tracking-wider px-3 py-1.5 rounded-md bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 border border-emerald-700/50 transition disabled:opacity-40">
+      ✓ Marcar reembolsado
+    </button>
+    <button id="bulk-send-invoice-btn" type="button"
+            class="text-[11px] font-mono font-bold uppercase tracking-wider px-3 py-1.5 rounded-md bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 border border-emerald-700/50 transition disabled:opacity-40">
+      📄 Enviar factura
+    </button>
+    <button id="bulk-delete-btn" type="button"
+            class="text-[11px] font-mono font-bold uppercase tracking-wider px-3 py-1.5 rounded-md bg-red-900/40 hover:bg-red-800/60 text-red-200 border border-red-700/50 transition disabled:opacity-40">
+      ✕ Borrar
+    </button>
+  </div>
+
   <!-- Reservations table -->
   <div class="bg-gray-900/40 border border-gray-800 rounded-2xl overflow-hidden">
     <div class="overflow-x-auto">
       <table class="w-full text-sm" id="rsv-table">
         <thead class="bg-black/60 border-b border-gray-800">
           <tr class="text-[10px] uppercase tracking-widest text-gray-500 font-mono">
+            <th class="text-left px-3 py-3 w-8">
+              <input type="checkbox" id="rsv-select-all"
+                     class="w-4 h-4 accent-brand-400 cursor-pointer"
+                     title="Select / deselect all visible rows">
+            </th>
             <th class="text-left px-4 py-3">Paid</th>
             <th class="text-left px-4 py-3">Form</th>
             <th class="text-left px-4 py-3">Name</th>
@@ -342,7 +391,11 @@
               data-invoice-sent="{{ '1' if (cp and cp.invoice_sent_at) else '0' }}"
               data-top50="{{ '1' if is_top_50 else '0' }}"
               data-search="{{ ((r.name or '') ~ ' ' ~ (r.surname or '') ~ ' ' ~ (r.email or ''))|lower }}"
+              data-cp-id="{{ cp.id if cp else '' }}"
               class="hover:bg-gray-800/30">
+            <td class="px-3 py-3">
+              <input type="checkbox" class="rsv-select w-4 h-4 accent-brand-400 cursor-pointer" data-rid="{{ r.id }}">
+            </td>
             <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">
               {% if r.paid_at %}{{ r.paid_at.strftime('%H:%M:%S') }}{% else %}—{% endif %}
             </td>
@@ -515,6 +568,20 @@
                    title="Open WhatsApp with intro for {{ r.ambassador.phone_number }}">
                   💬 WA
                 </a>
+              {% elif r.paid_at %}
+                {% if r.no_phone_email_sent_at %}
+                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-yellow-900/30 border border-yellow-700/40 text-yellow-300 text-[10px] font-mono uppercase tracking-wider whitespace-nowrap mr-1"
+                        title="No-phone email sent {{ r.no_phone_email_sent_at.strftime('%Y-%m-%d %H:%M') }}">
+                    ✓ no-tel email
+                  </span>
+                {% else %}
+                  <button type="button"
+                          class="no-phone-email-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-yellow-900/40 hover:bg-yellow-800/60 border border-yellow-700/50 text-yellow-200 hover:text-white text-[10px] font-mono uppercase tracking-wider whitespace-nowrap mr-1 cursor-pointer"
+                          data-rid="{{ r.id }}"
+                          title="No phone on file — click to email the buyer asking them to ping me back via WhatsApp/SMS/email.">
+                    📧 sin tel
+                  </button>
+                {% endif %}
               {% else %}
                 <span class="inline-flex items-center justify-center w-7 h-7 text-gray-700 text-xs cursor-not-allowed mr-1"
                       title="No phone on file (no ambassador match or missing number)">·</span>
@@ -531,7 +598,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="18" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
+          <tr><td colspan="19" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
           {% endfor %}
 
           {# Orphan buyers: paid the full plan in Circle but never went through reservation. #}
@@ -546,7 +613,13 @@
               data-invoice-sent="{{ '1' if cp.invoice_sent_at else '0' }}"
               data-top50="{{ '1' if is_top_50 else '0' }}"
               data-search="{{ ((cp.customer_name or '') ~ ' ' ~ (cp.email or ''))|lower }}"
+              data-cp-id="{{ cp.id }}"
+              data-orphan="1"
               class="hover:bg-purple-900/20 bg-purple-950/10 border-l-2 border-purple-700/50">
+            <td class="px-3 py-3">
+              <input type="checkbox" class="rsv-select-orphan w-4 h-4 accent-purple-400 cursor-pointer" data-cpid="{{ cp.id }}"
+                     title="Orphan payment — only invoice-send / delete bulk actions apply">
+            </td>
             <td class="px-4 py-3 text-xs text-gray-600 font-mono whitespace-nowrap">—</td>
             <td class="px-4 py-3 text-xs text-gray-600 font-mono whitespace-nowrap">—</td>
             <td class="px-4 py-3 text-white">
@@ -726,6 +799,7 @@
     Array.prototype.forEach.call(tbody.querySelectorAll('tr[data-row-id]'), function(tr) {
       tr.style.display = rowMatchesFilter(tr) ? '' : 'none';
     });
+    if (typeof updateBulkBar === 'function') updateBulkBar();
   }
 
   document.querySelectorAll('.filter-btn').forEach(function(btn) {
@@ -839,6 +913,210 @@
     return '<span class="text-gray-600 text-xs">—</span>';
   }
 
+  // ── Bulk selection state ────────────────────────────────────────
+  // selectedRowIds: reservation IDs ticked. selectedOrphanCpIds: orphan
+  // CirclePayment IDs ticked (only invoice/delete actions apply to them).
+  // Lives outside the row-render so selection survives the poll() refresh.
+  const selectedRowIds = new Set();
+  const selectedOrphanCpIds = new Set();
+
+  function updateBulkBar() {
+    const total = selectedRowIds.size + selectedOrphanCpIds.size;
+    const bar = document.getElementById('bulk-bar');
+    const count = document.getElementById('bulk-count');
+    if (count) count.textContent = total;
+    if (bar) bar.classList.toggle('hidden', total === 0);
+
+    // Disable actions that don't apply to the current selection mix.
+    const hasReservations = selectedRowIds.size > 0;
+    const hasOrphans = selectedOrphanCpIds.size > 0;
+    const onlyOrphans = hasOrphans && !hasReservations;
+    const setDisabled = function(id, disabled) {
+      const el = document.getElementById(id);
+      if (el) el.disabled = disabled;
+    };
+    setDisabled('bulk-send-no-phone-btn', onlyOrphans);
+    setDisabled('bulk-send-refund-email-btn', onlyOrphans);
+    setDisabled('bulk-mark-refunded-btn', onlyOrphans);
+    // Invoice action: any selection (orphans have CirclePayments, reservations may too).
+    setDisabled('bulk-send-invoice-btn', total === 0);
+    setDisabled('bulk-delete-btn', !hasReservations && !hasOrphans);
+
+    // Keep the master "select all" indeterminate state in sync.
+    const master = document.getElementById('rsv-select-all');
+    if (master) {
+      const visible = document.querySelectorAll('#rsv-body tr[data-row-id]:not([style*="display: none"])');
+      const visibleSelected = Array.from(visible).filter(tr => {
+        const cb = tr.querySelector('.rsv-select, .rsv-select-orphan');
+        return cb && cb.checked;
+      }).length;
+      master.checked = visible.length > 0 && visibleSelected === visible.length;
+      master.indeterminate = visibleSelected > 0 && visibleSelected < visible.length;
+    }
+  }
+
+  function rsvCpIdForRow(tr) {
+    const v = tr.dataset.cpId;
+    return v ? parseInt(v, 10) : null;
+  }
+
+  // Collect CirclePayment IDs from currently-selected reservation rows
+  // (for bulk-send-invoice, which is keyed by cp.id, not reservation.id).
+  function collectSelectedCpIds() {
+    const cpIds = new Set();
+    document.querySelectorAll('#rsv-body tr[data-row-id]').forEach(tr => {
+      const cb = tr.querySelector('.rsv-select');
+      if (cb && cb.checked) {
+        const cpId = rsvCpIdForRow(tr);
+        if (cpId) cpIds.add(cpId);
+      }
+    });
+    selectedOrphanCpIds.forEach(id => cpIds.add(id));
+    return Array.from(cpIds);
+  }
+
+  // Delegated checkbox toggle — survives table re-renders.
+  document.body.addEventListener('change', function(ev) {
+    const cb = ev.target;
+    if (cb && cb.classList.contains('rsv-select')) {
+      const rid = parseInt(cb.dataset.rid, 10);
+      if (rid) {
+        if (cb.checked) selectedRowIds.add(rid);
+        else selectedRowIds.delete(rid);
+      }
+      updateBulkBar();
+    } else if (cb && cb.classList.contains('rsv-select-orphan')) {
+      const cpid = parseInt(cb.dataset.cpid, 10);
+      if (cpid) {
+        if (cb.checked) selectedOrphanCpIds.add(cpid);
+        else selectedOrphanCpIds.delete(cpid);
+      }
+      updateBulkBar();
+    } else if (cb && cb.id === 'rsv-select-all') {
+      const checked = cb.checked;
+      document.querySelectorAll('#rsv-body tr[data-row-id]').forEach(tr => {
+        if (tr.style.display === 'none') return;  // skip filtered-out rows
+        const inner = tr.querySelector('.rsv-select, .rsv-select-orphan');
+        if (!inner) return;
+        inner.checked = checked;
+        if (inner.classList.contains('rsv-select')) {
+          const rid = parseInt(inner.dataset.rid, 10);
+          if (rid) { if (checked) selectedRowIds.add(rid); else selectedRowIds.delete(rid); }
+        } else {
+          const cpid = parseInt(inner.dataset.cpid, 10);
+          if (cpid) { if (checked) selectedOrphanCpIds.add(cpid); else selectedOrphanCpIds.delete(cpid); }
+        }
+      });
+      updateBulkBar();
+    }
+  });
+
+  // Clear button
+  document.getElementById('bulk-clear-btn')?.addEventListener('click', function() {
+    selectedRowIds.clear();
+    selectedOrphanCpIds.clear();
+    document.querySelectorAll('.rsv-select, .rsv-select-orphan').forEach(cb => { cb.checked = false; });
+    const m = document.getElementById('rsv-select-all');
+    if (m) { m.checked = false; m.indeterminate = false; }
+    updateBulkBar();
+  });
+
+  async function runBulkPost(url, body, confirmMsg) {
+    if (confirmMsg && !confirm(confirmMsg)) return null;
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (!data.ok) { alert('Failed: ' + (data.error || 'unknown')); return null; }
+      return data;
+    } catch (e) {
+      alert('Request failed: ' + e);
+      return null;
+    }
+  }
+
+  document.getElementById('bulk-send-no-phone-btn')?.addEventListener('click', async function() {
+    const ids = Array.from(selectedRowIds);
+    if (!ids.length) return alert('No has seleccionado ninguna reserva.');
+    const data = await runBulkPost(
+      '/admin/reservations/bulk-send-no-phone-email', { ids },
+      'Enviar email "intenté contactarte por WhatsApp" a ' + ids.length + ' reserva(s) seleccionada(s)?'
+    );
+    if (data) {
+      alert('Sent: ' + data.sent + ' · Failed: ' + data.failed + ' · Skipped (already sent): ' + (data.skipped || 0));
+      selectedRowIds.clear(); updateBulkBar(); await poll();
+    }
+  });
+
+  document.getElementById('bulk-send-refund-email-btn')?.addEventListener('click', async function() {
+    const ids = Array.from(selectedRowIds);
+    if (!ids.length) return alert('No has seleccionado ninguna reserva.');
+    const data = await runBulkPost(
+      '/admin/reservations/bulk-send-refund-email', { ids },
+      'Enviar email "tu depósito está en camino" a ' + ids.length + ' reserva(s) seleccionada(s)?\n\nSólo se envía a quienes están marcados como reembolsados.'
+    );
+    if (data) {
+      alert('Sent: ' + data.sent + ' · Failed: ' + data.failed + ' · Skipped (not refunded or ya enviado): ' + (data.skipped || 0));
+      selectedRowIds.clear(); updateBulkBar(); await poll();
+    }
+  });
+
+  document.getElementById('bulk-mark-refunded-btn')?.addEventListener('click', async function() {
+    const ids = Array.from(selectedRowIds);
+    if (!ids.length) return alert('No has seleccionado ninguna reserva.');
+    const alsoEmail = confirm('Marcar ' + ids.length + ' reserva(s) como reembolsadas.\n\n¿Enviar también el email de confirmación? (Aceptar = sí · Cancelar = sólo marcar)');
+    const data = await runBulkPost(
+      '/admin/reservations/bulk-mark-refunded', { ids, send_email: alsoEmail ? 1 : 0 }, null
+    );
+    if (data) {
+      alert('Marked: ' + data.marked + ' · Skipped: ' + data.skipped + (alsoEmail ? '\nEmail sent: ' + data.email_sent + ' · failed: ' + data.email_failed : ''));
+      selectedRowIds.clear(); updateBulkBar(); await poll();
+    }
+  });
+
+  document.getElementById('bulk-send-invoice-btn')?.addEventListener('click', async function() {
+    const cpIds = collectSelectedCpIds();
+    if (!cpIds.length) return alert('Las reservas seleccionadas no tienen pago completo (Circle) asociado, no se puede facturar.');
+    const data = await runBulkPost(
+      '/admin/circle-payments/bulk-send-invoice', { ids: cpIds },
+      'Generar + enviar PDF de factura a ' + cpIds.length + ' pago(s) seleccionado(s)?\n\nSe omiten los que ya tienen factura enviada.'
+    );
+    if (data) {
+      alert('Sent: ' + data.sent + ' · Failed: ' + data.failed + ' · Skipped (ya enviada): ' + (data.skipped || 0));
+      selectedRowIds.clear(); selectedOrphanCpIds.clear(); updateBulkBar(); await poll();
+    }
+  });
+
+  document.getElementById('bulk-delete-btn')?.addEventListener('click', async function() {
+    const ids = Array.from(selectedRowIds);
+    const cpIds = Array.from(selectedOrphanCpIds);
+    if (!ids.length && !cpIds.length) return alert('No has seleccionado nada.');
+    const total = ids.length + cpIds.length;
+    if (!confirm('Borrar ' + total + ' fila(s) seleccionada(s)?\n\nEsto borra las reservas + sus CirclePayments asociados por email. NO toca Stripe. NO se puede deshacer.')) return;
+
+    let totalReservations = 0, totalCps = 0;
+    if (ids.length) {
+      const data = await runBulkPost('/admin/reservations/bulk-delete', { ids }, null);
+      if (data) { totalReservations += data.deleted_reservations; totalCps += data.deleted_circle_payments; }
+    }
+    // Orphans use the existing per-row delete (no bulk endpoint — only used
+    // for direct buyers, typically a handful).
+    for (const cpid of cpIds) {
+      try {
+        const r = await fetch('/admin/circle-payments/' + cpid + '/delete', {
+          method: 'POST', headers: { 'Accept': 'application/json' },
+        });
+        const d = await r.json();
+        if (d.ok) totalCps += 1;
+      } catch (e) { /* keep going */ }
+    }
+    alert('Borrados: ' + totalReservations + ' reservas + ' + totalCps + ' Circle payments.');
+    selectedRowIds.clear(); selectedOrphanCpIds.clear(); updateBulkBar(); await poll();
+  });
+
   // Skip the table re-render while the operator is mid-edit — otherwise
   // typing in a note textarea or holding the contact toggle would get
   // wiped every poll cycle.
@@ -879,6 +1157,19 @@
                       + ' font-bold';
         }
         if (b) b.disabled = !data.pending_invoices;
+      }
+
+      // Pending no-phone outreach emails counter + button state
+      if (data.pending_no_phone_emails !== undefined) {
+        const c = document.getElementById('kpi-pending-no-phone');
+        const b = document.getElementById('send-no-phone-emails-btn');
+        if (c) {
+          c.textContent = data.pending_no_phone_emails;
+          c.className = 'ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] '
+                      + (data.pending_no_phone_emails > 0 ? 'bg-yellow-500 text-black' : 'bg-gray-700 text-gray-400')
+                      + ' font-bold';
+        }
+        if (b) b.disabled = !data.pending_no_phone_emails;
       }
 
       // Pending refund emails counter + button enabled state
@@ -965,7 +1256,9 @@
           + 'data-invoice-sent="' + (invoiceSent ? '1' : '0') + '" '
           + 'data-top50="' + (r.is_top_50 ? '1' : '0') + '" '
           + 'data-search="' + escapeHtml(search) + '" '
+          + 'data-cp-id="' + (cp && cp.id ? cp.id : '') + '" '
           + 'class="hover:bg-gray-800/30">'
+          + '<td class="px-3 py-3"><input type="checkbox" class="rsv-select w-4 h-4 accent-brand-400 cursor-pointer" data-rid="' + r.id + '"' + (selectedRowIds.has(r.id) ? ' checked' : '') + '></td>'
           + '<td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">' + (r.paid_at ? fmtTime(r.paid_at) : '—') + '</td>'
           + '<td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">' + (r.form_completed_at ? fmtTime(r.form_completed_at) : '<span class="text-yellow-500">—</span>') + '</td>'
           + '<td class="px-4 py-3 text-white"><a href="/admin/buyer/' + encodeURIComponent(r.email) + '" class="hover:text-brand-400 transition" title="Open buyer profile">' + escapeHtml(r.name) + ' ' + escapeHtml(r.surname) + '</a></td>'
@@ -986,7 +1279,13 @@
           + '<td class="px-4 py-3 text-right whitespace-nowrap">'
             + (r.phone
                 ? '<a href="https://wa.me/' + encodeURIComponent(r.phone.replace(/^\+/, '').replace(/\s/g, '')) + '?text=' + encodeURIComponent('Hey ' + (r.name || 'there') + ', how are you doing today?') + '" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600/20 hover:bg-emerald-500/40 border border-emerald-700/40 text-emerald-300 hover:text-white transition mr-1 text-xs font-mono uppercase tracking-wider whitespace-nowrap" title="Open WhatsApp with intro for ' + escapeHtml(r.phone) + '">💬 WA</a>'
-                : '<span class="inline-flex items-center justify-center w-7 h-7 text-gray-700 text-xs cursor-not-allowed mr-1" title="No phone on file">·</span>'
+                : (r.paid_at
+                    ? (r.no_phone_email_sent_at
+                        ? '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-yellow-900/30 border border-yellow-700/40 text-yellow-300 text-[10px] font-mono uppercase tracking-wider whitespace-nowrap mr-1" title="No-phone email sent ' + escapeHtml(new Date(r.no_phone_email_sent_at).toLocaleString()) + '">✓ no-tel email</span>'
+                        : '<button type="button" class="no-phone-email-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-yellow-900/40 hover:bg-yellow-800/60 border border-yellow-700/50 text-yellow-200 hover:text-white text-[10px] font-mono uppercase tracking-wider whitespace-nowrap mr-1 cursor-pointer" data-rid="' + r.id + '" title="No phone on file — click to email the buyer.">📧 sin tel</button>'
+                      )
+                    : '<span class="inline-flex items-center justify-center w-7 h-7 text-gray-700 text-xs cursor-not-allowed mr-1" title="No phone on file">·</span>'
+                  )
               )
             + '<form method="POST" action="/admin/reservations/' + r.id + '/delete" style="display:inline;" '
               + 'onsubmit="return confirm(\'Delete reservation for ' + escapeHtml(r.email).replace(/\\u0027/g, "\\\\u0027") + ' AND any Circle payments for this email? This cannot be undone.\');">'
@@ -1008,7 +1307,10 @@
           + 'data-invoice-sent="' + (cp.invoice_sent_at ? '1' : '0') + '" '
           + 'data-top50="' + (cp.is_top_50 ? '1' : '0') + '" '
           + 'data-search="' + escapeHtml(search) + '" '
+          + 'data-cp-id="' + cp.id + '" '
+          + 'data-orphan="1" '
           + 'class="hover:bg-purple-900/20 bg-purple-950/10 border-l-2 border-purple-700/50">'
+          + '<td class="px-3 py-3"><input type="checkbox" class="rsv-select-orphan w-4 h-4 accent-purple-400 cursor-pointer" data-cpid="' + cp.id + '"' + (selectedOrphanCpIds.has(cp.id) ? ' checked' : '') + ' title="Orphan payment — only invoice-send / delete bulk actions apply"></td>'
           + '<td class="px-4 py-3 text-xs text-gray-600 font-mono whitespace-nowrap">—</td>'
           + '<td class="px-4 py-3 text-xs text-gray-600 font-mono whitespace-nowrap">—</td>'
           + '<td class="px-4 py-3 text-white"><a href="/admin/buyer/' + encodeURIComponent(cp.email) + '" class="hover:text-brand-400 transition">' + escapeHtml(cp.name || '(no name)') + '</a></td>'
@@ -1036,12 +1338,15 @@
           + '</tr>';
       }).join('');
 
-      tbody.innerHTML = (html + orphanHtml) || '<tr><td colspan="18" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>';
+      tbody.innerHTML = (html + orphanHtml) || '<tr><td colspan="19" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>';
 
       // Re-seed savedValue on the freshly-rendered textareas so blur-detect works.
       tbody.querySelectorAll('.admin-note-input').forEach(ta => {
         ta.dataset.savedValue = ta.value;
       });
+
+      // Refresh the bulk-bar in case the master/indeterminate state changed.
+      updateBulkBar();
 
       // Update revenue KPIs live
       if (data.revenue) {
@@ -1338,6 +1643,68 @@
       } finally {
         refundEmailsBtn.disabled = false;
         refundEmailsBtn.innerHTML = orig;
+      }
+    });
+  }
+
+  // Per-row no-phone outreach button — sends one email to a buyer
+  // whose phone we don't have on file.
+  document.body.addEventListener('click', async function(ev) {
+    const btn = ev.target.closest('.no-phone-email-btn');
+    if (!btn) return;
+    ev.preventDefault();
+    const rid = btn.dataset.rid;
+    if (!rid) return;
+    if (!confirm('Enviar email "intenté contactar por WhatsApp pero no tengo tu número" a este cliente?')) return;
+    btn.disabled = true;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '⏳';
+    try {
+      const r = await fetch('/admin/reservations/' + rid + '/send-no-phone-email', { method: 'POST' });
+      const data = await r.json();
+      if (!data.ok) {
+        alert('Failed: ' + (data.error || 'unknown'));
+      } else if (data.sent) {
+        await poll();
+      } else {
+        alert('No se envió. Razón: ' + (data.reason || 'unknown') + (data.sent_at ? ' (' + data.sent_at + ')' : ''));
+      }
+    } catch (e) {
+      alert('Request failed: ' + e);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  });
+
+  // No-phone email batch — sends the outreach email to every paid buyer
+  // who has no phone on file and hasn't been notified yet.
+  const noPhoneBtn = document.getElementById('send-no-phone-emails-btn');
+  if (noPhoneBtn) {
+    noPhoneBtn.addEventListener('click', async function() {
+      const count = parseInt(document.getElementById('kpi-pending-no-phone').textContent || '0', 10);
+      if (!count) {
+        alert('No hay emails pendientes — todos los clientes sin teléfono ya recibieron el email.');
+        return;
+      }
+      if (!confirm('Enviar email "intenté contactarte por WhatsApp" a ' + count + ' cliente(s) que pagaron pero no tienen teléfono guardado?\n\nNo se reenvía a quien ya lo recibió.')) return;
+      noPhoneBtn.disabled = true;
+      const orig = noPhoneBtn.innerHTML;
+      noPhoneBtn.innerHTML = '⏳ Enviando...';
+      try {
+        const r = await fetch('/admin/reservations/send-pending-no-phone-emails', { method: 'POST' });
+        const data = await r.json();
+        if (!data.ok) {
+          alert('Failed: ' + (data.error || 'unknown'));
+        } else {
+          alert('Candidates: ' + data.candidates + '\nSent: ' + data.sent + '\nFailed: ' + data.failed);
+          await poll();
+        }
+      } catch (e) {
+        alert('Request failed: ' + e);
+      } finally {
+        noPhoneBtn.disabled = false;
+        noPhoneBtn.innerHTML = orig;
       }
     });
   }

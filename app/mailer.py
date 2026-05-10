@@ -1534,6 +1534,135 @@ def send_refund_confirmation_email(reservation, app_url=None):
     )
 
 
+# ─── NO-PHONE OUTREACH ────────────────────────────────────────────
+
+def build_no_phone_outreach_html(reservation, app_url=None):
+    """Build the HTML body for the "I tried WhatsApp but couldn't reach you"
+    email. Sent to buyers whose deposit is paid but who don't have a phone
+    on file (so we can't WhatsApp them to prep their plan).
+
+    Three CTAs: WhatsApp, SMS, Email.
+    """
+    if app_url is None:
+        from flask import current_app
+        try:
+            app_url = current_app.config.get("APP_URL", "")
+        except Exception:
+            app_url = ""
+
+    first_name = "there"
+    if getattr(reservation, "name", None) and reservation.name.strip():
+        first_name = reservation.name.strip().split()[0]
+    elif getattr(reservation, "ambassador", None) and getattr(reservation.ambassador, "name", None):
+        first_name = reservation.ambassador.name.strip().split()[0]
+
+    # Álvaro's contact channels — env-overridable so this can move later
+    # without a redeploy.
+    contact_phone_e164 = os.getenv("CONTACT_PHONE_E164", "+34623960962").strip()
+    contact_phone_display = os.getenv("CONTACT_PHONE_DISPLAY", "+34 623 960 962").strip()
+    contact_email = os.getenv("INVOICE_BUSINESS_EMAIL", "info@metakizzproject.com").strip()
+
+    digits_only = "".join(ch for ch in contact_phone_e164 if ch.isdigit())
+    whatsapp_url = f"https://wa.me/{digits_only}"
+    sms_url = f"sms:{contact_phone_e164}"
+    mailto_url = f"mailto:{contact_email}"
+
+    content = f"""
+<!-- Status badge -->
+<table cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;">
+<tr><td style="background-color:#1F1A0A;border:1px solid #7a5a1a;border-radius:999px;padding:6px 14px;">
+    <span style="color:#FBBF24;font-family:'Share Tech Mono','Courier New',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;">● TRYING TO REACH YOU</span>
+</td></tr>
+</table>
+
+<h1 style="color:#FFFFFF;font-size:24px;line-height:1.3;margin:0 0 10px 0;">
+    Hey {first_name}, I'm trying to reach you.
+</h1>
+
+<p style="color:#9CA3AF;font-size:15px;line-height:1.7;margin:0 0 18px 0;">
+    I wanted to call you on WhatsApp to walk through your MKOT 3.0 plan
+    and answer any questions — but I don't have your number on file.
+    Either it didn't get saved, or it wasn't filled in on the form.
+</p>
+
+<!-- Reassurance card -->
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0A0F0A;border:1px solid #1F2937;border-radius:14px;margin:0 0 24px 0;">
+<tr><td style="padding:18px 20px;">
+    <p style="color:#2EDB99;font-family:'Share Tech Mono','Courier New',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:0 0 8px 0;">▌ Your reservation</p>
+    <p style="color:#FFFFFF;font-size:15px;line-height:1.5;margin:0;">
+        Your <strong>€100 deposit is safe</strong> and locked in — nothing to worry about.
+        I just want to make sure we get you set up properly.
+    </p>
+</td></tr>
+</table>
+
+<p style="color:#E5E7EB;font-size:15px;line-height:1.7;margin:0 0 18px 0;">
+    Pick whichever way is easiest for you and ping me — I'll take it from there.
+</p>
+
+<!-- Three CTAs -->
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px 0;">
+<tr><td style="padding:0 0 10px 0;">
+    <table cellpadding="0" cellspacing="0" width="100%">
+    <tr><td style="background-color:#25D366;border-radius:10px;text-align:center;">
+        <a href="{whatsapp_url}" style="display:block;padding:14px 22px;color:#FFFFFF;text-decoration:none;font-weight:bold;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            💬&nbsp;&nbsp;WhatsApp me &nbsp;·&nbsp; {contact_phone_display}
+        </a>
+    </td></tr>
+    </table>
+</td></tr>
+<tr><td style="padding:0 0 10px 0;">
+    <table cellpadding="0" cellspacing="0" width="100%">
+    <tr><td style="background-color:#3B82F6;border-radius:10px;text-align:center;">
+        <a href="{sms_url}" style="display:block;padding:14px 22px;color:#FFFFFF;text-decoration:none;font-weight:bold;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            📱&nbsp;&nbsp;SMS me &nbsp;·&nbsp; {contact_phone_display}
+        </a>
+    </td></tr>
+    </table>
+</td></tr>
+<tr><td>
+    <table cellpadding="0" cellspacing="0" width="100%">
+    <tr><td style="background-color:#0A0A0A;border:1px solid #2EDB99;border-radius:10px;text-align:center;">
+        <a href="{mailto_url}" style="display:block;padding:14px 22px;color:#2EDB99;text-decoration:none;font-weight:bold;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            ✉️&nbsp;&nbsp;Email me &nbsp;·&nbsp; {contact_email}
+        </a>
+    </td></tr>
+    </table>
+</td></tr>
+</table>
+
+<p style="color:#9CA3AF;font-size:13px;line-height:1.6;margin:0 0 6px 0;">
+    Drop me a quick "hey, here I am" and I'll reach back out the same day.
+    Whatever questions you have about the plan, I'm here to answer them.
+</p>
+
+<p style="color:#6B7280;font-size:13px;line-height:1.6;margin:24px 0 0 0;">
+    Talk soon.<br>
+    <span style="color:#9CA3AF;">— Álvaro</span>
+</p>
+"""
+
+    return _wrap(content, app_url)
+
+
+def send_no_phone_outreach_email(reservation, app_url=None):
+    """Send the "I tried to reach you on WhatsApp but couldn't" email
+    to a paying buyer whose phone isn't on file.
+
+    Returns True on success. Does NOT stamp no_phone_email_sent_at — the
+    caller (admin route) owns that so the field stays the single source
+    of truth.
+    """
+    if not reservation or not reservation.email:
+        return False
+    html = build_no_phone_outreach_html(reservation, app_url=app_url)
+    return _send(
+        reservation.email,
+        "Trying to reach you about your MKOT 3.0 plan",
+        html,
+    )
+
+
 # ─── INVOICES ─────────────────────────────────────────────────────
 
 def build_invoice_email_html(circle_payment, invoice_number, app_url=None):

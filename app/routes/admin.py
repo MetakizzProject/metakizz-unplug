@@ -15,8 +15,10 @@ from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotificati
 from app.services.temperature import bucket_from_event_set
 from app.mailer import (
     build_refund_confirmation_html,
+    build_no_phone_outreach_html,
     send_invoice_email,
     send_refund_confirmation_email,
+    send_no_phone_outreach_email,
     send_welcome_email,
     send_activation_nudge_email,
     send_activation_push_email,
@@ -126,6 +128,41 @@ def _send_refund_email_and_stamp(reservation):
         return False
     if ok:
         reservation.refund_email_sent_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return True
+    return False
+
+
+def _reservation_has_phone(reservation):
+    """True if we have a usable phone number for this buyer (via the
+    matched Ambassador). Used to decide which buyers get the
+    "no-phone outreach" email.
+    """
+    if not reservation:
+        return False
+    amb = getattr(reservation, "ambassador", None)
+    if amb is None:
+        return False
+    phone = (getattr(amb, "phone_number", None) or "").strip()
+    return bool(phone)
+
+
+def _send_no_phone_email_and_stamp(reservation):
+    """Send the "tried-to-reach-you-on-WhatsApp" email and stamp
+    no_phone_email_sent_at on the reservation. Idempotent: skips if
+    already sent. Returns True if a fresh email was sent.
+    """
+    if not reservation or not reservation.email:
+        return False
+    if reservation.no_phone_email_sent_at:
+        return False
+    try:
+        ok = bool(send_no_phone_outreach_email(reservation))
+    except Exception:
+        logger.exception("send_no_phone_outreach_email failed for reservation %s", reservation.id)
+        return False
+    if ok:
+        reservation.no_phone_email_sent_at = datetime.now(timezone.utc)
         db.session.commit()
         return True
     return False
@@ -6259,6 +6296,13 @@ def reservations():
         if not cp.invoice_sent_at
     )
 
+    # Count paid reservations we can't WhatsApp (no phone on file) and
+    # haven't yet sent the "trying to reach you" email to.
+    pending_no_phone_emails = sum(
+        1 for r in all_rows
+        if r.paid_at and not _reservation_has_phone(r) and not r.no_phone_email_sent_at
+    )
+
     return render_template(
         "admin_reservations.html",
         page_title="Reservas",
@@ -6282,6 +6326,7 @@ def reservations():
         refunds_out_cents=refunds_out_cents,
         pending_refund_emails=pending_refund_emails,
         pending_invoices=pending_invoices,
+        pending_no_phone_emails=pending_no_phone_emails,
         **_admin_layout_context(),
     )
 
@@ -6345,6 +6390,10 @@ def reservations_json():
         if r.refund_status == "success" and not r.refund_email_sent_at
     )
     pending_invoices = sum(1 for cp in ordered_cps if not cp.invoice_sent_at)
+    pending_no_phone_emails = sum(
+        1 for r in rows
+        if r.paid_at and not _reservation_has_phone(r) and not r.no_phone_email_sent_at
+    )
 
     # Orphans for the JSON payload (emails that paid full but no Reservation).
     reservation_emails = {r.email.lower() for r in rows if r.email}
@@ -6399,6 +6448,8 @@ def reservations_json():
             "refund_id": r.refund_id or "",
             "refund_error": r.refund_error or "",
             "refund_email_sent_at": r.refund_email_sent_at.isoformat() if r.refund_email_sent_at else None,
+            "no_phone_email_sent_at": r.no_phone_email_sent_at.isoformat() if r.no_phone_email_sent_at else None,
+            "has_phone": _reservation_has_phone(r),
             # CirclePayment join (full plan paid)
             "circle_payment": ({
                 "amount_cents": cp.amount_cents or 0,
@@ -6428,6 +6479,7 @@ def reservations_json():
         "refunds_out_cents": refunds_out_cents,
         "pending_refund_emails": pending_refund_emails,
         "pending_invoices": pending_invoices,
+        "pending_no_phone_emails": pending_no_phone_emails,
         "top_n_video": TOP_N_VIDEO,
         "revenue": {
             "estimated_total": rev["estimated_total"],
@@ -6750,6 +6802,291 @@ def send_pending_refund_emails():
         len(targets), sent, failed,
     )
     return jsonify(ok=True, candidates=len(targets), sent=sent, failed=failed)
+
+
+@admin_bp.route("/reservations/<int:reservation_id>/send-no-phone-email", methods=["POST"])
+def send_no_phone_email_for_reservation(reservation_id):
+    """Send (or re-send) the "tried to reach you on WhatsApp but couldn't"
+    email for a single reservation. Use ?force=1 to re-send.
+    """
+    from flask import jsonify
+    r = Reservation.query.get_or_404(reservation_id)
+    force = (request.form.get("force") or request.args.get("force") or "").strip().lower() in ("1", "true", "yes")
+    if r.no_phone_email_sent_at and not force:
+        return jsonify(ok=True, sent=False, reason="already_sent",
+                       sent_at=r.no_phone_email_sent_at.isoformat())
+    if force:
+        r.no_phone_email_sent_at = None
+        db.session.commit()
+    sent = _send_no_phone_email_and_stamp(r)
+    return jsonify(
+        ok=True,
+        sent=sent,
+        sent_at=r.no_phone_email_sent_at.isoformat() if r.no_phone_email_sent_at else None,
+    )
+
+
+@admin_bp.route("/reservations/send-pending-no-phone-emails", methods=["POST"])
+def send_pending_no_phone_emails():
+    """Bulk-send the "tried to reach you on WhatsApp" email to every paid
+    reservation that has no phone on file (via the matched Ambassador) and
+    hasn't been emailed yet.
+    """
+    from flask import jsonify
+    targets = (
+        Reservation.query
+        .filter(Reservation.paid_at.isnot(None))
+        .filter(Reservation.no_phone_email_sent_at.is_(None))
+        .all()
+    )
+    targets = [r for r in targets if not _reservation_has_phone(r)]
+    sent = 0
+    failed = 0
+    for r in targets:
+        if _send_no_phone_email_and_stamp(r):
+            sent += 1
+        else:
+            failed += 1
+    logger.info(
+        "send_pending_no_phone_emails: candidates=%d sent=%d failed=%d",
+        len(targets), sent, failed,
+    )
+    return jsonify(ok=True, candidates=len(targets), sent=sent, failed=failed)
+
+
+@admin_bp.route("/preview-no-phone-email")
+def preview_no_phone_email():
+    """Render the no-phone outreach email body for preview (HTML in browser).
+    Picks the most recent paid reservation without a phone number. Falls
+    back to a synthesized stub so the page renders even with an empty DB.
+    """
+    sample = (
+        Reservation.query
+        .filter(Reservation.paid_at.isnot(None))
+        .order_by(Reservation.paid_at.desc())
+        .first()
+    )
+    if sample is None:
+        # Render with a stub so the admin can still preview the layout.
+        class _Stub:
+            email = "you@example.com"
+            name = "Sample"
+            ambassador = None
+            amount_cents = 10000
+        sample = _Stub()
+    html = build_no_phone_outreach_html(sample)
+    return html
+
+
+# ─── BULK ACTIONS ON SELECTED RESERVATIONS ─────────────────────────
+#
+# The /admin/reservations page lets the admin tick checkboxes on multiple
+# rows and apply one operation to all of them at once. Each endpoint
+# accepts JSON `{"ids": [1,2,3]}` or form-encoded `ids=1&ids=2&ids=3`.
+# Returns counts of processed/sent/failed for the toast in the UI.
+
+def _parse_id_list(field="ids"):
+    """Pull an integer list of IDs out of the current request. Accepts
+    JSON body, form data (repeated keys), or comma-separated string.
+    Returns a list of ints (de-duplicated, order preserved).
+    """
+    raw_ids = []
+    if request.is_json:
+        body = request.get_json(silent=True) or {}
+        raw = body.get(field) or body.get(f"{field}[]")
+        if isinstance(raw, list):
+            raw_ids = raw
+        elif isinstance(raw, str):
+            raw_ids = raw.split(",")
+    if not raw_ids:
+        raw_ids = request.form.getlist(field) or request.form.getlist(f"{field}[]")
+    if not raw_ids:
+        s = request.form.get(field) or request.args.get(field) or ""
+        if s:
+            raw_ids = s.split(",")
+
+    out, seen = [], set()
+    for v in raw_ids:
+        try:
+            n = int(str(v).strip())
+        except (TypeError, ValueError):
+            continue
+        if n in seen:
+            continue
+        seen.add(n)
+        out.append(n)
+    return out
+
+
+@admin_bp.route("/reservations/bulk-send-no-phone-email", methods=["POST"])
+def bulk_send_no_phone_email():
+    """Send the no-phone outreach email to a specific list of reservations.
+    Skips rows that already have it sent. Idempotent.
+    """
+    from flask import jsonify
+    ids = _parse_id_list("ids")
+    if not ids:
+        return jsonify(ok=False, error="no_ids"), 400
+    rows = Reservation.query.filter(Reservation.id.in_(ids)).all()
+    sent = failed = skipped = 0
+    for r in rows:
+        if r.no_phone_email_sent_at:
+            skipped += 1
+            continue
+        if _send_no_phone_email_and_stamp(r):
+            sent += 1
+        else:
+            failed += 1
+    logger.info(
+        "bulk_send_no_phone_email: ids=%d found=%d sent=%d failed=%d skipped=%d",
+        len(ids), len(rows), sent, failed, skipped,
+    )
+    return jsonify(ok=True, candidates=len(rows), sent=sent, failed=failed, skipped=skipped)
+
+
+@admin_bp.route("/reservations/bulk-send-refund-email", methods=["POST"])
+def bulk_send_refund_email():
+    """Send the refund-on-the-way email to a list of refunded reservations.
+    Skips rows already notified or not yet marked as refunded.
+    """
+    from flask import jsonify
+    ids = _parse_id_list("ids")
+    if not ids:
+        return jsonify(ok=False, error="no_ids"), 400
+    rows = Reservation.query.filter(Reservation.id.in_(ids)).all()
+    sent = failed = skipped = 0
+    for r in rows:
+        if r.refund_status != "success" or r.refund_email_sent_at:
+            skipped += 1
+            continue
+        if _send_refund_email_and_stamp(r):
+            sent += 1
+        else:
+            failed += 1
+    logger.info(
+        "bulk_send_refund_email: ids=%d found=%d sent=%d failed=%d skipped=%d",
+        len(ids), len(rows), sent, failed, skipped,
+    )
+    return jsonify(ok=True, candidates=len(rows), sent=sent, failed=failed, skipped=skipped)
+
+
+@admin_bp.route("/reservations/bulk-mark-refunded", methods=["POST"])
+def bulk_mark_refunded():
+    """Mark every selected reservation as refunded (manual, no Stripe call).
+    Optionally send the confirmation email at the same time (send_email=1).
+    """
+    from flask import jsonify
+    ids = _parse_id_list("ids")
+    if not ids:
+        return jsonify(ok=False, error="no_ids"), 400
+
+    send_email_raw = (
+        request.form.get("send_email")
+        or request.args.get("send_email")
+        or (request.get_json(silent=True) or {}).get("send_email", "") if request.is_json else ""
+    )
+    if isinstance(send_email_raw, bool):
+        send_email = send_email_raw
+    else:
+        send_email = str(send_email_raw or "").strip().lower() in ("1", "true", "yes", "on")
+
+    rows = Reservation.query.filter(Reservation.id.in_(ids)).all()
+    now = datetime.now(timezone.utc)
+    marked = email_sent = email_failed = skipped = 0
+    for r in rows:
+        if r.refund_status == "success":
+            skipped += 1
+        else:
+            r.refunded_at = now
+            r.refund_status = "success"
+            r.refund_attempted_at = r.refund_attempted_at or now
+            if not r.refund_id:
+                r.refund_id = "MANUAL"
+            if not r.refund_amount_cents:
+                r.refund_amount_cents = r.amount_cents or 10000
+            marked += 1
+        if send_email and not r.refund_email_sent_at:
+            if _send_refund_email_and_stamp(r):
+                email_sent += 1
+            else:
+                email_failed += 1
+    db.session.commit()
+    logger.info(
+        "bulk_mark_refunded: ids=%d found=%d marked=%d skipped=%d email_sent=%d email_failed=%d",
+        len(ids), len(rows), marked, skipped, email_sent, email_failed,
+    )
+    return jsonify(
+        ok=True, candidates=len(rows), marked=marked, skipped=skipped,
+        email_sent=email_sent, email_failed=email_failed,
+    )
+
+
+@admin_bp.route("/reservations/bulk-delete", methods=["POST"])
+def bulk_delete_reservations():
+    """Hard-delete a list of reservations + any CirclePayments for the
+    same emails. Returns counts. Same blast radius as the per-row delete.
+    """
+    from flask import jsonify
+    ids = _parse_id_list("ids")
+    if not ids:
+        return jsonify(ok=False, error="no_ids"), 400
+
+    rows = Reservation.query.filter(Reservation.id.in_(ids)).all()
+    state = _get_raffle_state()
+    deleted_reservations = 0
+    deleted_cps = 0
+    for r in rows:
+        if state.winner_reservation_id == r.id:
+            state.winner_reservation_id = None
+            state.spun_at = None
+        email = (r.email or "").lower()
+        if email:
+            cps = CirclePayment.query.filter(CirclePayment.email.ilike(email)).all()
+            for cp in cps:
+                db.session.delete(cp)
+                deleted_cps += 1
+        db.session.delete(r)
+        deleted_reservations += 1
+    db.session.commit()
+    logger.info(
+        "bulk_delete_reservations: ids=%d deleted_reservations=%d deleted_cps=%d",
+        len(ids), deleted_reservations, deleted_cps,
+    )
+    return jsonify(
+        ok=True,
+        deleted_reservations=deleted_reservations,
+        deleted_circle_payments=deleted_cps,
+    )
+
+
+@admin_bp.route("/circle-payments/bulk-send-invoice", methods=["POST"])
+def bulk_send_invoice():
+    """Generate + email the PDF invoice for a list of CirclePayments.
+    Skips rows already invoiced.
+    """
+    from flask import jsonify
+    ids = _parse_id_list("ids")
+    if not ids:
+        return jsonify(ok=False, error="no_ids"), 400
+    cps = CirclePayment.query.filter(CirclePayment.id.in_(ids)).all()
+    sent = failed = skipped = 0
+    for cp in cps:
+        if cp.invoice_sent_at:
+            skipped += 1
+            continue
+        try:
+            if _generate_and_send_invoice(cp):
+                sent += 1
+            else:
+                failed += 1
+        except Exception:
+            logger.exception("bulk_send_invoice: failed for cp=%s", cp.id)
+            failed += 1
+    logger.info(
+        "bulk_send_invoice: ids=%d found=%d sent=%d failed=%d skipped=%d",
+        len(ids), len(cps), sent, failed, skipped,
+    )
+    return jsonify(ok=True, candidates=len(cps), sent=sent, failed=failed, skipped=skipped)
 
 
 @admin_bp.route("/buyer/<path:email>")
