@@ -1377,16 +1377,10 @@ Open <strong style="color:#FFFFFF;">/admin/reservations</strong> to review and r
     return _send(admin_email, subject, _wrap(content, app_url), from_name="MetaKizz Alerts")
 
 
-def send_refund_confirmation_email(reservation, app_url=None):
-    """Notify the buyer that their €100 deposit refund is on the way.
-
-    Triggered:
-      - automatically when /api/webhook/stripe-circle issues a real refund
-      - manually when admin clicks "Mark as refunded + send email" on a row
+def build_refund_confirmation_html(reservation, app_url=None):
+    """Build the HTML body for the refund confirmation email. Pure function
+    so the admin preview endpoint can render it without sending.
     """
-    if not reservation or not reservation.email:
-        return False
-
     if app_url is None:
         from flask import current_app
         try:
@@ -1395,12 +1389,16 @@ def send_refund_confirmation_email(reservation, app_url=None):
             app_url = ""
 
     first_name = "there"
-    if reservation.name and reservation.name.strip():
+    if getattr(reservation, "name", None) and reservation.name.strip():
         first_name = reservation.name.strip().split()[0]
-    elif reservation.ambassador and reservation.ambassador.name:
+    elif getattr(reservation, "ambassador", None) and getattr(reservation.ambassador, "name", None):
         first_name = reservation.ambassador.name.strip().split()[0]
 
-    amount = (reservation.refund_amount_cents or reservation.amount_cents or 10000) / 100
+    amount = (
+        getattr(reservation, "refund_amount_cents", None)
+        or getattr(reservation, "amount_cents", None)
+        or 10000
+    ) / 100
     whatsapp_url = "https://wa.me/34623960962"
 
     content = f"""
@@ -1459,8 +1457,21 @@ def send_refund_confirmation_email(reservation, app_url=None):
 </p>
 """
 
+    return _wrap(content, app_url), amount
+
+
+def send_refund_confirmation_email(reservation, app_url=None):
+    """Notify the buyer that their €100 deposit refund is on the way.
+
+    Triggered:
+      - automatically when /api/webhook/stripe-circle issues a real refund
+      - manually when admin clicks "Mark as refunded + send email" on a row
+    """
+    if not reservation or not reservation.email:
+        return False
+    html, amount = build_refund_confirmation_html(reservation, app_url=app_url)
     return _send(
         reservation.email,
         f"Your €{amount:.0f} deposit is on its way back 🟢",
-        _wrap(content, app_url),
+        html,
     )

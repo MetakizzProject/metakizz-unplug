@@ -14,6 +14,7 @@ from sqlalchemy.orm import joinedload
 from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent, Reservation, RaffleState, PartnerInvite, CirclePayment
 from app.services.temperature import bucket_from_event_set
 from app.mailer import (
+    build_refund_confirmation_html,
     send_refund_confirmation_email,
     send_welcome_email,
     send_activation_nudge_email,
@@ -6373,6 +6374,36 @@ def unmark_reservation_refunded(reservation_id):
     db.session.commit()
     logger.info("unmarked refund on reservation %s", r.id)
     return jsonify(ok=True, reservation_id=r.id)
+
+
+@admin_bp.route("/preview-refund-email")
+def preview_refund_email():
+    """Render the refund confirmation email for visual review.
+
+    Optional ?reservation_id=<id> — preview with real data from a specific
+    reservation. Default: dummy data ("Maria López", €100).
+    """
+    rid_raw = request.args.get("reservation_id")
+    reservation = None
+    if rid_raw:
+        try:
+            reservation = Reservation.query.get(int(rid_raw))
+        except Exception:
+            reservation = None
+
+    if reservation is None:
+        # Build a lightweight dummy that quacks like a Reservation enough
+        # for the email builder.
+        class _Dummy:
+            email = "preview@example.com"
+            name = "Maria"
+            ambassador = None
+            amount_cents = 10000
+            refund_amount_cents = 10000
+        reservation = _Dummy()
+
+    html, _amount = build_refund_confirmation_html(reservation)
+    return html
 
 
 @admin_bp.route("/reservations/<int:reservation_id>/send-refund-email", methods=["POST"])
