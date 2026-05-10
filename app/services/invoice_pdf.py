@@ -89,7 +89,10 @@ def generate_invoice_pdf(
     """
     issue_date = issue_date or datetime.now(timezone.utc)
     payment_terms = _env("INVOICE_PAYMENT_TERMS", "Due on Receipt")
-    footer_note = _env("INVOICE_FOOTER_NOTE", "Thank you for your business.")
+    footer_note = _env(
+        "INVOICE_FOOTER_NOTE",
+        "Welcome to the community. So glad you're with us.",
+    )
 
     line_items = line_items or []
     if not line_items:
@@ -128,6 +131,19 @@ def generate_invoice_pdf(
     biz_phone = _env("INVOICE_BUSINESS_PHONE")
     biz_web = _env("INVOICE_BUSINESS_WEBSITE")
 
+    # Optional logo (env-overridable). Default: bundled green Metakizz logo.
+    logo_path = _env("INVOICE_LOGO_PATH") or os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "static", "brand", "organized", "logo-green.png",
+    )
+    logo_flowable = None
+    if os.path.exists(logo_path):
+        try:
+            logo_flowable = Image(logo_path, width=1.0 * inch, height=1.0 * inch, kind="proportional")
+        except Exception:
+            logger.exception("invoice: failed to load logo from %s", logo_path)
+            logo_flowable = None
+
     issuer_lines = [biz_name]
     if addr1:
         issuer_lines.append(addr1)
@@ -146,12 +162,18 @@ def generate_invoice_pdf(
     if biz_web:
         issuer_lines.append(biz_web)
 
-    issuer_html = "<br/>".join(issuer_lines)
     issuer_para = Paragraph(
         f"<font size=12 color='#0A0A0A'><b>{biz_name}</b></font><br/>"
         + "<br/>".join(issuer_lines[1:]),
         BODY,
     )
+
+    # If we have a logo, stack it above the issuer text in the left column.
+    if logo_flowable is not None:
+        from reportlab.platypus import KeepInFrame
+        left_col = [logo_flowable, Spacer(1, 0.1 * inch), issuer_para]
+    else:
+        left_col = issuer_para
 
     invoice_block_html = (
         "INVOICE<br/>"
@@ -164,7 +186,7 @@ def generate_invoice_pdf(
     invoice_para = Paragraph(invoice_block_html, INVOICE_TITLE)
 
     header_table = Table(
-        [[issuer_para, invoice_para]],
+        [[left_col, invoice_para]],
         colWidths=[3.5 * inch, 4.0 * inch],
     )
     header_table.setStyle(TableStyle([
