@@ -441,6 +441,20 @@ class Reservation(db.Model):
     last_contacted_channel = db.Column(db.String(20), nullable=True)
     admin_notes = db.Column(db.Text, nullable=True)
 
+    # Auto-refund state. When the buyer pays the full plan in the Circle
+    # Stripe account, our /api/webhook/stripe-circle endpoint refunds the
+    # €100 deposit on this reservation. Idempotency guard: refunded_at
+    # being set means we already issued the refund — never double-refund.
+    # circle_payment_id records which Circle-side charge triggered the
+    # refund so we can trace it back. refund_status: success | failed | dry_run.
+    refunded_at = db.Column(db.DateTime, nullable=True, index=True)
+    refund_id = db.Column(db.String(120), nullable=True)
+    refund_amount_cents = db.Column(db.Integer, nullable=True)
+    refund_status = db.Column(db.String(20), nullable=True)
+    refund_attempted_at = db.Column(db.DateTime, nullable=True)
+    refund_error = db.Column(db.Text, nullable=True)
+    circle_payment_id = db.Column(db.String(120), nullable=True, index=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     ambassador = db.relationship("Ambassador", foreign_keys=[ambassador_id])

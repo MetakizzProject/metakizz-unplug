@@ -1284,3 +1284,94 @@ PartnerInvite id #{invite.id} — see /admin/partner-invites for full row.
 
     subject = f"⚠️ Partner invite failed — {invite.buyer_email}"
     return _send(admin_email, subject, _wrap(content, app_url), from_name="MetaKizz Alerts")
+
+
+def send_refund_admin_alert(email, reason, reservations, circle_charge_id=None,
+                             circle_amount_cents=None, app_url=None):
+    """Internal alert when the auto-refund flow needs human review.
+
+    Triggered by:
+      - Multiple deposit reservations match the same buyer email
+      - Stripe refund call failed (auth, network, etc.)
+      - Configuration missing (STRIPE_DEPOSIT_API_KEY, payment_intent_id)
+    """
+    admin_email = os.getenv("ADMIN_NOTIFICATION_EMAIL", "").strip()
+    if not admin_email:
+        default_from = os.getenv("EMAIL_FROM", "")
+        if "<" in default_from:
+            admin_email = default_from.split("<", 1)[-1].rstrip(">").strip()
+        else:
+            admin_email = default_from.strip()
+    if not admin_email:
+        logger.warning("no ADMIN_NOTIFICATION_EMAIL set, skipping refund admin alert")
+        return False
+
+    if app_url is None:
+        from flask import current_app
+        try:
+            app_url = current_app.config.get("APP_URL", "")
+        except Exception:
+            app_url = ""
+
+    safe_email = (email or "").replace("<", "&lt;").replace(">", "&gt;")
+    safe_reason = (reason or "").replace("<", "&lt;").replace(">", "&gt;")
+
+    rows_html = ""
+    for r in (reservations or []):
+        paid = r.paid_at.strftime("%Y-%m-%d %H:%M") if r.paid_at else "—"
+        amt = (r.amount_cents or 0) / 100
+        rows_html += (
+            f'<tr>'
+            f'<td style="padding:6px 12px 6px 0;color:#9CA3AF;font-size:13px;">#{r.id}</td>'
+            f'<td style="padding:6px 12px 6px 0;color:#FFFFFF;font-size:13px;">€{amt:.2f}</td>'
+            f'<td style="padding:6px 12px 6px 0;color:#9CA3AF;font-size:13px;">{paid}</td>'
+            f'<td style="padding:6px 0;color:#9CA3AF;font-size:12px;font-family:monospace;word-break:break-all;">{r.stripe_payment_intent_id or "(no pi)"}</td>'
+            f'</tr>'
+        )
+
+    circle_amt_str = ""
+    if circle_amount_cents is not None:
+        circle_amt_str = f"€{(circle_amount_cents or 0) / 100:.2f}"
+
+    content = f"""
+<h1 style="color:#FFFFFF;font-size:20px;margin:0 0 12px 0;">⚠️ Refund needs review</h1>
+
+<p style="color:#9CA3AF;font-size:14px;line-height:1.6;">
+A buyer just paid the full plan in the Circle Stripe account, but the
+auto-refund could not be issued automatically.
+</p>
+
+<table cellpadding="0" cellspacing="0" style="margin:18px 0;width:100%;background-color:#0A0F0A;border:1px solid #1A1A2E;border-radius:8px;padding:8px 12px;">
+<tr>
+    <td style="padding:6px 12px 6px 0;color:#9CA3AF;font-size:13px;">Buyer email</td>
+    <td style="padding:6px 0;color:#FFFFFF;font-size:14px;">{safe_email}</td>
+</tr>
+<tr>
+    <td style="padding:6px 12px 6px 0;color:#9CA3AF;font-size:13px;">Circle charge</td>
+    <td style="padding:6px 0;color:#FFFFFF;font-size:13px;font-family:monospace;word-break:break-all;">{circle_charge_id or "—"} {("(" + circle_amt_str + ")") if circle_amt_str else ""}</td>
+</tr>
+<tr>
+    <td style="padding:6px 12px 6px 0;color:#9CA3AF;font-size:13px;">Reason</td>
+    <td style="padding:6px 0;color:#FBBF24;font-size:14px;">{safe_reason}</td>
+</tr>
+</table>
+
+<p style="color:#2EDB99;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin:18px 0 8px 0;">Matching deposit reservations</p>
+
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0A0F0A;border:1px solid #1A1A2E;border-radius:8px;padding:10px 14px;">
+<tr style="color:#6B7280;font-size:11px;text-transform:uppercase;letter-spacing:1px;">
+    <td style="padding:6px 12px 6px 0;">ID</td>
+    <td style="padding:6px 12px 6px 0;">Amount</td>
+    <td style="padding:6px 12px 6px 0;">Paid at</td>
+    <td style="padding:6px 0;">Payment Intent</td>
+</tr>
+{rows_html or '<tr><td colspan="4" style="padding:10px 0;color:#6B7280;font-size:13px;">(none)</td></tr>'}
+</table>
+
+<p style="color:#9CA3AF;font-size:13px;line-height:1.6;margin:20px 0 0 0;">
+Open <strong style="color:#FFFFFF;">/admin/reservations</strong> to review and refund manually if needed.
+</p>
+"""
+
+    subject = f"⚠️ Refund needs review — {safe_email}"
+    return _send(admin_email, subject, _wrap(content, app_url), from_name="MetaKizz Alerts")

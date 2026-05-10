@@ -232,6 +232,7 @@
             <th class="text-left px-4 py-3">Payment</th>
             <th class="text-left px-4 py-3">Feeling</th>
             <th class="text-left px-4 py-3">Buyer notes</th>
+            <th class="text-left px-4 py-3 whitespace-nowrap">€100 Refund</th>
             <th class="text-left px-4 py-3">Stripe</th>
             <th class="text-right px-4 py-3"></th>
           </tr>
@@ -310,6 +311,26 @@
             <td class="px-4 py-3 text-xs text-gray-400 max-w-[260px] truncate" title="{{ r.notes or '' }}">
               {{ r.notes or '—' }}
             </td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              {% if r.refund_status == 'success' %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50"
+                      title="Refunded {{ r.refunded_at.strftime('%Y-%m-%d %H:%M') if r.refunded_at else '' }} · {{ r.refund_id or '' }}">
+                  ✓ refunded
+                </span>
+              {% elif r.refund_status == 'dry_run' %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-blue-900/40 text-blue-300 border border-blue-700/50"
+                      title="Dry run: webhook matched but STRIPE_REFUND_ENABLED is OFF. Set STRIPE_REFUND_ENABLED=1 to issue real refunds.">
+                  ⏸ dry-run
+                </span>
+              {% elif r.refund_status == 'failed' %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-red-900/40 text-red-300 border border-red-700/50"
+                      title="{{ r.refund_error or 'Refund failed — check logs' }}">
+                  ⚠ failed
+                </span>
+              {% else %}
+                <span class="text-gray-600 text-xs">—</span>
+              {% endif %}
+            </td>
             <td class="px-4 py-3 text-[10px] text-gray-600 font-mono">
               {{ (r.stripe_session_id or '')[:14] }}…
             </td>
@@ -338,7 +359,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="13" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
+          <tr><td colspan="14" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
           {% endfor %}
         </tbody>
       </table>

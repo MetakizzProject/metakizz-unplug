@@ -160,6 +160,14 @@ def _ensure_unsubscribe_columns(db):
                 ("last_contacted_at",      "TIMESTAMP"),
                 ("last_contacted_channel", "VARCHAR(20)"),
                 ("admin_notes",            "TEXT"),
+                # Auto-refund state (added 2026-05-10).
+                ("refunded_at",            "TIMESTAMP"),
+                ("refund_id",              "VARCHAR(120)"),
+                ("refund_amount_cents",    "INTEGER"),
+                ("refund_status",          "VARCHAR(20)"),
+                ("refund_attempted_at",    "TIMESTAMP"),
+                ("refund_error",           "TEXT"),
+                ("circle_payment_id",      "VARCHAR(120)"),
             ]:
                 if col_name not in res_cols:
                     conn.execute(text(f"ALTER TABLE reservations ADD COLUMN {col_name} {col_type}"))
@@ -265,6 +273,7 @@ def create_app():
     from app.routes.reservation import reservation_bp
     from app.routes.stripe_webhook import stripe_bp
     from app.routes.partner_invite import partner_invite_bp
+    from app.routes.stripe_circle_webhook import stripe_circle_bp
 
     app.register_blueprint(home_bp)
     app.register_blueprint(dashboard_bp)
@@ -275,6 +284,7 @@ def create_app():
     app.register_blueprint(reservation_bp)
     app.register_blueprint(stripe_bp)
     app.register_blueprint(partner_invite_bp)
+    app.register_blueprint(stripe_circle_bp)
 
     return app
 
