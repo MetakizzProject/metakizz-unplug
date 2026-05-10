@@ -705,6 +705,77 @@
     </div>
   </div>
 
+  <!-- Pre-send confirmation modal — appears before any bulk email goes out -->
+  <div id="email-send-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm overflow-y-auto"
+       role="dialog" aria-modal="true">
+    <div class="min-h-full flex items-start justify-center p-4 sm:p-8">
+      <div class="w-full max-w-2xl bg-gray-950 border border-brand-700/50 rounded-2xl shadow-2xl shadow-black/80 my-8">
+        <!-- Header -->
+        <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+          <div>
+            <p class="text-[10px] font-mono uppercase tracking-[0.25em] text-brand-400 mb-1">// Preview before send</p>
+            <h2 id="esm-title" class="text-lg font-display font-bold text-white">Email</h2>
+          </div>
+          <button type="button" id="esm-close"
+                  class="text-gray-500 hover:text-white text-2xl leading-none px-2"
+                  aria-label="Cerrar">×</button>
+        </div>
+
+        <!-- Description + counters -->
+        <div class="px-6 py-3 border-b border-gray-800">
+          <p id="esm-description" class="text-xs text-gray-400 mb-2">…</p>
+          <div class="flex gap-2 text-[11px] font-mono">
+            <span class="px-2 py-1 rounded-md bg-brand-900/40 border border-brand-700/50 text-brand-300">
+              ▶ Enviará: <span id="esm-to-send" class="text-white font-bold">0</span>
+            </span>
+            <span class="px-2 py-1 rounded-md bg-gray-800 border border-gray-700 text-gray-400">
+              ◯ Omite: <span id="esm-to-skip" class="text-gray-300 font-bold">0</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Recipient list -->
+        <div class="px-6 py-3 border-b border-gray-800">
+          <p class="text-[10px] font-mono uppercase tracking-widest text-gray-500 mb-2">Destinatarios</p>
+          <div id="esm-recipient-list"
+               class="max-h-60 overflow-y-auto bg-black/60 border border-gray-800 rounded-lg divide-y divide-gray-900 text-xs">
+            <!-- populated by JS -->
+          </div>
+        </div>
+
+        <!-- Test send -->
+        <div class="px-6 py-3 border-b border-gray-800">
+          <p class="text-[10px] font-mono uppercase tracking-widest text-gray-500 mb-2">
+            🧪 Email de prueba (no afecta a destinatarios reales)
+          </p>
+          <div class="flex flex-wrap items-center gap-2">
+            <input type="email" id="esm-test-email"
+                   class="flex-1 min-w-[200px] bg-black/60 border border-gray-700 focus:border-brand-500 focus:outline-none rounded-md px-3 py-2 text-sm text-white"
+                   placeholder="tu-email@ejemplo.com"
+                   value="alvarohertinez@gmail.com">
+            <button type="button" id="esm-test-btn"
+                    class="px-4 py-2 rounded-md bg-purple-900/40 hover:bg-purple-800/60 border border-purple-700/50 text-purple-200 hover:text-white text-xs font-mono font-bold uppercase tracking-wider transition disabled:opacity-50">
+              🧪 Enviar prueba
+            </button>
+          </div>
+          <p id="esm-test-result" class="text-[11px] font-mono mt-2 min-h-[1em]"></p>
+        </div>
+
+        <!-- Footer actions -->
+        <div class="px-6 py-4 flex flex-wrap items-center justify-end gap-2">
+          <button type="button" id="esm-cancel"
+                  class="px-4 py-2 rounded-md bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-xs font-mono font-bold uppercase tracking-wider transition">
+            ✕ Cancelar
+          </button>
+          <button type="button" id="esm-send-btn"
+                  class="px-4 py-2 rounded-md bg-brand-500 hover:bg-brand-400 text-black text-xs font-mono font-bold uppercase tracking-wider transition disabled:opacity-50">
+            ▶ Enviar a <span id="esm-send-count">0</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <style>
@@ -1038,15 +1109,173 @@
     }
   }
 
+  // ── Pre-send confirmation modal ─────────────────────────────────
+  // Wraps any bulk-email action so the admin sees the recipient list,
+  // can fire a test send to a custom address, and then approves the
+  // real send. Resolves with the send-endpoint's JSON, or null if the
+  // user cancelled.
+  function showSendPreview(opts) {
+    return new Promise(async function(resolve) {
+      const modal = document.getElementById('email-send-modal');
+      const titleEl = document.getElementById('esm-title');
+      const descEl = document.getElementById('esm-description');
+      const listEl = document.getElementById('esm-recipient-list');
+      const toSendEl = document.getElementById('esm-to-send');
+      const toSkipEl = document.getElementById('esm-to-skip');
+      const testEmailEl = document.getElementById('esm-test-email');
+      const testBtn = document.getElementById('esm-test-btn');
+      const testResult = document.getElementById('esm-test-result');
+      const sendBtn = document.getElementById('esm-send-btn');
+      const sendCount = document.getElementById('esm-send-count');
+      const cancelBtn = document.getElementById('esm-cancel');
+      const closeBtn = document.getElementById('esm-close');
+
+      titleEl.textContent = opts.title || 'Email';
+      descEl.textContent = opts.description || '';
+      listEl.innerHTML = '<div class="p-4 text-center text-gray-500">⏳ Cargando destinatarios…</div>';
+      toSendEl.textContent = '0';
+      toSkipEl.textContent = '0';
+      sendCount.textContent = '0';
+      testResult.textContent = '';
+      testResult.className = 'text-[11px] font-mono mt-2 min-h-[1em]';
+      sendBtn.disabled = true;
+      testBtn.disabled = false;
+      modal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+
+      function cleanup(result) {
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+        sendBtn.onclick = null;
+        testBtn.onclick = null;
+        cancelBtn.onclick = null;
+        closeBtn.onclick = null;
+        resolve(result);
+      }
+
+      cancelBtn.onclick = function() { cleanup(null); };
+      closeBtn.onclick = function() { cleanup(null); };
+
+      // Fetch the dry-run recipient list.
+      let toSend = 0, toSkip = 0;
+      try {
+        const r = await fetch(opts.dryRunUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(Object.assign({}, opts.dryRunBody || {}, { dry_run: 1 })),
+        });
+        const data = await r.json();
+        if (!data.ok) {
+          listEl.innerHTML = '<div class="p-4 text-center text-red-400">Error cargando destinatarios: ' + escapeHtml(data.error || 'unknown') + '</div>';
+          return;
+        }
+        const candidates = data.candidates || [];
+        toSend = (data.to_send != null) ? data.to_send : candidates.length;
+        toSkip = (data.to_skip != null) ? data.to_skip : 0;
+        if (!candidates.length) {
+          listEl.innerHTML = '<div class="p-4 text-center text-gray-500">No hay destinatarios que coincidan.</div>';
+        } else {
+          listEl.innerHTML = candidates.map(function(c) {
+            const skipped = !!c.skip_reason;
+            const cls = skipped ? 'opacity-40' : '';
+            const amount = c.amount_eur
+              ? '<div class="text-brand-300 font-mono text-[11px] whitespace-nowrap">€' + c.amount_eur + '</div>'
+              : '';
+            const skipBadge = skipped
+              ? '<span class="text-[10px] text-yellow-400 font-mono whitespace-nowrap ml-2">⊘ ' + escapeHtml(c.skip_reason) + '</span>'
+              : '';
+            return '<div class="flex items-center justify-between gap-2 px-3 py-2 ' + cls + '">'
+                 +   '<div class="flex-1 min-w-0">'
+                 +     '<div class="text-white truncate">' + escapeHtml(c.name || '(no name)') + '</div>'
+                 +     '<div class="text-gray-500 text-[11px] font-mono truncate">' + escapeHtml(c.email || '') + '</div>'
+                 +   '</div>'
+                 +   amount
+                 +   skipBadge
+                 + '</div>';
+          }).join('');
+        }
+      } catch (e) {
+        listEl.innerHTML = '<div class="p-4 text-center text-red-400">Request failed: ' + escapeHtml(String(e)) + '</div>';
+        return;
+      }
+
+      toSendEl.textContent = toSend;
+      toSkipEl.textContent = toSkip;
+      sendCount.textContent = toSend;
+      sendBtn.disabled = toSend === 0;
+
+      testBtn.onclick = async function() {
+        const to = (testEmailEl.value || '').trim();
+        if (!to || to.indexOf('@') === -1) {
+          testResult.textContent = '✕ Email no válido';
+          testResult.className = 'text-[11px] font-mono mt-2 min-h-[1em] text-red-400';
+          return;
+        }
+        testBtn.disabled = true;
+        testResult.textContent = '⏳ Enviando prueba a ' + to + '…';
+        testResult.className = 'text-[11px] font-mono mt-2 min-h-[1em] text-gray-400';
+        try {
+          const r = await fetch('/admin/email-tests/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({
+              kind: opts.testKind,
+              to: to,
+              ids: opts.testIdsHint || [],
+            }),
+          });
+          const data = await r.json();
+          if (data.ok && data.sent) {
+            testResult.textContent = '✓ Prueba enviada a ' + to + '. Revisa tu bandeja.';
+            testResult.className = 'text-[11px] font-mono mt-2 min-h-[1em] text-brand-400';
+          } else {
+            testResult.textContent = '✕ ' + (data.error || 'No se pudo enviar la prueba');
+            testResult.className = 'text-[11px] font-mono mt-2 min-h-[1em] text-red-400';
+          }
+        } catch (e) {
+          testResult.textContent = '✕ Error: ' + String(e);
+          testResult.className = 'text-[11px] font-mono mt-2 min-h-[1em] text-red-400';
+        } finally {
+          testBtn.disabled = false;
+        }
+      };
+
+      sendBtn.onclick = async function() {
+        sendBtn.disabled = true;
+        const orig = sendBtn.innerHTML;
+        sendBtn.innerHTML = '⏳ Enviando…';
+        try {
+          const r = await fetch(opts.sendUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(opts.sendBody || {}),
+          });
+          const data = await r.json();
+          cleanup(data);
+        } catch (e) {
+          alert('Request failed: ' + e);
+          sendBtn.disabled = false;
+          sendBtn.innerHTML = orig;
+        }
+      };
+    });
+  }
+
   document.getElementById('bulk-send-no-phone-btn')?.addEventListener('click', async function() {
     const ids = Array.from(selectedRowIds);
     if (!ids.length) return alert('No has seleccionado ninguna reserva.');
-    const data = await runBulkPost(
-      '/admin/reservations/bulk-send-no-phone-email', { ids },
-      'Enviar email "intenté contactarte por WhatsApp" a ' + ids.length + ' reserva(s) seleccionada(s)?'
-    );
-    if (data) {
-      alert('Sent: ' + data.sent + ' · Failed: ' + data.failed + ' · Skipped (already sent): ' + (data.skipped || 0));
+    const result = await showSendPreview({
+      title: 'Email "Sin teléfono" — selección de ' + ids.length,
+      description: 'Email "Trying to reach you about your MKOT 3.0 plan" a las reservas marcadas. Las que ya recibieron este email aparecen tachadas y se omitirán.',
+      dryRunUrl: '/admin/reservations/bulk-send-no-phone-email',
+      dryRunBody: { ids },
+      sendUrl: '/admin/reservations/bulk-send-no-phone-email',
+      sendBody: { ids },
+      testKind: 'no_phone',
+      testIdsHint: ids,
+    });
+    if (result && result.ok) {
+      alert('Sent: ' + result.sent + ' · Failed: ' + result.failed + ' · Skipped (ya enviado): ' + (result.skipped || 0));
       selectedRowIds.clear(); updateBulkBar(); await poll();
     }
   });
@@ -1054,12 +1283,18 @@
   document.getElementById('bulk-send-refund-email-btn')?.addEventListener('click', async function() {
     const ids = Array.from(selectedRowIds);
     if (!ids.length) return alert('No has seleccionado ninguna reserva.');
-    const data = await runBulkPost(
-      '/admin/reservations/bulk-send-refund-email', { ids },
-      'Enviar email "tu depósito está en camino" a ' + ids.length + ' reserva(s) seleccionada(s)?\n\nSólo se envía a quienes están marcados como reembolsados.'
-    );
-    if (data) {
-      alert('Sent: ' + data.sent + ' · Failed: ' + data.failed + ' · Skipped (not refunded or ya enviado): ' + (data.skipped || 0));
+    const result = await showSendPreview({
+      title: 'Email reembolso — selección de ' + ids.length,
+      description: 'Email "tu depósito de €100 está en camino" a las reservas marcadas. Sólo se envía a las marcadas como reembolsadas; las demás se omiten.',
+      dryRunUrl: '/admin/reservations/bulk-send-refund-email',
+      dryRunBody: { ids },
+      sendUrl: '/admin/reservations/bulk-send-refund-email',
+      sendBody: { ids },
+      testKind: 'refund',
+      testIdsHint: ids,
+    });
+    if (result && result.ok) {
+      alert('Sent: ' + result.sent + ' · Failed: ' + result.failed + ' · Skipped: ' + (result.skipped || 0));
       selectedRowIds.clear(); updateBulkBar(); await poll();
     }
   });
@@ -1080,12 +1315,18 @@
   document.getElementById('bulk-send-invoice-btn')?.addEventListener('click', async function() {
     const cpIds = collectSelectedCpIds();
     if (!cpIds.length) return alert('Las reservas seleccionadas no tienen pago completo (Circle) asociado, no se puede facturar.');
-    const data = await runBulkPost(
-      '/admin/circle-payments/bulk-send-invoice', { ids: cpIds },
-      'Generar + enviar PDF de factura a ' + cpIds.length + ' pago(s) seleccionado(s)?\n\nSe omiten los que ya tienen factura enviada.'
-    );
-    if (data) {
-      alert('Sent: ' + data.sent + ' · Failed: ' + data.failed + ' · Skipped (ya enviada): ' + (data.skipped || 0));
+    const result = await showSendPreview({
+      title: 'Factura PDF — selección de ' + cpIds.length,
+      description: 'Genera y envía el PDF de factura a los pagos seleccionados. Las que ya tienen factura enviada se omiten.',
+      dryRunUrl: '/admin/circle-payments/bulk-send-invoice',
+      dryRunBody: { ids: cpIds },
+      sendUrl: '/admin/circle-payments/bulk-send-invoice',
+      sendBody: { ids: cpIds },
+      testKind: 'invoice',
+      testIdsHint: cpIds,
+    });
+    if (result && result.ok) {
+      alert('Sent: ' + result.sent + ' · Failed: ' + result.failed + ' · Skipped (ya enviada): ' + (result.skipped || 0));
       selectedRowIds.clear(); selectedOrphanCpIds.clear(); updateBulkBar(); await poll();
     }
   });
@@ -1584,29 +1825,19 @@
   const sendInvoicesBtn = document.getElementById('send-invoices-btn');
   if (sendInvoicesBtn) {
     sendInvoicesBtn.addEventListener('click', async function() {
-      const count = parseInt(document.getElementById('kpi-pending-invoices').textContent || '0', 10);
-      if (!count) {
-        alert('No hay facturas pendientes.');
-        return;
-      }
-      if (!confirm('Generar y enviar PDF de factura a ' + count + ' clientes que pagaron pero no han recibido factura todavía?\n\nNo se vuelve a enviar a quien ya recibió la suya.')) return;
-      sendInvoicesBtn.disabled = true;
-      const orig = sendInvoicesBtn.innerHTML;
-      sendInvoicesBtn.innerHTML = '⏳ Enviando...';
-      try {
-        const r = await fetch('/admin/circle-payments/send-pending-invoices', { method: 'POST' });
-        const data = await r.json();
-        if (!data.ok) {
-          alert('Failed: ' + (data.error || 'unknown'));
-        } else {
-          alert('Candidates: ' + data.candidates + '\nSent: ' + data.sent + '\nFailed: ' + data.failed);
-          await poll();
-        }
-      } catch (e) {
-        alert('Request failed: ' + e);
-      } finally {
-        sendInvoicesBtn.disabled = false;
-        sendInvoicesBtn.innerHTML = orig;
+      const result = await showSendPreview({
+        title: 'Factura PDF — pendientes (edición actual)',
+        description: 'Genera y envía el PDF de factura a todos los clientes de la edición actual que aún no han recibido la suya.',
+        dryRunUrl: '/admin/circle-payments/send-pending-invoices',
+        dryRunBody: {},
+        sendUrl: '/admin/circle-payments/send-pending-invoices',
+        sendBody: {},
+        testKind: 'invoice',
+        testIdsHint: [],
+      });
+      if (result && result.ok) {
+        alert('Candidates: ' + result.candidates + '\nSent: ' + result.sent + '\nFailed: ' + result.failed);
+        await poll();
       }
     });
   }
@@ -1616,33 +1847,19 @@
   const refundEmailsBtn = document.getElementById('send-refund-emails-btn');
   if (refundEmailsBtn) {
     refundEmailsBtn.addEventListener('click', async function() {
-      const count = parseInt(document.getElementById('kpi-pending-refund-emails').textContent || '0', 10);
-      if (!count) {
-        alert('No hay emails de reembolso pendientes.');
-        return;
-      }
-      if (!confirm('Enviar email de "tu depósito está en camino" a ' + count + ' clientes refundeados que aún no han sido notificados?\n\nNo se vuelve a enviar a quien ya recibió el email.')) return;
-      refundEmailsBtn.disabled = true;
-      const orig = refundEmailsBtn.innerHTML;
-      refundEmailsBtn.innerHTML = '⏳ Enviando...';
-      try {
-        const r = await fetch('/admin/reservations/send-pending-refund-emails', { method: 'POST' });
-        const data = await r.json();
-        if (!data.ok) {
-          alert('Failed: ' + (data.error || 'unknown'));
-        } else {
-          alert(
-            'Candidates: ' + data.candidates + '\n' +
-            'Sent: ' + data.sent + '\n' +
-            'Failed: ' + data.failed
-          );
-          await poll();
-        }
-      } catch (e) {
-        alert('Request failed: ' + e);
-      } finally {
-        refundEmailsBtn.disabled = false;
-        refundEmailsBtn.innerHTML = orig;
+      const result = await showSendPreview({
+        title: 'Email reembolso — pendientes',
+        description: 'Email "tu depósito de €100 está en camino" a todos los reembolsados que aún no han sido notificados.',
+        dryRunUrl: '/admin/reservations/send-pending-refund-emails',
+        dryRunBody: {},
+        sendUrl: '/admin/reservations/send-pending-refund-emails',
+        sendBody: {},
+        testKind: 'refund',
+        testIdsHint: [],
+      });
+      if (result && result.ok) {
+        alert('Candidates: ' + result.candidates + '\nSent: ' + result.sent + '\nFailed: ' + result.failed);
+        await poll();
       }
     });
   }
@@ -1682,29 +1899,19 @@
   const noPhoneBtn = document.getElementById('send-no-phone-emails-btn');
   if (noPhoneBtn) {
     noPhoneBtn.addEventListener('click', async function() {
-      const count = parseInt(document.getElementById('kpi-pending-no-phone').textContent || '0', 10);
-      if (!count) {
-        alert('No hay emails pendientes — todos los clientes sin teléfono ya recibieron el email.');
-        return;
-      }
-      if (!confirm('Enviar email "intenté contactarte por WhatsApp" a ' + count + ' cliente(s) que pagaron pero no tienen teléfono guardado?\n\nNo se reenvía a quien ya lo recibió.')) return;
-      noPhoneBtn.disabled = true;
-      const orig = noPhoneBtn.innerHTML;
-      noPhoneBtn.innerHTML = '⏳ Enviando...';
-      try {
-        const r = await fetch('/admin/reservations/send-pending-no-phone-emails', { method: 'POST' });
-        const data = await r.json();
-        if (!data.ok) {
-          alert('Failed: ' + (data.error || 'unknown'));
-        } else {
-          alert('Candidates: ' + data.candidates + '\nSent: ' + data.sent + '\nFailed: ' + data.failed);
-          await poll();
-        }
-      } catch (e) {
-        alert('Request failed: ' + e);
-      } finally {
-        noPhoneBtn.disabled = false;
-        noPhoneBtn.innerHTML = orig;
+      const result = await showSendPreview({
+        title: 'Email "Sin teléfono" — pendientes',
+        description: 'Email "Trying to reach you about your MKOT 3.0 plan" a todos los pagados que aún no tienen teléfono guardado y no han recibido el email.',
+        dryRunUrl: '/admin/reservations/send-pending-no-phone-emails',
+        dryRunBody: {},
+        sendUrl: '/admin/reservations/send-pending-no-phone-emails',
+        sendBody: {},
+        testKind: 'no_phone',
+        testIdsHint: [],
+      });
+      if (result && result.ok) {
+        alert('Candidates: ' + result.candidates + '\nSent: ' + result.sent + '\nFailed: ' + result.failed);
+        await poll();
       }
     });
   }

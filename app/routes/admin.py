@@ -6705,6 +6705,12 @@ def send_pending_invoices():
             .all()
         if _is_current_edition(cp)
     ]
+    if _is_dry_run():
+        return jsonify(
+            ok=True, dry_run=True,
+            candidates=[_summarize_circle_payment(cp) for cp in candidates],
+            to_send=len(candidates), to_skip=0,
+        )
     sent = 0
     failed = 0
     for cp in candidates:
@@ -6790,6 +6796,12 @@ def send_pending_refund_emails():
         .filter(Reservation.refund_email_sent_at.is_(None))
         .all()
     )
+    if _is_dry_run():
+        return jsonify(
+            ok=True, dry_run=True,
+            candidates=[_summarize_reservation(r) for r in targets],
+            to_send=len(targets), to_skip=0,
+        )
     sent = 0
     failed = 0
     for r in targets:
@@ -6840,6 +6852,12 @@ def send_pending_no_phone_emails():
         .all()
     )
     targets = [r for r in targets if not _reservation_has_phone(r)]
+    if _is_dry_run():
+        return jsonify(
+            ok=True, dry_run=True,
+            candidates=[_summarize_reservation(r) for r in targets],
+            to_send=len(targets), to_skip=0,
+        )
     sent = 0
     failed = 0
     for r in targets:
@@ -6918,6 +6936,43 @@ def _parse_id_list(field="ids"):
     return out
 
 
+def _is_dry_run():
+    """True if the current request asked for a dry-run preview instead of
+    an actual send. Reads `dry_run` from JSON body, form data, or query
+    string. Used by the "preview before send" modal to fetch the candidate
+    list without firing emails.
+    """
+    raw = ""
+    if request.is_json:
+        raw = (request.get_json(silent=True) or {}).get("dry_run") or ""
+    if not raw:
+        raw = request.form.get("dry_run") or request.args.get("dry_run") or ""
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _summarize_reservation(r, skip_reason=None):
+    """Compact dict for the bulk-email preview modal."""
+    name = ((r.name or "") + " " + (r.surname or "")).strip() or "(no name)"
+    return {
+        "id": r.id,
+        "name": name,
+        "email": r.email or "",
+        "amount_eur": round((r.amount_cents or 0) / 100, 2),
+        "skip_reason": skip_reason,
+    }
+
+
+def _summarize_circle_payment(cp, skip_reason=None):
+    """Compact dict for the bulk-invoice preview modal."""
+    return {
+        "id": cp.id,
+        "name": cp.customer_name or "(no name)",
+        "email": cp.email or "",
+        "amount_eur": round((cp.amount_cents or 0) / 100, 2),
+        "skip_reason": skip_reason,
+    }
+
+
 @admin_bp.route("/reservations/bulk-send-no-phone-email", methods=["POST"])
 def bulk_send_no_phone_email():
     """Send the no-phone outreach email to a specific list of reservations.
@@ -6928,6 +6983,21 @@ def bulk_send_no_phone_email():
     if not ids:
         return jsonify(ok=False, error="no_ids"), 400
     rows = Reservation.query.filter(Reservation.id.in_(ids)).all()
+    if _is_dry_run():
+        candidates = []
+        to_send = to_skip = 0
+        for r in rows:
+            if r.no_phone_email_sent_at:
+                stamp = r.no_phone_email_sent_at.strftime("%Y-%m-%d %H:%M")
+                candidates.append(_summarize_reservation(r, skip_reason=f"already sent {stamp}"))
+                to_skip += 1
+            else:
+                candidates.append(_summarize_reservation(r))
+                to_send += 1
+        return jsonify(
+            ok=True, dry_run=True, candidates=candidates,
+            to_send=to_send, to_skip=to_skip,
+        )
     sent = failed = skipped = 0
     for r in rows:
         if r.no_phone_email_sent_at:
@@ -6954,6 +7024,24 @@ def bulk_send_refund_email():
     if not ids:
         return jsonify(ok=False, error="no_ids"), 400
     rows = Reservation.query.filter(Reservation.id.in_(ids)).all()
+    if _is_dry_run():
+        candidates = []
+        to_send = to_skip = 0
+        for r in rows:
+            if r.refund_status != "success":
+                candidates.append(_summarize_reservation(r, skip_reason="not refunded yet"))
+                to_skip += 1
+            elif r.refund_email_sent_at:
+                stamp = r.refund_email_sent_at.strftime("%Y-%m-%d %H:%M")
+                candidates.append(_summarize_reservation(r, skip_reason=f"already sent {stamp}"))
+                to_skip += 1
+            else:
+                candidates.append(_summarize_reservation(r))
+                to_send += 1
+        return jsonify(
+            ok=True, dry_run=True, candidates=candidates,
+            to_send=to_send, to_skip=to_skip,
+        )
     sent = failed = skipped = 0
     for r in rows:
         if r.refund_status != "success" or r.refund_email_sent_at:
@@ -7069,6 +7157,21 @@ def bulk_send_invoice():
     if not ids:
         return jsonify(ok=False, error="no_ids"), 400
     cps = CirclePayment.query.filter(CirclePayment.id.in_(ids)).all()
+    if _is_dry_run():
+        candidates = []
+        to_send = to_skip = 0
+        for cp in cps:
+            if cp.invoice_sent_at:
+                stamp = cp.invoice_sent_at.strftime("%Y-%m-%d %H:%M")
+                candidates.append(_summarize_circle_payment(cp, skip_reason=f"already invoiced {stamp}"))
+                to_skip += 1
+            else:
+                candidates.append(_summarize_circle_payment(cp))
+                to_send += 1
+        return jsonify(
+            ok=True, dry_run=True, candidates=candidates,
+            to_send=to_send, to_skip=to_skip,
+        )
     sent = failed = skipped = 0
     for cp in cps:
         if cp.invoice_sent_at:
@@ -7087,6 +7190,127 @@ def bulk_send_invoice():
         len(ids), len(cps), sent, failed, skipped,
     )
     return jsonify(ok=True, candidates=len(cps), sent=sent, failed=failed, skipped=skipped)
+
+
+@admin_bp.route("/email-tests/send", methods=["POST"])
+def send_test_bulk_email():
+    """Send a single test copy of one of the bulk emails to an arbitrary
+    address. Does NOT stamp any *_sent_at fields and does NOT assign a
+    real invoice number — it's purely for "what will this look like in
+    my inbox?" verification before launching the real send.
+
+    Body (JSON or form): {kind, to, ids?}
+        kind: "no_phone" | "refund" | "invoice"
+        to: destination address for the test
+        ids: optional — if provided, use the first row as the body source
+             (otherwise we pick a representative sample row).
+    """
+    from flask import jsonify
+    from app.mailer import _send, _send_with_attachment
+
+    body = request.get_json(silent=True) or {}
+    kind = (body.get("kind") or request.form.get("kind") or "").strip().lower()
+    to = (body.get("to") or request.form.get("to") or "").strip()
+    ids_raw = body.get("ids") or []
+    if isinstance(ids_raw, str):
+        ids_raw = [x for x in ids_raw.split(",") if x]
+
+    if not to or "@" not in to:
+        return jsonify(ok=False, error="invalid_email"), 400
+    if kind not in ("no_phone", "refund", "invoice"):
+        return jsonify(ok=False, error="invalid_kind"), 400
+
+    sample_id = None
+    try:
+        sample_id = int(ids_raw[0]) if ids_raw else None
+    except (TypeError, ValueError):
+        sample_id = None
+
+    if kind == "no_phone":
+        sample = None
+        if sample_id:
+            sample = Reservation.query.get(sample_id)
+        if sample is None:
+            sample = (
+                Reservation.query
+                .filter(Reservation.paid_at.isnot(None))
+                .order_by(Reservation.paid_at.desc())
+                .first()
+            )
+        if sample is None:
+            return jsonify(ok=False, error="no_sample_row"), 400
+        html = build_no_phone_outreach_html(sample)
+        ok = bool(_send(to, "[TEST] Trying to reach you about your MKOT 3.0 plan", html))
+        return jsonify(ok=True, sent=ok, kind=kind, to=to, sample_id=sample.id)
+
+    if kind == "refund":
+        sample = None
+        if sample_id:
+            sample = Reservation.query.get(sample_id)
+        if sample is None:
+            sample = (
+                Reservation.query
+                .filter(Reservation.refund_status == "success")
+                .order_by(Reservation.id.desc())
+                .first()
+            )
+        if sample is None:
+            sample = Reservation.query.order_by(Reservation.id.desc()).first()
+        if sample is None:
+            return jsonify(ok=False, error="no_sample_row"), 400
+        html, _amount = build_refund_confirmation_html(sample)
+        ok = bool(_send(to, "[TEST] Your €100 deposit is on its way back", html))
+        return jsonify(ok=True, sent=ok, kind=kind, to=to, sample_id=sample.id)
+
+    # kind == "invoice"
+    from app.services.invoice_pdf import generate_invoice_pdf, safe_pdf_filename
+    sample_cp = None
+    if sample_id:
+        sample_cp = CirclePayment.query.get(sample_id)
+    if sample_cp is None:
+        sample_cp = (
+            CirclePayment.query
+            .order_by(CirclePayment.id.desc())
+            .first()
+        )
+    if sample_cp is None:
+        return jsonify(ok=False, error="no_sample_row"), 400
+
+    biz_name = os.getenv("INVOICE_BUSINESS_NAME", "Virtual Flow LLC").strip()
+    test_invoice_number = "INV-TEST"
+    line_description = sample_cp.description or "Digital services — MetaKizz Project"
+    amount = sample_cp.amount_cents or 0
+
+    try:
+        pdf_bytes = generate_invoice_pdf(
+            invoice_number=test_invoice_number,
+            customer_email=sample_cp.email,
+            customer_name=sample_cp.customer_name,
+            line_items=[{
+                "description": line_description,
+                "qty": 1,
+                "unit_price_cents": amount,
+            }],
+            currency=(sample_cp.currency or "usd").upper(),
+            stripe_charge_id=sample_cp.stripe_charge_id,
+            issue_date=sample_cp.paid_at or datetime.now(timezone.utc),
+        )
+    except Exception:
+        logger.exception("invoice PDF test generation failed for cp=%s", sample_cp.id)
+        return jsonify(ok=False, error="pdf_generation_failed"), 500
+
+    from app.mailer import build_invoice_email_html
+    html = build_invoice_email_html(sample_cp, test_invoice_number)
+    filename = safe_pdf_filename(test_invoice_number, sample_cp.customer_name, sample_cp.email)
+    ok = bool(_send_with_attachment(
+        to=to,
+        subject=f"[TEST] Your invoice from {biz_name} — {test_invoice_number}",
+        html=html,
+        attachment_bytes=pdf_bytes,
+        attachment_filename=filename,
+        from_name=biz_name,
+    ))
+    return jsonify(ok=True, sent=ok, kind=kind, to=to, sample_id=sample_cp.id)
 
 
 @admin_bp.route("/buyer/<path:email>")
