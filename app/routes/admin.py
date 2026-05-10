@@ -86,11 +86,11 @@ def _is_current_edition(circle_payment):
         return False
 
     # Primary: date filter.
-    cutoff_iso = os.getenv("MKOT3_START_AT", "2026-04-01T00:00:00+00:00")
+    cutoff_iso = os.getenv("MKOT3_START_AT", "2026-05-01T00:00:00+00:00")
     try:
         cutoff = datetime.fromisoformat(cutoff_iso)
     except Exception:
-        cutoff = datetime(2026, 4, 1, tzinfo=timezone.utc)
+        cutoff = datetime(2026, 5, 1, tzinfo=timezone.utc)
     paid_at = circle_payment.paid_at
     if paid_at is None:
         return False  # no date = can't trust it, exclude
