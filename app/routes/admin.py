@@ -6206,10 +6206,19 @@ def reservations():
         CirclePayment.query.order_by(CirclePayment.paid_at.asc().nullslast()).all()
         if _is_current_edition(cp)
     ]
+    # Rank by UNIQUE EMAIL (not by individual charge), so subscription
+    # renewals don't push the rank forward. Buyer #5 stays #5 even if
+    # they pay 6 monthly installments.
     order_index_by_email = {}
-    for idx, cp in enumerate(ordered_cps):
-        if cp.email and cp.email.lower() not in order_index_by_email:
-            order_index_by_email[cp.email.lower()] = idx + 1
+    rank_counter = 0
+    for cp in ordered_cps:
+        if not cp.email:
+            continue
+        key = cp.email.lower()
+        if key in order_index_by_email:
+            continue
+        rank_counter += 1
+        order_index_by_email[key] = rank_counter
     TOP_N_VIDEO = 50
 
     # Orphan buyers: paid the full plan but never went through reservation.
@@ -6305,15 +6314,22 @@ def reservations_json():
             full_paid_amount_cents += (cp.amount_cents or 0)
 
     # Order index by Circle paid_at ASC (current edition only).
+    # Rank by UNIQUE EMAIL so subscription renewals don't shift positions.
     ordered_cps = [
         cp for cp in
         CirclePayment.query.order_by(CirclePayment.paid_at.asc().nullslast()).all()
         if _is_current_edition(cp)
     ]
     order_index_by_email = {}
-    for idx, cp in enumerate(ordered_cps):
-        if cp.email and cp.email.lower() not in order_index_by_email:
-            order_index_by_email[cp.email.lower()] = idx + 1
+    rank_counter = 0
+    for cp in ordered_cps:
+        if not cp.email:
+            continue
+        key = cp.email.lower()
+        if key in order_index_by_email:
+            continue
+        rank_counter += 1
+        order_index_by_email[key] = rank_counter
     TOP_N_VIDEO = 50
 
     # Cash collected (NET).
@@ -6783,6 +6799,7 @@ def buyer_detail(email):
         )
 
     # Order index (for the "Top 50" badge) — current-edition only.
+    # Counted by UNIQUE EMAIL so subscription renewals don't shift the rank.
     order_index = None
     is_top_50 = False
     TOP_N_VIDEO = 50
@@ -6792,9 +6809,18 @@ def buyer_detail(email):
             CirclePayment.query.order_by(CirclePayment.paid_at.asc().nullslast()).all()
             if _is_current_edition(cp)
         ]
-        for idx, cp in enumerate(ordered):
-            if cp.email and cp.email.lower() == email:
-                order_index = idx + 1
+        seen_emails = set()
+        rank = 0
+        for cp in ordered:
+            if not cp.email:
+                continue
+            key = cp.email.lower()
+            if key in seen_emails:
+                continue
+            seen_emails.add(key)
+            rank += 1
+            if key == email:
+                order_index = rank
                 break
         is_top_50 = (order_index is not None and order_index <= TOP_N_VIDEO)
 
