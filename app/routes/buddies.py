@@ -2,7 +2,11 @@
 
 Public blueprint with:
   GET  /buddies                          → public map page
-  GET  /buddies/<dashboard_code>/edit    → publish/edit form (per-Ambassador)
+  GET  /buddies/<dashboard_code>/edit    → 302 → /dashboard/<code>#tribe
+                                            (the editor lives as a tab inside
+                                            the ambassador dashboard now;
+                                            this URL stays alive for old
+                                            email links and bookmarks)
   POST /api/buddies/<dashboard_code>/save → upsert BuddyPost (JSON)
   POST /api/buddies/<dashboard_code>/delete → delete BuddyPost
   POST /api/buddies/<post_id>/contact     → relay contact form (anyone)
@@ -190,21 +194,17 @@ def buddy_start():
 
 @buddies_bp.route("/buddies/<code>/edit", methods=["GET"])
 def buddy_edit(code):
-    """Form for a specific ambassador to publish/edit their post.
-
-    Auth: anyone with the dashboard URL can edit. Same pattern as the
-    /dashboard/<code> route. No login required for Phase 1.
+    """Legacy URL — the buddy editor now lives as a tab inside the
+    ambassador dashboard so the experience feels like one app. We
+    keep this route alive as a 302 redirect so old links (emails,
+    bookmarks, share-with-a-friend URLs) still work.
     """
     amb = Ambassador.query.filter_by(dashboard_code=code).first_or_404()
-    post = BuddyPost.query.filter_by(ambassador_id=amb.id).first()
+    target = url_for("dashboard.show", code=amb.dashboard_code) + "#tribe"
     ref = (request.args.get("ref") or "").strip()
-    return render_template(
-        "buddies_edit.html",
-        ambassador=amb,
-        post=post,
-        ref=ref,
-        ttl_days=POST_TTL_DAYS,
-    )
+    if ref:
+        target = url_for("dashboard.show", code=amb.dashboard_code) + "?ref=" + ref + "#tribe"
+    return redirect(target)
 
 
 @buddies_bp.route("/api/buddies/<code>/save", methods=["POST"])

@@ -176,9 +176,27 @@
   .radius-btn.active { background: rgba(46,219,153,0.18) !important; color: #2EDB99 !important; border-color: rgba(46,219,153,0.6) !important; }
   #map .leaflet-container { background: #0a0a0a; }
   .buddy-marker {
-    background: #2EDB99; border: 2px solid #fff;
-    width: 16px; height: 16px; border-radius: 50%;
-    box-shadow: 0 0 8px rgba(46,219,153,0.6);
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 2px solid #2EDB99;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.55), 0 0 8px rgba(46,219,153,0.35);
+    background-color: #0a0a0a;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .buddy-marker-photo {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  .buddy-marker-letter {
+    background: linear-gradient(135deg, #1ea07a 0%, #0e6b50 100%);
+    color: #fff;
+    font-family: 'Share Tech Mono', monospace;
+    font-weight: 900;
+    font-size: 16px;
+    line-height: 1;
+    text-transform: uppercase;
+    letter-spacing: 0;
   }
   .country-agg-marker {
     background: rgba(124,58,237,0.45);
@@ -249,12 +267,28 @@
   const markersLayer = L.layerGroup().addTo(map);
   const markerByPostId = new Map();
 
-  function buddyIcon() {
+  // Allow only http(s) image URLs into the inline `style` attribute. Anything
+  // else (javascript:, data:, mismatched quotes) gets dropped and the marker
+  // falls back to the letter avatar.
+  function safeImageUrl(u) {
+    if (!u || typeof u !== 'string') return '';
+    const trimmed = u.trim();
+    if (!/^https?:\/\//i.test(trimmed)) return '';
+    if (/["'<>\\]/.test(trimmed)) return '';
+    return trimmed;
+  }
+
+  function buddyIcon(post) {
+    const photo = safeImageUrl(post && post.profile_picture_url);
+    const initial = ((post && post.name) || '?').trim().charAt(0).toUpperCase() || '?';
+    const html = photo
+      ? '<div class="buddy-marker buddy-marker-photo" style="background-image:url(\'' + photo + '\')"></div>'
+      : '<div class="buddy-marker buddy-marker-letter">' + escapeHtml(initial) + '</div>';
     return L.divIcon({
       className: '',
-      html: '<div class="buddy-marker"></div>',
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
+      html: html,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
     });
   }
 
@@ -304,7 +338,7 @@
 
     visible.forEach(p => {
       if (p.lat && p.lng) {
-        const m = L.marker([p.lat, p.lng], {icon: buddyIcon()})
+        const m = L.marker([p.lat, p.lng], {icon: buddyIcon(p)})
           .addTo(markersLayer)
           .on('click', () => openContactModal(p));
         markerByPostId.set(p.id, m);

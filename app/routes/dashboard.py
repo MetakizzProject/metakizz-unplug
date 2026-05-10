@@ -124,6 +124,7 @@ def show(code):
 
     # Buddy Finder (Phase 1) — fetch the ambassador's published post if any.
     from app.models import BuddyPost
+    from app.routes.buddies import POST_TTL_DAYS as BUDDY_TTL_DAYS
     buddy_post = BuddyPost.query.filter_by(ambassador_id=ambassador.id).first()
     buddy_days_left = None
     if buddy_post and buddy_post.expires_at:
@@ -133,6 +134,9 @@ def show(code):
             exp = exp.replace(tzinfo=None)
         delta = exp - datetime.utcnow()
         buddy_days_left = max(0, delta.days)
+    # `?ref=<dashboard_code>` viral attribution survives the redirect from
+    # /buddies/<code>/edit?ref=... → /dashboard/<code>?ref=...#tribe.
+    buddy_invited_by = (request.args.get("ref") or "").strip()
 
     return render_template(
         "dashboard.html",
@@ -154,4 +158,6 @@ def show(code):
         is_under_review=is_under_review,
         buddy_post=buddy_post,
         buddy_days_left=buddy_days_left,
+        buddy_ttl_days=BUDDY_TTL_DAYS,
+        buddy_invited_by=buddy_invited_by,
     )
