@@ -524,6 +524,9 @@ class CirclePayment(db.Model):
     invoice_id = db.Column(db.String(120), nullable=True, index=True)
     invoice_sent_at = db.Column(db.DateTime, nullable=True)
     invoice_pdf_url = db.Column(db.String(500), nullable=True)
+    # Immutable copy of the PDF as generated at send time. Stored in DB
+    # because Render's filesystem is ephemeral. Postgres BYTEA / SQLite BLOB.
+    invoice_pdf_bytes = db.Column(db.LargeBinary, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
 

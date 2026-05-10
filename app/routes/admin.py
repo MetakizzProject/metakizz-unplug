@@ -96,10 +96,13 @@ def _generate_and_send_invoice(circle_payment, force=False):
 
     if sent:
         circle_payment.invoice_sent_at = datetime.now(timezone.utc)
+        # Persist the exact bytes we sent so future re-downloads return the
+        # same document (immutability — the customer-received version).
+        circle_payment.invoice_pdf_bytes = pdf_bytes
         db.session.commit()
         logger.info(
-            "invoice sent: cp=%s invoice_number=%s email=%s",
-            circle_payment.id, invoice_number, circle_payment.email,
+            "invoice sent: cp=%s invoice_number=%s email=%s pdf_bytes=%d",
+            circle_payment.id, invoice_number, circle_payment.email, len(pdf_bytes),
         )
         return True
 
@@ -1515,7 +1518,7 @@ def _admin_layout_context():
             "overview", "live", "queue", "emails", "class_views",
             "security", "reach", "leads", "leads_insights",
             "ghosts", "network", "reservations", "raffle",
-            "partner_invites",
+            "partner_invites", "invoices",
         ],
         "pending_review_count": PendingReferral.query.filter_by(status="pending").count(),
     }
@@ -6487,12 +6490,88 @@ def unmark_reservation_refunded(reservation_id):
     return jsonify(ok=True, reservation_id=r.id)
 
 
+@admin_bp.route("/invoices")
+def invoices():
+    """Listing of all sent invoices, filterable by search + month.
+
+    Pulls every CirclePayment with invoice_sent_at set. Pure read-only.
+    """
+    q_search = (request.args.get("q") or "").strip().lower()
+    q_month = (request.args.get("month") or "").strip()  # "YYYY-MM"
+
+    query = (
+        CirclePayment.query
+        .filter(CirclePayment.invoice_sent_at.isnot(None))
+        .order_by(CirclePayment.invoice_sent_at.desc())
+    )
+    rows = query.all()
+
+    # In-Python filter (small dataset, simple).
+    if q_search:
+        rows = [
+            cp for cp in rows
+            if (cp.invoice_id and q_search in cp.invoice_id.lower())
+            or (cp.email and q_search in cp.email.lower())
+            or (cp.customer_name and q_search in cp.customer_name.lower())
+            or (cp.description and q_search in cp.description.lower())
+        ]
+    if q_month and len(q_month) == 7:
+        rows = [
+            cp for cp in rows
+            if cp.invoice_sent_at and cp.invoice_sent_at.strftime("%Y-%m") == q_month
+        ]
+
+    # Aggregate KPIs across the FULL set (unfiltered) so the admin sees
+    # totals for the whole archive regardless of current filter.
+    all_invoiced = (
+        CirclePayment.query
+        .filter(CirclePayment.invoice_sent_at.isnot(None))
+        .all()
+    )
+    total_count = len(all_invoiced)
+    total_amount_cents = sum(cp.amount_cents or 0 for cp in all_invoiced)
+
+    # Build a list of YYYY-MM options from existing invoices for the filter.
+    months = sorted({
+        cp.invoice_sent_at.strftime("%Y-%m") for cp in all_invoiced if cp.invoice_sent_at
+    }, reverse=True)
+
+    return render_template(
+        "admin_invoices.html",
+        rows=rows,
+        q_search=q_search,
+        q_month=q_month,
+        months=months,
+        total_count=total_count,
+        total_amount_cents=total_amount_cents,
+        filtered_count=len(rows),
+        filtered_amount_cents=sum(cp.amount_cents or 0 for cp in rows),
+        active_section="invoices",
+        **_admin_layout_context(),
+    )
+
+
 @admin_bp.route("/circle-payments/<int:cp_id>/preview-invoice")
 def preview_invoice_pdf(cp_id):
-    """Render the invoice PDF inline so admin can review before sending."""
+    """Serve the invoice PDF for a CirclePayment.
+
+    If the invoice has already been sent, returns the immutable copy
+    that was emailed to the customer. Otherwise generates a fresh
+    preview from current data + current template.
+    """
     from flask import Response
     from app.services.invoice_pdf import generate_invoice_pdf
     cp = CirclePayment.query.get_or_404(cp_id)
+
+    # Already-sent invoice → serve the exact bytes the customer got.
+    if cp.invoice_pdf_bytes and cp.invoice_id:
+        return Response(
+            bytes(cp.invoice_pdf_bytes),
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f"inline; filename={cp.invoice_id}.pdf"},
+        )
+
+    # Otherwise: live preview.
     invoice_number = cp.invoice_id or "INV-PREVIEW"
     line_description = cp.description or "Digital services — MetaKizz Project"
     pdf = generate_invoice_pdf(

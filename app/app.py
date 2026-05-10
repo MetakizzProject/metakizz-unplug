@@ -183,6 +183,20 @@ def _ensure_unsubscribe_columns(db):
                 conn.execute(text("ALTER TABLE partner_invites ADD COLUMN target_group VARCHAR(20)"))
                 logger.info("added column partner_invites.target_group")
 
+        # CirclePayment.invoice_pdf_bytes (added 2026-05-10). Stores the
+        # rendered PDF immutably so the admin can re-download what the
+        # customer received, not a regenerated version.
+        if "circle_payments" in inspector.get_table_names():
+            cp_cols = {c["name"] for c in inspector.get_columns("circle_payments")}
+            if "invoice_pdf_bytes" not in cp_cols:
+                # Postgres uses BYTEA; SQLite uses BLOB. Use LargeBinary
+                # syntax that both engines accept via the column type alias.
+                if engine.dialect.name == "postgresql":
+                    conn.execute(text("ALTER TABLE circle_payments ADD COLUMN invoice_pdf_bytes BYTEA"))
+                else:
+                    conn.execute(text("ALTER TABLE circle_payments ADD COLUMN invoice_pdf_bytes BLOB"))
+                logger.info("added column circle_payments.invoice_pdf_bytes")
+
         # Webinar attendance enrichment columns on lead_events. Populated by
         # /admin/zoom/import-participants — sums duration across rejoins,
         # captures country / device / first-join / last-leave from the Zoom
