@@ -32,9 +32,9 @@
   </div>
 
   <!-- KPI strip -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
     <div class="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
-      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Pagos</p>
+      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Pagos depósito</p>
       <p id="kpi-paid" class="font-display font-bold text-2xl text-white">{{ paid_total }}</p>
     </div>
     <div class="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
@@ -42,8 +42,20 @@
       <p id="kpi-pending" class="font-display font-bold text-2xl text-yellow-400">{{ pending_form }}</p>
     </div>
     <div class="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
-      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Completados</p>
+      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Completados form</p>
       <p id="kpi-completed" class="font-display font-bold text-2xl text-brand-400">{{ completed_total }}</p>
+    </div>
+    <div class="bg-gray-900/60 border border-purple-800/40 rounded-xl px-4 py-3">
+      <p class="text-[10px] uppercase tracking-widest text-purple-300 font-mono mb-1">Pagaron Circle</p>
+      <p id="kpi-circle-paid" class="font-display font-bold text-2xl text-purple-300">{{ full_paid_total }}</p>
+      {% if full_paid_amount_cents %}
+        <p class="text-[10px] text-gray-500 font-mono mt-0.5">€{{ "{:,}".format((full_paid_amount_cents/100)|round|int).replace(',', '.') }} total</p>
+      {% endif %}
+    </div>
+    <div class="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
+      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Falta pagar Circle</p>
+      <p id="kpi-not-circle" class="font-display font-bold text-2xl text-yellow-300">{{ paid_total - full_paid_total if (paid_total - full_paid_total) > 0 else 0 }}</p>
+      <p class="text-[10px] text-gray-500 font-mono mt-0.5">de {{ paid_total }} con depósito</p>
     </div>
     <div class="bg-gray-900/60 border border-brand-800/40 rounded-xl px-4 py-3">
       <p class="text-[10px] uppercase tracking-widest text-brand-400 font-mono mb-1">Elegibles sorteo</p>
@@ -213,6 +225,20 @@
       <button data-filter="couple"      class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Couple</button>
       <button data-filter="notsure"     class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Not sure</button>
     </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Plan completo:</span>
+      <button data-filter="paid_full"     class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">💰 Pagó plan</button>
+      <button data-filter="not_paid_full" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">⏳ Falta plan</button>
+      <button data-filter="refunded"      class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">✓ Devuelto €100</button>
+      <button data-filter="needs_refund"  class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">⚠ Devolución pendiente</button>
+      <button data-filter="invoice_sent"  class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">📄 Factura enviada</button>
+      <button data-filter="no_invoice"    class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">📭 Sin factura</button>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Search:</span>
+      <input type="text" id="rsv-search" placeholder="email or name..."
+             class="bg-gray-900 border border-gray-800 rounded-md px-3 py-1.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-brand-500 w-72">
+    </div>
   </div>
 
   <!-- Reservations table -->
@@ -232,13 +258,16 @@
             <th class="text-left px-4 py-3">Payment</th>
             <th class="text-left px-4 py-3">Feeling</th>
             <th class="text-left px-4 py-3">Buyer notes</th>
+            <th class="text-left px-4 py-3 whitespace-nowrap">💰 Plan completo</th>
             <th class="text-left px-4 py-3 whitespace-nowrap">€100 Refund</th>
+            <th class="text-left px-4 py-3 whitespace-nowrap">📄 Factura</th>
             <th class="text-left px-4 py-3">Stripe</th>
             <th class="text-right px-4 py-3"></th>
           </tr>
         </thead>
         <tbody id="rsv-body" class="divide-y divide-gray-800/60">
           {% for r in rows %}
+          {% set cp = circle_by_email.get(r.email|lower) if r.email else None %}
           <tr data-row-id="{{ r.id }}"
               data-eligible="{{ '1' if (r.paid_at and r.form_completed_at and (not state.window_closed_at or r.form_completed_at <= state.window_closed_at)) else '0' }}"
               data-pending="{{ '1' if (r.paid_at and not r.form_completed_at) else '0' }}"
@@ -248,6 +277,11 @@
               data-has-note="{{ '1' if r.admin_notes else '0' }}"
               data-program="{{ r.program_choice or '' }}"
               data-modality="{{ r.modality_choice or '' }}"
+              data-paid-full="{{ '1' if cp else '0' }}"
+              data-needs-refund="{{ '1' if (cp and r.refund_status != 'success') else '0' }}"
+              data-refunded="{{ '1' if r.refund_status == 'success' else '0' }}"
+              data-invoice-sent="{{ '1' if (cp and cp.invoice_sent_at) else '0' }}"
+              data-search="{{ ((r.name or '') ~ ' ' ~ (r.surname or '') ~ ' ' ~ (r.email or ''))|lower }}"
               class="hover:bg-gray-800/30">
             <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">
               {% if r.paid_at %}{{ r.paid_at.strftime('%H:%M:%S') }}{% else %}—{% endif %}
@@ -312,6 +346,19 @@
               {{ r.notes or '—' }}
             </td>
             <td class="px-4 py-3 whitespace-nowrap">
+              {% if cp %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-purple-900/40 text-purple-300 border border-purple-700/50"
+                      title="Pagó {% if cp.amount_cents %}€{{ '%.2f'|format(cp.amount_cents/100) }}{% endif %}{% if cp.paid_at %} el {{ cp.paid_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}{% if cp.description %} · {{ cp.description }}{% endif %}">
+                  💰 {% if cp.amount_cents %}€{{ (cp.amount_cents/100)|round|int }}{% else %}paid{% endif %}
+                </span>
+              {% else %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-gray-800/40 text-gray-500 border border-gray-700/50"
+                      title="Aún no ha pagado el plan completo en la cuenta de Circle">
+                  ⏳ pendiente
+                </span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap">
               {% if r.refund_status == 'success' %}
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50"
                       title="Refunded {{ r.refunded_at.strftime('%Y-%m-%d %H:%M') if r.refunded_at else '' }} · {{ r.refund_id or '' }}">
@@ -326,6 +373,21 @@
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-red-900/40 text-red-300 border border-red-700/50"
                       title="{{ r.refund_error or 'Refund failed — check logs' }}">
                   ⚠ failed
+                </span>
+              {% else %}
+                <span class="text-gray-600 text-xs">—</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              {% if cp and cp.invoice_sent_at %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50"
+                      title="Sent {{ cp.invoice_sent_at.strftime('%Y-%m-%d %H:%M') }}{% if cp.invoice_id %} · {{ cp.invoice_id }}{% endif %}">
+                  📄 sent
+                </span>
+              {% elif cp %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/30 text-yellow-300 border border-yellow-700/50"
+                      title="Buyer paid the full plan but no invoice has been generated yet (invoice system pending)">
+                  📭 not yet
                 </span>
               {% else %}
                 <span class="text-gray-600 text-xs">—</span>
@@ -359,7 +421,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="14" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
+          <tr><td colspan="16" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -420,21 +482,38 @@
     return '<span class="text-gray-600 text-xs">—</span>';
   }
 
+  let currentSearch = '';
+
   function rowMatchesFilter(row) {
     const f = currentFilter;
-    if (f === 'all')           return true;
-    if (f === 'paid')          return row.dataset.paid === '1';
-    if (f === 'eligible')      return row.dataset.eligible === '1';
-    if (f === 'pending')       return row.dataset.pending === '1';
-    if (f === 'doubts')        return row.dataset.doubts === '1';
-    if (f === 'not_contacted') return row.dataset.contacted === '0' && row.dataset.paid === '1';
-    if (f === 'contacted')     return row.dataset.contacted === '1';
-    if (f === 'has_note')      return row.dataset.hasNote === '1';
-    if (f === 'dancers')       return row.dataset.program === 'dancers';
-    if (f === 'instructors')   return row.dataset.program === 'instructors';
-    if (f === 'solo')          return row.dataset.modality === 'solo';
-    if (f === 'couple')        return row.dataset.modality === 'duo';
-    if (f === 'notsure')       return row.dataset.program === 'not_sure' || row.dataset.modality === 'not_sure';
+    let pass = true;
+    if (f === 'all')                    pass = true;
+    else if (f === 'paid')              pass = row.dataset.paid === '1';
+    else if (f === 'eligible')          pass = row.dataset.eligible === '1';
+    else if (f === 'pending')           pass = row.dataset.pending === '1';
+    else if (f === 'doubts')            pass = row.dataset.doubts === '1';
+    else if (f === 'not_contacted')     pass = row.dataset.contacted === '0' && row.dataset.paid === '1';
+    else if (f === 'contacted')         pass = row.dataset.contacted === '1';
+    else if (f === 'has_note')          pass = row.dataset.hasNote === '1';
+    else if (f === 'dancers')           pass = row.dataset.program === 'dancers';
+    else if (f === 'instructors')       pass = row.dataset.program === 'instructors';
+    else if (f === 'solo')              pass = row.dataset.modality === 'solo';
+    else if (f === 'couple')            pass = row.dataset.modality === 'duo';
+    else if (f === 'notsure')           pass = row.dataset.program === 'not_sure' || row.dataset.modality === 'not_sure';
+    else if (f === 'paid_full')         pass = row.dataset.paidFull === '1';
+    else if (f === 'not_paid_full')     pass = row.dataset.paidFull === '0';
+    else if (f === 'refunded')          pass = row.dataset.refunded === '1';
+    else if (f === 'needs_refund')      pass = row.dataset.needsRefund === '1';
+    else if (f === 'invoice_sent')      pass = row.dataset.invoiceSent === '1';
+    else if (f === 'no_invoice')        pass = row.dataset.paidFull === '1' && row.dataset.invoiceSent === '0';
+
+    if (!pass) return false;
+
+    // Search filter (cumulative — applies on top of any pill filter)
+    if (currentSearch && currentSearch.length > 0) {
+      const hay = row.dataset.search || '';
+      if (hay.indexOf(currentSearch) === -1) return false;
+    }
     return true;
   }
 
@@ -452,6 +531,14 @@
       applyFilter();
     });
   });
+
+  const searchInput = document.getElementById('rsv-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', function() {
+      currentSearch = (searchInput.value || '').trim().toLowerCase();
+      applyFilter();
+    });
+  }
 
   function fmtContactedDate(iso) {
     if (!iso) return '';
@@ -479,6 +566,44 @@
          + '<span class="note-status text-[9px] uppercase tracking-widest text-gray-700 font-mono ml-1"></span>';
   }
 
+  function fullPlanBadge(cp) {
+    if (cp) {
+      const amt = cp.amount_cents ? '€' + Math.round(cp.amount_cents / 100) : 'paid';
+      const tooltipParts = [];
+      if (cp.amount_cents) tooltipParts.push('€' + (cp.amount_cents / 100).toFixed(2));
+      if (cp.paid_at) tooltipParts.push('on ' + new Date(cp.paid_at).toLocaleString());
+      if (cp.description) tooltipParts.push(cp.description);
+      const tt = tooltipParts.join(' · ');
+      return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-purple-900/40 text-purple-300 border border-purple-700/50" title="' + escapeHtml(tt) + '">💰 ' + amt + '</span>';
+    }
+    return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-gray-800/40 text-gray-500 border border-gray-700/50" title="Aún no ha pagado el plan completo">⏳ pendiente</span>';
+  }
+
+  function refundBadge(r) {
+    if (r.refund_status === 'success') {
+      const tt = 'Refunded' + (r.refunded_at ? ' on ' + new Date(r.refunded_at).toLocaleString() : '') + (r.refund_id ? ' · ' + r.refund_id : '');
+      return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50" title="' + escapeHtml(tt) + '">✓ refunded</span>';
+    }
+    if (r.refund_status === 'dry_run') {
+      return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-blue-900/40 text-blue-300 border border-blue-700/50" title="Dry run: webhook matched but STRIPE_REFUND_ENABLED is OFF">⏸ dry-run</span>';
+    }
+    if (r.refund_status === 'failed') {
+      return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-red-900/40 text-red-300 border border-red-700/50" title="' + escapeHtml(r.refund_error || 'Refund failed') + '">⚠ failed</span>';
+    }
+    return '<span class="text-gray-600 text-xs">—</span>';
+  }
+
+  function invoiceBadge(cp) {
+    if (cp && cp.invoice_sent_at) {
+      const tt = 'Sent ' + new Date(cp.invoice_sent_at).toLocaleString() + (cp.invoice_id ? ' · ' + cp.invoice_id : '');
+      return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-brand-900/40 text-brand-400 border border-brand-700/50" title="' + escapeHtml(tt) + '">📄 sent</span>';
+    }
+    if (cp) {
+      return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/30 text-yellow-300 border border-yellow-700/50" title="Buyer paid the full plan but no invoice has been generated yet">📭 not yet</span>';
+    }
+    return '<span class="text-gray-600 text-xs">—</span>';
+  }
+
   // Skip the table re-render while the operator is mid-edit — otherwise
   // typing in a note textarea or holding the contact toggle would get
   // wiped every poll cycle.
@@ -498,6 +623,12 @@
       document.getElementById('kpi-completed').textContent = data.completed_total;
       document.getElementById('kpi-pending').textContent = (data.paid_total - data.completed_total);
       document.getElementById('kpi-eligible').textContent = data.eligible_count;
+      const kpiCircle = document.getElementById('kpi-circle-paid');
+      if (kpiCircle && data.full_paid_total !== undefined) kpiCircle.textContent = data.full_paid_total;
+      const kpiNot = document.getElementById('kpi-not-circle');
+      if (kpiNot && data.full_paid_total !== undefined) {
+        kpiNot.textContent = Math.max(0, data.paid_total - data.full_paid_total);
+      }
 
       // Reload page if raffle state changed (so the action buttons re-render)
       const isClosed = !!data.window_closed_at;
@@ -525,6 +656,12 @@
         const isDoubts  = r.clarity === 'doubts';
         const hasNote   = !!(r.admin_notes && r.admin_notes.length);
         const contacted = !!r.last_contacted_at;
+        const cp = r.circle_payment;
+        const paidFull = !!cp;
+        const refunded = r.refund_status === 'success';
+        const needsRefund = paidFull && !refunded;
+        const invoiceSent = !!(cp && cp.invoice_sent_at);
+        const search = ((r.name || '') + ' ' + (r.surname || '') + ' ' + (r.email || '')).toLowerCase();
         return '<tr data-row-id="' + r.id + '" '
           + 'data-eligible="' + (isEligible ? '1' : '0') + '" '
           + 'data-pending="' + (isPending ? '1' : '0') + '" '
@@ -534,6 +671,11 @@
           + 'data-has-note="' + (hasNote ? '1' : '0') + '" '
           + 'data-program="' + escapeHtml(r.program_choice || '') + '" '
           + 'data-modality="' + escapeHtml(r.modality_choice || '') + '" '
+          + 'data-paid-full="' + (paidFull ? '1' : '0') + '" '
+          + 'data-needs-refund="' + (needsRefund ? '1' : '0') + '" '
+          + 'data-refunded="' + (refunded ? '1' : '0') + '" '
+          + 'data-invoice-sent="' + (invoiceSent ? '1' : '0') + '" '
+          + 'data-search="' + escapeHtml(search) + '" '
           + 'class="hover:bg-gray-800/30">'
           + '<td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">' + (r.paid_at ? fmtTime(r.paid_at) : '—') + '</td>'
           + '<td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">' + (r.form_completed_at ? fmtTime(r.form_completed_at) : '<span class="text-yellow-500">—</span>') + '</td>'
@@ -546,6 +688,9 @@
           + '<td class="px-4 py-3 text-xs">' + paymentBadge(r.payment_plan) + '</td>'
           + '<td class="px-4 py-3">' + clarityBadge(r.clarity) + '</td>'
           + '<td class="px-4 py-3 text-xs text-gray-400 max-w-[260px] truncate" title="' + escapeHtml(r.notes) + '">' + (r.notes ? escapeHtml(r.notes) : '—') + '</td>'
+          + '<td class="px-4 py-3 whitespace-nowrap">' + fullPlanBadge(cp) + '</td>'
+          + '<td class="px-4 py-3 whitespace-nowrap">' + refundBadge(r) + '</td>'
+          + '<td class="px-4 py-3 whitespace-nowrap">' + invoiceBadge(cp) + '</td>'
           + '<td class="px-4 py-3 text-[10px] text-gray-600 font-mono">' + escapeHtml((r.stripe_session_id || '').substring(0, 14)) + '…</td>'
           + '<td class="px-4 py-3 text-right whitespace-nowrap">'
             + (r.phone

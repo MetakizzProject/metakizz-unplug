@@ -499,6 +499,33 @@ class PartnerInvite(db.Model):
     needs_followup = db.Column(db.Boolean, default=False, nullable=False, index=True)
 
 
+class CirclePayment(db.Model):
+    """One row per payment received in the Circle Stripe account.
+
+    Captured by /api/webhook/stripe-circle on `checkout.session.completed`
+    or `charge.succeeded`. Email is the join key against Reservation
+    (deposit) and Ambassador (Circle member). Idempotent on
+    stripe_charge_id — repeated webhooks for the same charge are no-ops.
+    """
+    __tablename__ = "circle_payments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    stripe_charge_id = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    stripe_payment_intent_id = db.Column(db.String(120), nullable=True)
+    email = db.Column(db.String(200), nullable=False, index=True)
+    customer_name = db.Column(db.String(200), nullable=True)
+    amount_cents = db.Column(db.Integer, nullable=True)
+    currency = db.Column(db.String(3), nullable=True)
+    paid_at = db.Column(db.DateTime, nullable=True, index=True)
+    description = db.Column(db.String(500), nullable=True)
+    raw_event_type = db.Column(db.String(60), nullable=True)
+    # Invoice tracking — populated once the invoice system ships.
+    invoice_id = db.Column(db.String(120), nullable=True, index=True)
+    invoice_sent_at = db.Column(db.DateTime, nullable=True)
+    invoice_pdf_url = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+
 class RaffleState(db.Model):
     """Singleton row (id=1) holding the current raffle window state.
 

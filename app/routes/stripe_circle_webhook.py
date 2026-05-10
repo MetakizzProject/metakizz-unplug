@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, request, jsonify
 
-from app.models import db, Reservation
+from app.models import db, Reservation, CirclePayment
 from app.mailer import send_refund_admin_alert
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,10 @@ def stripe_circle_webhook():
     # charge.succeeded → fires for one-off charges and subscription cycles.
     # We dedupe by Stripe charge id so multiple events for the same payment
     # only result in ONE refund.
+    customer_name = None
+    description = None
+    payment_intent_id = None
+
     if event_type == "checkout.session.completed":
         session = event["data"]["object"]
         email = _extract_email(session)
@@ -86,6 +90,14 @@ def stripe_circle_webhook():
             or session.get("id")
             or event_id
         )
+        payment_intent_id = session.get("payment_intent")
+        customer_name = ((session.get("customer_details") or {}).get("name") or None)
+        # Try to read the line item description if present (Payment Links include it).
+        line_items = session.get("line_items") or {}
+        if isinstance(line_items, dict):
+            data = line_items.get("data") or []
+            if data and isinstance(data[0], dict):
+                description = (data[0].get("description") or None)
     elif event_type == "charge.succeeded":
         charge = event["data"]["object"]
         billing = charge.get("billing_details") or {}
@@ -96,12 +108,17 @@ def stripe_circle_webhook():
         amount = charge.get("amount")
         currency = (charge.get("currency") or "eur").lower()
         circle_charge_id = charge.get("id") or event_id
+        payment_intent_id = charge.get("payment_intent")
+        customer_name = (billing.get("name") or None)
+        description = (charge.get("description") or None)
     else:
         # Ignore — but 200 so Stripe doesn't retry forever.
         return jsonify(ok=True, ignored=event_type), 200
 
     if isinstance(circle_charge_id, dict):
         circle_charge_id = circle_charge_id.get("id")
+    if isinstance(payment_intent_id, dict):
+        payment_intent_id = payment_intent_id.get("id")
 
     logger.info(
         "circle webhook: type=%s email=%s amount=%s currency=%s charge=%s",
@@ -111,6 +128,29 @@ def stripe_circle_webhook():
     if not email:
         logger.warning("circle webhook: no email on event %s", event_id)
         return jsonify(ok=True, no_email=True), 200
+
+    # Upsert a CirclePayment row so the admin sees ALL paid customers in
+    # /admin/reservations (even ones without a deposit). Idempotent on
+    # stripe_charge_id.
+    if circle_charge_id:
+        existing_payment = CirclePayment.query.filter_by(stripe_charge_id=circle_charge_id).first()
+        if existing_payment is None:
+            db.session.add(CirclePayment(
+                stripe_charge_id=circle_charge_id,
+                stripe_payment_intent_id=payment_intent_id,
+                email=email,
+                customer_name=customer_name,
+                amount_cents=amount,
+                currency=currency,
+                paid_at=_utcnow(),
+                description=description,
+                raw_event_type=event_type,
+            ))
+            db.session.commit()
+            logger.info(
+                "circle webhook: persisted CirclePayment charge=%s email=%s amount=%s",
+                circle_charge_id, email, amount,
+            )
 
     # Idempotency: have we already processed THIS Circle charge?
     already = (

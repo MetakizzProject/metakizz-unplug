@@ -11,7 +11,7 @@ from flask import (
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
-from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent, Reservation, RaffleState, PartnerInvite
+from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent, Reservation, RaffleState, PartnerInvite, CirclePayment
 from app.services.temperature import bucket_from_event_set
 from app.mailer import (
     send_welcome_email,
@@ -6000,6 +6000,22 @@ def reservations():
     ).count()
     pending_form = paid_total - completed_total
     revenue = _revenue_breakdown(all_rows)
+
+    # Build a {email_lowercase -> CirclePayment} map so the template can
+    # show, for each Reservation, whether the buyer also paid the full
+    # plan in the Circle Stripe account. Latest payment per email wins.
+    circle_by_email = {}
+    full_paid_total = 0
+    full_paid_amount_cents = 0
+    for cp in CirclePayment.query.order_by(CirclePayment.paid_at.desc().nullslast()).all():
+        if not cp.email:
+            continue
+        key = cp.email.lower()
+        if key not in circle_by_email:
+            circle_by_email[key] = cp
+            full_paid_total += 1
+            full_paid_amount_cents += (cp.amount_cents or 0)
+
     return render_template(
         "admin_reservations.html",
         page_title="Reservas",
@@ -6012,6 +6028,9 @@ def reservations():
         state=state,
         winner=state.winner if state.winner_reservation_id else None,
         revenue=revenue,
+        circle_by_email=circle_by_email,
+        full_paid_total=full_paid_total,
+        full_paid_amount_cents=full_paid_amount_cents,
         **_admin_layout_context(),
     )
 
@@ -6028,6 +6047,57 @@ def reservations_json():
     )
     eligible = _eligible_reservations(state)
     rev = _revenue_breakdown(rows)
+
+    # Same join as /admin/reservations — latest CirclePayment per email.
+    circle_by_email = {}
+    full_paid_total = 0
+    full_paid_amount_cents = 0
+    for cp in CirclePayment.query.order_by(CirclePayment.paid_at.desc().nullslast()).all():
+        if not cp.email:
+            continue
+        key = cp.email.lower()
+        if key not in circle_by_email:
+            circle_by_email[key] = cp
+            full_paid_total += 1
+            full_paid_amount_cents += (cp.amount_cents or 0)
+
+    rows_payload = []
+    for r in rows:
+        cp = circle_by_email.get(r.email.lower()) if r.email else None
+        rows_payload.append({
+            "id": r.id,
+            "paid_at": r.paid_at.isoformat() if r.paid_at else None,
+            "form_completed_at": r.form_completed_at.isoformat() if r.form_completed_at else None,
+            "email": r.email,
+            "name": r.name or "",
+            "surname": r.surname or "",
+            "program_choice": r.program_choice or "",
+            "modality_choice": r.modality_choice or "",
+            "payment_plan": r.payment_plan or "",
+            "clarity": r.clarity or "",
+            "notes": r.notes or "",
+            "amount_cents": r.amount_cents or 0,
+            "stripe_session_id": r.stripe_session_id,
+            "ambassador_id": r.ambassador_id,
+            "phone": (r.ambassador.phone_number if (r.ambassador and r.ambassador.phone_number) else ""),
+            "last_contacted_at": r.last_contacted_at.isoformat() if r.last_contacted_at else None,
+            "last_contacted_channel": r.last_contacted_channel or "",
+            "admin_notes": r.admin_notes or "",
+            # Refund fields
+            "refund_status": r.refund_status or "",
+            "refunded_at": r.refunded_at.isoformat() if r.refunded_at else None,
+            "refund_id": r.refund_id or "",
+            "refund_error": r.refund_error or "",
+            # CirclePayment join (full plan paid)
+            "circle_payment": ({
+                "amount_cents": cp.amount_cents or 0,
+                "paid_at": cp.paid_at.isoformat() if cp.paid_at else None,
+                "description": cp.description or "",
+                "invoice_sent_at": cp.invoice_sent_at.isoformat() if cp.invoice_sent_at else None,
+                "invoice_id": cp.invoice_id or "",
+            } if cp else None),
+        })
+
     return jsonify({
         "window_closed_at": state.window_closed_at.isoformat() if state.window_closed_at else None,
         "winner_id": state.winner_reservation_id,
@@ -6038,6 +6108,8 @@ def reservations_json():
         "eligible_count": len(eligible),
         "paid_total": sum(1 for r in rows if r.paid_at),
         "completed_total": sum(1 for r in rows if r.paid_at and r.form_completed_at),
+        "full_paid_total": full_paid_total,
+        "full_paid_amount_cents": full_paid_amount_cents,
         "revenue": {
             "estimated_total": rev["estimated_total"],
             "deposits_in":     rev["deposits_in"],
@@ -6047,31 +6119,7 @@ def reservations_json():
             "counts":          rev["counts"],
             "revenue":         rev["revenue"],
         },
-        "rows": [
-            {
-                "id": r.id,
-                "paid_at": r.paid_at.isoformat() if r.paid_at else None,
-                "form_completed_at": r.form_completed_at.isoformat() if r.form_completed_at else None,
-                "email": r.email,
-                "name": r.name or "",
-                "surname": r.surname or "",
-                "program_choice": r.program_choice or "",
-                "modality_choice": r.modality_choice or "",
-                "payment_plan": r.payment_plan or "",
-                "clarity": r.clarity or "",
-                "notes": r.notes or "",
-                "amount_cents": r.amount_cents or 0,
-                "stripe_session_id": r.stripe_session_id,
-                "ambassador_id": r.ambassador_id,
-                # Phone (E.164) from the linked Ambassador, if any. Used to open WhatsApp.
-                "phone": (r.ambassador.phone_number if (r.ambassador and r.ambassador.phone_number) else ""),
-                # Admin follow-up state (CRM hub)
-                "last_contacted_at": r.last_contacted_at.isoformat() if r.last_contacted_at else None,
-                "last_contacted_channel": r.last_contacted_channel or "",
-                "admin_notes": r.admin_notes or "",
-            }
-            for r in rows
-        ],
+        "rows": rows_payload,
     })
 
 
