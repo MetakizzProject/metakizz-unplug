@@ -839,7 +839,7 @@ def send_carrots_landing_email(ambassador, app_url):
 
     return _send(
         ambassador.email,
-        "🥕 If You Eat Carrots, You'll Poop Carrots 💩",
+        "If You Eat Carrots, You'll Poop Carrots",
         html,
         template_key="carrots_landing",
         ambassador=ambassador,
