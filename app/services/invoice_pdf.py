@@ -9,7 +9,6 @@ Reads issuer info from env vars (so Álvaro can change without redeploy):
   INVOICE_BUSINESS_EIN            → "33-1929195"
   INVOICE_BUSINESS_EMAIL          → "info@metakizzproject.com"
   INVOICE_BUSINESS_WEBSITE        → "metakizzproject.com" (optional)
-  INVOICE_BUSINESS_PHONE          → optional
   INVOICE_LOGO_PATH               → optional, server-side path or URL
   INVOICE_PAYMENT_TERMS           → default "Due on Receipt"
   INVOICE_FOOTER_NOTE             → default "Thank you for your business."
@@ -128,7 +127,6 @@ def generate_invoice_pdf(
     country = _env("INVOICE_BUSINESS_COUNTRY", "United States")
     ein = _env("INVOICE_BUSINESS_EIN")
     biz_email = _env("INVOICE_BUSINESS_EMAIL")
-    biz_phone = _env("INVOICE_BUSINESS_PHONE")
     biz_web = _env("INVOICE_BUSINESS_WEBSITE")
 
     # Optional logo (env-overridable). Default: bundled green Metakizz logo.
@@ -157,8 +155,6 @@ def generate_invoice_pdf(
         issuer_lines.append(f"EIN {ein}")
     if biz_email:
         issuer_lines.append(biz_email)
-    if biz_phone:
-        issuer_lines.append(biz_phone)
     if biz_web:
         issuer_lines.append(biz_web)
 
