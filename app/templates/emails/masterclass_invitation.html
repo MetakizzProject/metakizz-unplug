@@ -1,0 +1,174 @@
+{% extends "emails/_shell.html" %}
+
+{% block title %}{{ first_name }}, here's your prize — {{ date_label }}{% endblock %}
+{% block preheader %}Musicality Masterclass · {{ date_label }} · Zoom link inside{% endblock %}
+{% block header_left %}METAKIZZ // PRIZE.UNLOCKED{% endblock %}
+{% block header_right %}STATUS: <span style="color:#2EDB99;">CONFIRMED</span>{% endblock %}
+
+{% block content %}
+
+<!-- 0. Prize banner -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:28px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a1a10" style="background:#0a1a10;border:2px solid #2EDB99;border-radius:14px;box-shadow:0 0 36px rgba(46,219,153,0.30);">
+    <tr>
+      <td align="center" style="padding:28px 18px 22px 18px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin:0 0 10px 0;">
+          🎁 Here's your prize
+        </p>
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFFFFF;font-size:28px;line-height:1.1;letter-spacing:1px;margin:0;text-shadow:0 0 22px rgba(46,219,153,0.55);text-transform:uppercase;">
+          Musicality Masterclass
+        </p>
+        <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;color:#FFC857;font-size:22px;line-height:1.15;letter-spacing:2.5px;margin:14px 0 0 0;text-shadow:0 0 18px rgba(255,200,87,0.55);text-transform:uppercase;">
+          {{ date_label }}
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 1. Personal congrats -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:30px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:0 0 14px 0;">
+      &gt; Congrats, <span style="color:#FFFFFF;">{{ first_name }}</span>_
+    </p>
+    {% if referral_count and referral_count >= 5 %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:16px;line-height:1.65;margin:0 0 12px 0;">
+      You unlocked the guaranteed prize. <strong style="color:#2EDB99;">{{ referral_count }} dancers</strong>
+      joined the protocol thanks to you.
+    </p>
+    {% elif referral_count and referral_count > 0 %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:16px;line-height:1.65;margin:0 0 12px 0;">
+      Thanks for bringing <strong style="color:#2EDB99;">{{ referral_count }}</strong>
+      {{ 'dancer' if referral_count == 1 else 'dancers' }} into MetaKizz. Your prize is below.
+    </p>
+    {% else %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:16px;line-height:1.65;margin:0 0 12px 0;">
+      You're part of the original launch crew. Here's your prize.
+    </p>
+    {% endif %}
+    <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#9CA3AF;font-size:14px;line-height:1.65;margin:0;">
+      A live masterclass with <strong style="color:#FFFFFF;">Jesús &amp; Anni</strong> —
+      decoding Urbankiz musicality, the way nobody teaches it.
+      <strong style="color:#FFC857;">Don't miss it.</strong>
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- 2. Primary CTA — Join Zoom -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" align="center" style="padding:28px 32px 0 32px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr>
+      <td align="center" bgcolor="#2EDB99" style="background:#2EDB99;border:2px solid #2EDB99;border-radius:10px;box-shadow:0 0 28px rgba(46,219,153,0.55);">
+        <a href="{{ join_url }}" class="mob-cta-text" style="display:inline-block;padding:20px 44px;font-family:'Orbitron','Arial Black',sans-serif;font-weight:900;font-size:15px;letter-spacing:2.5px;text-transform:uppercase;color:#000000;text-decoration:none;">
+          🎥 &nbsp;Join the Zoom &nbsp;→
+        </a>
+      </td>
+    </tr>
+    </table>
+    <p style="margin:14px 0 0 0;">
+      <a href="{{ join_url }}" style="font-family:'Share Tech Mono','Courier New',monospace;color:#9CA3AF;font-size:11px;letter-spacing:1.5px;text-decoration:underline;word-break:break-all;">
+        {{ join_url }}
+      </a>
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- 3. Add to calendar — three options inline -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 12px 0;text-align:center;">
+      📅 Add to your calendar
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr>
+      <td align="center" style="padding:0 6px;">
+        <a href="{{ google_calendar_url }}" target="_blank"
+           style="display:inline-block;padding:10px 16px;font-family:'Share Tech Mono','Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#FFFFFF;background:#0a0f0a;border:1px solid rgba(46,219,153,0.4);border-radius:8px;text-decoration:none;">
+          Google
+        </a>
+      </td>
+      <td align="center" style="padding:0 6px;">
+        <a href="{{ ics_url }}" target="_blank"
+           style="display:inline-block;padding:10px 16px;font-family:'Share Tech Mono','Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#FFFFFF;background:#0a0f0a;border:1px solid rgba(46,219,153,0.4);border-radius:8px;text-decoration:none;">
+          Apple
+        </a>
+      </td>
+      <td align="center" style="padding:0 6px;">
+        <a href="{{ outlook_calendar_url }}" target="_blank"
+           style="display:inline-block;padding:10px 16px;font-family:'Share Tech Mono','Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#FFFFFF;background:#0a0f0a;border:1px solid rgba(46,219,153,0.4);border-radius:8px;text-decoration:none;">
+          Outlook
+        </a>
+      </td>
+    </tr>
+    </table>
+    <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#6B7280;font-size:10px;text-align:center;margin:8px 0 0 0;">
+      <a href="{{ ics_url }}" style="color:#6B7280;text-decoration:underline;">or download the .ics file</a>
+    </p>
+  </td>
+</tr>
+</table>
+
+<!-- 4. Meeting details -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:24px 32px 0 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid rgba(46,219,153,0.35);border-radius:10px;">
+    <tr>
+      <td style="padding:18px 20px;">
+        <p style="font-family:'Share Tech Mono','Courier New',monospace;color:#2EDB99;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin:0 0 14px 0;">
+          ▌ Meeting details
+        </p>
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;line-height:1.85;margin:0;">
+          <span style="color:#9CA3AF;">Topic:</span> {{ topic }}<br>
+          <span style="color:#9CA3AF;">When:</span> {{ date_label }}<br>
+          <span style="color:#9CA3AF;">Meeting ID:</span> {{ meeting_id }}<br>
+          <span style="color:#9CA3AF;">Passcode:</span> <strong style="color:#FFC857;">{{ passcode }}</strong>
+        </p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- 5. Sign-off -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+  <td class="mob-pad" style="padding:32px 32px 32px 32px;">
+    <p style="font-family:'Share Tech Mono','Courier News',monospace;color:#FFFFFF;font-size:14px;line-height:1.6;margin:0 0 8px 0;">
+      See you live.
+    </p>
+    <p style="font-family:'Orbitron','Arial Black',sans-serif;font-weight:700;color:#2EDB99;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:0;">
+      Jesús &amp; Anni · MetaKizz
+    </p>
+  </td>
+</tr>
+</table>
+
+{% endblock %}
+
+{% block prominent_unsubscribe %}
+<tr>
+  <td style="padding:18px 0 0 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0f0a" style="background:#0a0f0a;border:1px solid #2D2D44;border-radius:10px;">
+    <tr>
+      <td align="center" style="padding:18px 20px;">
+        <p style="font-family:'Share Tech Mono','Space Mono',monospace;color:#FFFFFF;font-size:14px;margin:0 0 6px 0;">Don't want to keep receiving these emails?</p>
+        <p style="margin:0;"><a href="{{ unsubscribe_url }}" style="color:#2EDB99;text-decoration:underline;font-size:14px;font-weight:bold;">Click here to stop them.</a></p>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+{% endblock %}

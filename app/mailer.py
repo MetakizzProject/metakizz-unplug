@@ -655,6 +655,140 @@ def send_class3_rewatch_reminder_email(ambassador, app_url):
     return send_class_rewatch_reminder_email(ambassador, app_url, 3)
 
 
+def _masterclass_calendar_urls(app_url):
+    """Return (ics_url, google_calendar_url, outlook_calendar_url) for
+    the masterclass, all driven by the same MASTERCLASS_* env vars so a
+    new edition just needs the env updated (no redeploy, no copy drift
+    between email body and calendar files).
+    """
+    import urllib.parse as _u
+
+    join_url = os.getenv("MASTERCLASS_JOIN_URL", "").strip() or (
+        "https://us06web.zoom.us/j/87205814207?pwd=k0ZugO56KMvaKLMdyjbDn7YH2mCzJw.1"
+    )
+    topic = os.getenv("MASTERCLASS_TOPIC", "").strip() or (
+        "Musicality Masterclass · Hacking the Urbankiz Code"
+    )
+    # UTC timestamps in YYYYMMDDTHHMMSSZ form (Google Calendar's expected
+    # `dates=` format). Defaults: May 15 2026 18:00–19:30 Madrid (CEST).
+    dtstart = os.getenv("MASTERCLASS_START_UTC", "").strip() or "20260515T160000Z"
+    dtend = os.getenv("MASTERCLASS_END_UTC", "").strip() or "20260515T173000Z"
+
+    description = f"Live with Jesús & Anni · MetaKizz.\n\nJoin the Zoom: {join_url}"
+    location = join_url
+
+    ics_url = f"{app_url.rstrip('/')}/masterclass.ics"
+
+    google_qs = _u.urlencode({
+        "action": "TEMPLATE",
+        "text": topic,
+        "dates": f"{dtstart}/{dtend}",
+        "details": description,
+        "location": location,
+    })
+    google_calendar_url = f"https://calendar.google.com/calendar/r/eventedit?{google_qs}"
+
+    # Outlook expects ISO datetimes (with the colons + dashes) and
+    # *not* the compact Google format.
+    def _iso_from_compact(s):
+        # 20260515T160000Z → 2026-05-15T16:00:00Z
+        if len(s) < 16:
+            return s
+        return f"{s[0:4]}-{s[4:6]}-{s[6:11]}:{s[11:13]}:{s[13:15]}Z"
+
+    outlook_qs = _u.urlencode({
+        "path": "/calendar/action/compose",
+        "rru": "addevent",
+        "subject": topic,
+        "startdt": _iso_from_compact(dtstart),
+        "enddt": _iso_from_compact(dtend),
+        "body": description,
+        "location": location,
+    })
+    outlook_calendar_url = f"https://outlook.live.com/calendar/0/deeplink/compose?{outlook_qs}"
+
+    return ics_url, google_calendar_url, outlook_calendar_url
+
+
+def send_masterclass_invitation_email(ambassador, app_url):
+    """Manual admin send: "here's your prize" delivery for the live
+    Musicality Masterclass. Frames the masterclass as the reward for
+    participating in the launch (with a personalized referral_count
+    shout-out), and ships the Zoom link + 3 "add to calendar" buttons.
+
+    All knobs come from env vars so the same template ships every
+    edition without code changes:
+      MASTERCLASS_JOIN_URL    — Zoom join URL
+      MASTERCLASS_TOPIC       — "Musicality Masterclass · Hacking the Urbankiz Code"
+      MASTERCLASS_DATE_LABEL  — "May 15 · 18:00 Madrid"
+      MASTERCLASS_MEETING_ID  — "872 0581 4207"
+      MASTERCLASS_PASSCODE    — "488349"
+      MASTERCLASS_START_UTC   — "20260515T160000Z"  (drives calendar URLs)
+      MASTERCLASS_END_UTC     — "20260515T173000Z"
+      MASTERCLASS_UID         — stable .ics UID
+
+    Defaults match the May 15 2026 edition so this fires correctly even
+    if env vars aren't configured.
+    """
+    if is_unsubscribed(ambassador):
+        return False
+
+    join_url = os.getenv("MASTERCLASS_JOIN_URL", "").strip() or (
+        "https://us06web.zoom.us/j/87205814207?pwd=k0ZugO56KMvaKLMdyjbDn7YH2mCzJw.1"
+    )
+    topic = os.getenv("MASTERCLASS_TOPIC", "").strip() or (
+        "Musicality Masterclass · Hacking the Urbankiz Code"
+    )
+    date_label = os.getenv("MASTERCLASS_DATE_LABEL", "").strip() or "May 15 · 18:00 Madrid"
+    meeting_id = os.getenv("MASTERCLASS_MEETING_ID", "").strip() or "872 0581 4207"
+    passcode = os.getenv("MASTERCLASS_PASSCODE", "").strip() or "488349"
+
+    ics_url, google_calendar_url, outlook_calendar_url = _masterclass_calendar_urls(app_url)
+
+    # referral_count is a lazy property on the Ambassador relationship.
+    # In a bulk send we lean on the existing _get_referral_counts() cache
+    # at the call-site; here we just read it (Python caches the related
+    # query within the request anyway). Fall back to 0 on missing data.
+    try:
+        referral_count = int(getattr(ambassador, "referral_count", 0) or 0)
+    except Exception:
+        referral_count = 0
+
+    html = render_template(
+        "emails/masterclass_invitation.html",
+        first_name=_first_name(ambassador),
+        community=(ambassador.source == "community"),
+        referral_count=referral_count,
+        join_url=join_url,
+        topic=topic,
+        date_label=date_label,
+        meeting_id=meeting_id,
+        passcode=passcode,
+        ics_url=ics_url,
+        google_calendar_url=google_calendar_url,
+        outlook_calendar_url=outlook_calendar_url,
+        dashboard_url=f"{app_url}/dashboard/{ambassador.dashboard_code}",
+        unsubscribe_url=_unsubscribe_url(ambassador, app_url),
+        app_url=app_url.rstrip("/"),
+    )
+
+    first = ambassador.name.split()[0] if ambassador.name else "Hey"
+    if referral_count >= 5:
+        subject = f"{first}, you unlocked it — your masterclass is on {date_label}"
+    elif referral_count > 0:
+        subject = f"{first}, here's your prize — masterclass on {date_label}"
+    else:
+        subject = f"{first}, here's your prize — masterclass on {date_label}"
+
+    return _send(
+        ambassador.email,
+        subject,
+        html,
+        template_key="masterclass_invitation",
+        ambassador=ambassador,
+    )
+
+
 def send_webinar_reminder_email(ambassador, app_url):
     """Manual admin send: 1-hour-before reminder for the live webinar.
 

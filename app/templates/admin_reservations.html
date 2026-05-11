@@ -355,6 +355,7 @@
             <th class="text-left px-4 py-3">Form</th>
             <th class="text-left px-4 py-3">Name</th>
             <th class="text-left px-4 py-3">Email</th>
+            <th class="text-left px-4 py-3 whitespace-nowrap">📱 Phone</th>
             <th class="text-left px-4 py-3 whitespace-nowrap">📞 Contacted</th>
             <th class="text-left px-4 py-3 whitespace-nowrap">✎ Admin note</th>
             <th class="text-left px-4 py-3">Program</th>
@@ -412,6 +413,16 @@
                 {{ r.email }}
               </a>
             </td>
+            <td class="px-4 py-3 text-gray-300 text-xs whitespace-nowrap">
+              {% if r.ambassador and r.ambassador.phone_number %}
+                <a href="https://wa.me/{{ r.ambassador.phone_number|replace('+','')|replace(' ','') }}"
+                   target="_blank" rel="noopener"
+                   class="text-brand-400 hover:text-brand-300 font-mono"
+                   title="Open WhatsApp">{{ r.ambassador.phone_number }}</a>
+              {% else %}
+                <span class="text-gray-600">—</span>
+              {% endif %}
+            </td>
             <td class="px-4 py-3 whitespace-nowrap">
               {% if r.last_contacted_at %}
                 <button class="contact-toggle inline-flex items-center gap-1 px-2 py-1 rounded-md bg-brand-900/40 hover:bg-brand-800/60 border border-brand-700/40 text-brand-300 text-[11px] font-mono uppercase tracking-wider transition"
@@ -439,16 +450,37 @@
               {% elif r.program_choice == 'not_sure' %}<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase">? Not sure</span>
               {% else %}<span class="text-gray-600 text-xs">—</span>{% endif %}
             </td>
+            {% set row_inferred = (inferred_by_cp_id.get(cp.id) if (cp and inferred_by_cp_id) else None) %}
             <td class="px-4 py-3 text-xs">
-              {% if r.modality_choice == 'not_sure' %}<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase">? Not sure</span>
-              {% elif r.modality_choice %}<span class="text-gray-300 uppercase font-mono">{{ r.modality_choice }}</span>
-              {% else %}<span class="text-gray-600">—</span>{% endif %}
+              <div class="flex flex-col gap-1">
+                {% if r.modality_choice == 'not_sure' %}<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase w-fit">? Not sure</span>
+                {% elif r.modality_choice %}<span class="text-gray-300 uppercase font-mono">✓ {{ r.modality_choice }}</span>
+                {% else %}<span class="text-gray-600">—</span>{% endif %}
+                {% if row_inferred and row_inferred.modality %}
+                  {% set mismatch = (r.modality_choice and r.modality_choice != 'not_sure' and r.modality_choice != row_inferred.modality) %}
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-wider font-mono w-fit
+                               {% if mismatch %}bg-amber-900/30 text-amber-300 border border-amber-600/50{% else %}bg-purple-900/30 text-purple-300 border border-purple-700/40{% endif %}"
+                        title="{% if mismatch %}Discrepancy — paid plan doesn't match what they elected on the form{% else %}Inferred from payment{% endif %}">
+                    💳 {{ row_inferred.modality }}
+                  </span>
+                {% endif %}
+              </div>
             </td>
             <td class="px-4 py-3 text-xs">
-              {% if r.payment_plan == 'one_payment' %}<span class="inline-block bg-brand-900/40 text-brand-300 px-2 py-0.5 rounded text-xs font-mono uppercase">1 pay</span>
-              {% elif r.payment_plan == 'six_installments' %}<span class="inline-block bg-blue-900/40 text-blue-300 px-2 py-0.5 rounded text-xs font-mono uppercase">6×</span>
-              {% elif r.payment_plan == 'not_sure' %}<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase">? Not sure</span>
-              {% else %}<span class="text-gray-600">—</span>{% endif %}
+              <div class="flex flex-col gap-1">
+                {% if r.payment_plan == 'one_payment' %}<span class="inline-block bg-brand-900/40 text-brand-300 px-2 py-0.5 rounded text-xs font-mono uppercase w-fit">✓ 1×</span>
+                {% elif r.payment_plan == 'six_installments' %}<span class="inline-block bg-blue-900/40 text-blue-300 px-2 py-0.5 rounded text-xs font-mono uppercase w-fit">✓ 6×</span>
+                {% elif r.payment_plan == 'not_sure' %}<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase w-fit">? Not sure</span>
+                {% else %}<span class="text-gray-600">—</span>{% endif %}
+                {% if row_inferred and row_inferred.payment_plan %}
+                  {% set plan_mismatch = (r.payment_plan and r.payment_plan != 'not_sure' and r.payment_plan != row_inferred.payment_plan) %}
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-wider font-mono w-fit
+                               {% if plan_mismatch %}bg-amber-900/30 text-amber-300 border border-amber-600/50{% else %}bg-purple-900/30 text-purple-300 border border-purple-700/40{% endif %}"
+                        title="{% if plan_mismatch %}Discrepancy — paid plan doesn't match what they elected{% else %}Inferred from payment{% endif %}">
+                    💳 {{ '1×' if row_inferred.payment_plan == 'one_payment' else '6×' }}
+                  </span>
+                {% endif %}
+              </div>
             </td>
             <td class="px-4 py-3">
               {% if r.clarity == 'clear' %}
@@ -598,7 +630,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="19" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
+          <tr><td colspan="20" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>
           {% endfor %}
 
           {# Orphan buyers: paid the full plan in Circle but never went through reservation. #}
@@ -633,11 +665,40 @@
               </a>
               <span class="ml-1 text-[9px] uppercase tracking-wider text-purple-400 font-mono" title="Bought the full plan directly without going through the deposit reservation flow">· direct buyer</span>
             </td>
+            <td class="px-4 py-3 text-gray-300 text-xs whitespace-nowrap">
+              {% if cp.ambassador and cp.ambassador.phone_number %}
+                <a href="https://wa.me/{{ cp.ambassador.phone_number|replace('+','')|replace(' ','') }}"
+                   target="_blank" rel="noopener"
+                   class="text-brand-400 hover:text-brand-300 font-mono"
+                   title="Linked Ambassador · WhatsApp">{{ cp.ambassador.phone_number }}</a>
+              {% else %}
+                <span class="text-gray-600">—</span>
+              {% endif %}
+            </td>
             <td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>
             <td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>
             <td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>
-            <td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>
-            <td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>
+            {% set orphan_inferred = inferred_by_cp_id.get(cp.id) if inferred_by_cp_id else None %}
+            <td class="px-4 py-3">
+              {% if orphan_inferred and orphan_inferred.modality %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-wider font-mono bg-purple-900/40 text-purple-300 border border-purple-700/50"
+                      title="Inferred from payment ({{ orphan_inferred.source }})">
+                  💳 {{ orphan_inferred.modality }}
+                </span>
+              {% else %}
+                <span class="text-gray-700 text-xs">—</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3">
+              {% if orphan_inferred and orphan_inferred.payment_plan %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-wider font-mono bg-purple-900/40 text-purple-300 border border-purple-700/50"
+                      title="Inferred from payment ({{ orphan_inferred.source }})">
+                  💳 {{ '1×' if orphan_inferred.payment_plan == 'one_payment' else '6×' }}
+                </span>
+              {% else %}
+                <span class="text-gray-700 text-xs">—</span>
+              {% endif %}
+            </td>
             <td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>
             <td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>
             <td class="px-4 py-3 whitespace-nowrap text-center">
@@ -684,18 +745,33 @@
               {% endif %}
             </td>
             <td class="px-4 py-3 text-[10px] text-gray-600 font-mono">{{ (cp.stripe_charge_id or '')[:14] }}…</td>
-            <td class="px-4 py-3 text-right whitespace-nowrap">
+            <td class="px-4 py-3 text-right whitespace-nowrap relative">
+              {% if cp.ambassador %}
+                <button type="button"
+                        class="orphan-link-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-brand-900/40 hover:bg-brand-800/60 border border-brand-700/60 text-brand-300 text-xs font-mono uppercase tracking-wider mr-1"
+                        data-cpid="{{ cp.id }}" data-current-amb-id="{{ cp.ambassador.id }}"
+                        title="Linked to Ambassador #{{ cp.ambassador.id }} — click to change or unlink">
+                  🔗 {{ cp.ambassador.name }}
+                </button>
+              {% else %}
+                <button type="button"
+                        class="orphan-link-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-800/60 hover:bg-purple-700/40 border border-gray-700 hover:border-purple-700/60 text-gray-300 hover:text-purple-200 text-xs font-mono uppercase tracking-wider mr-1"
+                        data-cpid="{{ cp.id }}"
+                        title="Search and link this payment to a launch profile">
+                  🔗 Link
+                </button>
+              {% endif %}
               <a href="{{ url_for('admin.buyer_detail', email=cp.email) }}"
                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-800/60 hover:bg-purple-700/40 border border-gray-700 hover:border-purple-700/60 text-gray-300 hover:text-purple-200 transition mr-1 text-xs font-mono uppercase tracking-wider whitespace-nowrap"
                  title="Open profile">
-                👤 profile
+                👤
               </a>
               <button type="button"
                       class="orphan-delete-btn text-gray-600 hover:text-red-400 text-xs font-mono uppercase tracking-wider transition px-2 py-1 rounded border border-transparent hover:border-red-700/50"
                       data-cpid="{{ cp.id }}"
                       data-email="{{ cp.email }}"
                       title="Delete this CirclePayment (does NOT touch Stripe — only removes from dashboard)">
-                ✕ del
+                ✕
               </button>
             </td>
           </tr>
@@ -811,17 +887,38 @@
     return '<span class="text-gray-600 text-xs">—</span>';
   }
 
-  function modalityBadge(m) {
-    if (m === 'not_sure') return '<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase">? Not sure</span>';
-    if (m) return '<span class="text-gray-300 uppercase font-mono">' + escapeHtml(m) + '</span>';
-    return '<span class="text-gray-600">—</span>';
+  // Two-line cell: top = what the buyer ELECTED on the form (existing
+  // badge), bottom = what they actually PAID for (inferred from the
+  // CirclePayment amount/description). Discrepancies stand out in amber.
+  function modalityBadge(chose, inferred) {
+    const top = chose === 'not_sure'
+      ? '<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase w-fit">? Not sure</span>'
+      : (chose ? '<span class="text-gray-300 uppercase font-mono">✓ ' + escapeHtml(chose) + '</span>' : '<span class="text-gray-600">—</span>');
+    if (!inferred) return '<div class="flex flex-col gap-1">' + top + '</div>';
+    const mismatch = (chose && chose !== 'not_sure' && chose !== inferred);
+    const cls = mismatch
+      ? 'bg-amber-900/30 text-amber-300 border border-amber-600/50'
+      : 'bg-purple-900/30 text-purple-300 border border-purple-700/40';
+    const title = mismatch ? 'Discrepancy — paid plan differs from what they elected' : 'Inferred from payment';
+    const bottom = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-wider font-mono w-fit ' + cls + '" title="' + title + '">💳 ' + escapeHtml(inferred) + '</span>';
+    return '<div class="flex flex-col gap-1">' + top + bottom + '</div>';
   }
 
-  function paymentBadge(p) {
-    if (p === 'one_payment')      return '<span class="inline-block bg-brand-900/40 text-brand-300 px-2 py-0.5 rounded text-xs font-mono uppercase">1 pay</span>';
-    if (p === 'six_installments') return '<span class="inline-block bg-blue-900/40 text-blue-300 px-2 py-0.5 rounded text-xs font-mono uppercase">6×</span>';
-    if (p === 'not_sure')         return '<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase">? Not sure</span>';
-    return '<span class="text-gray-600">—</span>';
+  function paymentBadge(chose, inferred) {
+    let top;
+    if (chose === 'one_payment')           top = '<span class="inline-block bg-brand-900/40 text-brand-300 px-2 py-0.5 rounded text-xs font-mono uppercase w-fit">✓ 1×</span>';
+    else if (chose === 'six_installments') top = '<span class="inline-block bg-blue-900/40 text-blue-300 px-2 py-0.5 rounded text-xs font-mono uppercase w-fit">✓ 6×</span>';
+    else if (chose === 'not_sure')         top = '<span class="inline-block bg-yellow-900/30 text-yellow-300 px-2 py-0.5 rounded text-xs font-mono uppercase w-fit">? Not sure</span>';
+    else                                   top = '<span class="text-gray-600">—</span>';
+    if (!inferred) return '<div class="flex flex-col gap-1">' + top + '</div>';
+    const mismatch = (chose && chose !== 'not_sure' && chose !== inferred);
+    const cls = mismatch
+      ? 'bg-amber-900/30 text-amber-300 border border-amber-600/50'
+      : 'bg-purple-900/30 text-purple-300 border border-purple-700/40';
+    const title = mismatch ? 'Discrepancy — paid plan differs from what they elected' : 'Inferred from payment';
+    const label = inferred === 'one_payment' ? '1×' : '6×';
+    const bottom = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-wider font-mono w-fit ' + cls + '" title="' + title + '">💳 ' + label + '</span>';
+    return '<div class="flex flex-col gap-1">' + top + bottom + '</div>';
   }
 
   function clarityBadge(c) {
@@ -1504,11 +1601,16 @@
           + '<td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">' + (r.form_completed_at ? fmtTime(r.form_completed_at) : '<span class="text-yellow-500">—</span>') + '</td>'
           + '<td class="px-4 py-3 text-white"><a href="/admin/buyer/' + encodeURIComponent(r.email) + '" class="hover:text-brand-400 transition" title="Open buyer profile">' + escapeHtml(r.name) + ' ' + escapeHtml(r.surname) + '</a></td>'
           + '<td class="px-4 py-3 text-gray-300 text-xs"><a href="/admin/buyer/' + encodeURIComponent(r.email) + '" class="hover:text-brand-400 transition" title="Open buyer profile">' + escapeHtml(r.email) + '</a></td>'
+          + '<td class="px-4 py-3 text-gray-300 text-xs whitespace-nowrap">'
+            + (r.phone
+                ? '<a href="https://wa.me/' + encodeURIComponent(r.phone.replace(/^\+/, '').replace(/\s/g, '')) + '" target="_blank" rel="noopener" class="text-brand-400 hover:text-brand-300 font-mono" title="Open WhatsApp">' + escapeHtml(r.phone) + '</a>'
+                : '<span class="text-gray-600">—</span>')
+          + '</td>'
           + '<td class="px-4 py-3 whitespace-nowrap">' + contactBadge(r.id, r.last_contacted_at, r.last_contacted_channel) + '</td>'
           + '<td class="px-4 py-3">' + noteCell(r.id, r.admin_notes) + '</td>'
           + '<td class="px-4 py-3">' + programBadge(r.program_choice) + '</td>'
-          + '<td class="px-4 py-3 text-xs">' + modalityBadge(r.modality_choice) + '</td>'
-          + '<td class="px-4 py-3 text-xs">' + paymentBadge(r.payment_plan) + '</td>'
+          + '<td class="px-4 py-3 text-xs">' + modalityBadge(r.modality_choice, cp ? cp.inferred_modality : null) + '</td>'
+          + '<td class="px-4 py-3 text-xs">' + paymentBadge(r.payment_plan, cp ? cp.inferred_payment_plan : null) + '</td>'
           + '<td class="px-4 py-3">' + clarityBadge(r.clarity) + '</td>'
           + '<td class="px-4 py-3 text-xs text-gray-400 max-w-[260px] truncate" title="' + escapeHtml(r.notes) + '">' + (r.notes ? escapeHtml(r.notes) : '—') + '</td>'
           + '<td class="px-4 py-3 whitespace-nowrap text-center">' + orderBadge(r.order_index, r.is_top_50) + '</td>'
@@ -1554,13 +1656,33 @@
           + '<td class="px-3 py-3"><input type="checkbox" class="rsv-select-orphan w-4 h-4 accent-purple-400 cursor-pointer" data-cpid="' + cp.id + '"' + (selectedOrphanCpIds.has(cp.id) ? ' checked' : '') + ' title="Orphan payment — only invoice-send / delete bulk actions apply"></td>'
           + '<td class="px-4 py-3 text-xs text-gray-600 font-mono whitespace-nowrap">—</td>'
           + '<td class="px-4 py-3 text-xs text-gray-600 font-mono whitespace-nowrap">—</td>'
-          + '<td class="px-4 py-3 text-white"><a href="/admin/buyer/' + encodeURIComponent(cp.email) + '" class="hover:text-brand-400 transition">' + escapeHtml(cp.name || '(no name)') + '</a></td>'
+          + (function(){
+              const linked = cp.linked_ambassador;
+              const display = linked && linked.name ? linked.name : (cp.name || '(no name)');
+              const tag = linked
+                ? '<span class="ml-1 text-[9px] uppercase tracking-wider text-brand-400 font-mono" title="Linked to Ambassador #' + linked.id + '">· LINKED</span>'
+                : '';
+              return '<td class="px-4 py-3 text-white"><a href="/admin/buyer/' + encodeURIComponent(cp.email) + '" class="hover:text-brand-400 transition">' + escapeHtml(display) + '</a>' + tag + '</td>';
+            })()
           + '<td class="px-4 py-3 text-gray-300 text-xs"><a href="/admin/buyer/' + encodeURIComponent(cp.email) + '" class="hover:text-brand-400 transition">' + escapeHtml(cp.email) + '</a><span class="ml-1 text-[9px] uppercase tracking-wider text-purple-400 font-mono">· direct buyer</span></td>'
+          + '<td class="px-4 py-3 text-gray-300 text-xs whitespace-nowrap">'
+            + (cp.linked_ambassador && cp.linked_ambassador.phone
+                ? '<a href="https://wa.me/' + encodeURIComponent(cp.linked_ambassador.phone.replace(/^\+/, '').replace(/\s/g, '')) + '" target="_blank" rel="noopener" class="text-brand-400 hover:text-brand-300 font-mono" title="Linked Ambassador · WhatsApp">' + escapeHtml(cp.linked_ambassador.phone) + '</a>'
+                : '<span class="text-gray-600">—</span>')
+          + '</td>'
           + '<td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>'
           + '<td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>'
           + '<td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>'
-          + '<td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>'
-          + '<td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>'
+          + '<td class="px-4 py-3">'
+            + (cp.inferred_modality
+                ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-wider font-mono bg-purple-900/40 text-purple-300 border border-purple-700/50" title="Inferred from payment">💳 ' + escapeHtml(cp.inferred_modality) + '</span>'
+                : '<span class="text-gray-700 text-xs">—</span>')
+          + '</td>'
+          + '<td class="px-4 py-3">'
+            + (cp.inferred_payment_plan
+                ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-wider font-mono bg-purple-900/40 text-purple-300 border border-purple-700/50" title="Inferred from payment">💳 ' + (cp.inferred_payment_plan === 'one_payment' ? '1×' : '6×') + '</span>'
+                : '<span class="text-gray-700 text-xs">—</span>')
+          + '</td>'
           + '<td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>'
           + '<td class="px-4 py-3"><span class="text-gray-700 text-xs">—</span></td>'
           + '<td class="px-4 py-3 whitespace-nowrap text-center">' + orderBadge(cp.order_index, cp.is_top_50) + '</td>'
@@ -1572,14 +1694,17 @@
               : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono bg-yellow-900/30 text-yellow-300 border border-yellow-700/50">📭 not yet</span>'
           ) + '</td>'
           + '<td class="px-4 py-3 text-[10px] text-gray-600 font-mono">' + '—' + '</td>'
-          + '<td class="px-4 py-3 text-right whitespace-nowrap">'
-            + '<a href="/admin/buyer/' + encodeURIComponent(cp.email) + '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-800/60 hover:bg-purple-700/40 border border-gray-700 hover:border-purple-700/60 text-gray-300 hover:text-purple-200 transition mr-1 text-xs font-mono uppercase tracking-wider whitespace-nowrap">👤 profile</a>'
-            + '<button type="button" class="orphan-delete-btn text-gray-600 hover:text-red-400 text-xs font-mono uppercase tracking-wider transition px-2 py-1 rounded border border-transparent hover:border-red-700/50" data-cpid="' + cp.id + '" data-email="' + escapeHtml(cp.email) + '" title="Delete this CirclePayment">✕ del</button>'
+          + '<td class="px-4 py-3 text-right whitespace-nowrap relative">'
+            + (cp.linked_ambassador
+                ? '<button type="button" class="orphan-link-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-brand-900/40 hover:bg-brand-800/60 border border-brand-700/60 text-brand-300 text-xs font-mono uppercase tracking-wider mr-1" data-cpid="' + cp.id + '" data-current-amb-id="' + cp.linked_ambassador.id + '" title="Click to change or unlink">🔗 ' + escapeHtml(cp.linked_ambassador.name || 'linked') + '</button>'
+                : '<button type="button" class="orphan-link-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-800/60 hover:bg-purple-700/40 border border-gray-700 hover:border-purple-700/60 text-gray-300 hover:text-purple-200 text-xs font-mono uppercase tracking-wider mr-1" data-cpid="' + cp.id + '" title="Search and link this payment to a launch profile">🔗 Link</button>')
+            + '<a href="/admin/buyer/' + encodeURIComponent(cp.email) + '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-800/60 hover:bg-purple-700/40 border border-gray-700 hover:border-purple-700/60 text-gray-300 hover:text-purple-200 transition mr-1 text-xs font-mono uppercase tracking-wider whitespace-nowrap">👤</a>'
+            + '<button type="button" class="orphan-delete-btn text-gray-600 hover:text-red-400 text-xs font-mono uppercase tracking-wider transition px-2 py-1 rounded border border-transparent hover:border-red-700/50" data-cpid="' + cp.id + '" data-email="' + escapeHtml(cp.email) + '" title="Delete this CirclePayment">✕</button>'
           + '</td>'
           + '</tr>';
       }).join('');
 
-      tbody.innerHTML = (html + orphanHtml) || '<tr><td colspan="19" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>';
+      tbody.innerHTML = (html + orphanHtml) || '<tr><td colspan="20" class="px-6 py-12 text-center text-gray-500">No reservations yet</td></tr>';
 
       // Re-seed savedValue on the freshly-rendered textareas so blur-detect works.
       tbody.querySelectorAll('.admin-note-input').forEach(ta => {
@@ -1759,6 +1884,144 @@
       btn.disabled = false;
       btn.innerHTML = orig;
     }
+  });
+
+  // ── Orphan → link to launch profile ─────────────────────────
+  // Each orphan row has a 🔗 Link button. Clicking opens a small popover
+  // anchored under the button: a search input + a dropdown of matching
+  // Ambassador profiles. Picking one POSTs to /link-ambassador, then we
+  // poll() to refresh the row with the linked name + phone.
+  let activeLinkPopover = null;
+
+  function closeLinkPopover() {
+    if (activeLinkPopover) {
+      activeLinkPopover.remove();
+      activeLinkPopover = null;
+    }
+  }
+
+  function buildLinkPopover(cpid, currentAmbId) {
+    const wrap = document.createElement('div');
+    wrap.className = 'orphan-link-popover absolute right-0 mt-1 z-50 w-80 max-w-[calc(100vw-2rem)] bg-black border border-purple-700/60 rounded-lg shadow-2xl shadow-purple-900/40 p-3';
+    wrap.innerHTML =
+      '<p class="text-[10px] uppercase tracking-widest text-purple-400 font-mono mb-2">🔗 Link this payment to a launch profile</p>'
+      + '<input type="text" class="link-popover-search w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" placeholder="Name or email…" autocomplete="off">'
+      + '<div class="link-popover-results mt-2 max-h-72 overflow-auto text-left"></div>'
+      + (currentAmbId
+          ? '<div class="mt-2 pt-2 border-t border-gray-800 flex items-center justify-between gap-2">'
+              + '<span class="text-[10px] uppercase tracking-widest text-gray-500 font-mono">Currently linked to #' + currentAmbId + '</span>'
+              + '<button type="button" class="link-popover-unlink text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded-md bg-red-900/30 hover:bg-red-800/50 border border-red-800/60 text-red-300">Unlink</button>'
+            + '</div>'
+          : '');
+    wrap.dataset.cpid = cpid;
+    return wrap;
+  }
+
+  function renderLinkResults(container, items) {
+    if (!items.length) {
+      container.innerHTML = '<p class="text-xs text-gray-500 py-2">No matches.</p>';
+      return;
+    }
+    container.innerHTML = items.map(it =>
+      '<button type="button" class="link-popover-pick w-full text-left px-2 py-2 rounded-md hover:bg-purple-900/30 border border-transparent hover:border-purple-700/40 mb-1" data-amb-id="' + it.id + '">'
+        + '<div class="flex items-center justify-between gap-2">'
+          + '<span class="text-sm text-white">' + escapeHtml(it.name || '(no name)') + '</span>'
+          + '<span class="text-[10px] text-gray-500 font-mono">#' + it.id + '</span>'
+        + '</div>'
+        + '<div class="text-[11px] text-gray-400 font-mono truncate">' + escapeHtml(it.email || '') + '</div>'
+      + '</button>'
+    ).join('');
+  }
+
+  async function searchAmbassadors(query) {
+    const r = await fetch('/admin/api/ambassadors/search?q=' + encodeURIComponent(query) + '&limit=15');
+    if (!r.ok) return [];
+    try { return await r.json(); } catch (e) { return []; }
+  }
+
+  async function linkCpToAmbassador(cpid, ambId) {
+    const r = await fetch('/admin/circle-payments/' + cpid + '/link-ambassador', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ ambassador_id: ambId }),
+    });
+    const data = await r.json();
+    if (!data.ok) {
+      alert('Failed: ' + (data.error || 'unknown'));
+      return false;
+    }
+    return true;
+  }
+
+  document.body.addEventListener('click', async function(ev) {
+    const btn = ev.target.closest('.orphan-link-btn');
+    if (btn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const cpid = btn.dataset.cpid;
+      const currentAmbId = btn.dataset.currentAmbId || null;
+      if (activeLinkPopover && activeLinkPopover.dataset.cpid === cpid) {
+        closeLinkPopover();
+        return;
+      }
+      closeLinkPopover();
+      const pop = buildLinkPopover(cpid, currentAmbId);
+      // Mount inside the actions TD so positioning (right:0) is anchored
+      // under the button without overflowing the table on narrow screens.
+      btn.parentElement.appendChild(pop);
+      activeLinkPopover = pop;
+      const input = pop.querySelector('.link-popover-search');
+      const results = pop.querySelector('.link-popover-results');
+      input.focus();
+      let debounce;
+      input.addEventListener('input', function() {
+        clearTimeout(debounce);
+        const q = input.value.trim();
+        if (q.length < 2) { results.innerHTML = '<p class="text-xs text-gray-600 py-2">Type 2+ characters…</p>'; return; }
+        debounce = setTimeout(async () => {
+          const items = await searchAmbassadors(q);
+          renderLinkResults(results, items);
+        }, 250);
+      });
+      return;
+    }
+
+    const pick = ev.target.closest('.link-popover-pick');
+    if (pick) {
+      ev.preventDefault();
+      const popover = pick.closest('.orphan-link-popover');
+      const cpid = popover && popover.dataset.cpid;
+      const ambId = parseInt(pick.dataset.ambId, 10);
+      if (!cpid || !ambId) return;
+      pick.disabled = true;
+      pick.style.opacity = 0.5;
+      const ok = await linkCpToAmbassador(cpid, ambId);
+      closeLinkPopover();
+      if (ok) await poll();
+      return;
+    }
+
+    const unlinkBtn = ev.target.closest('.link-popover-unlink');
+    if (unlinkBtn) {
+      ev.preventDefault();
+      const popover = unlinkBtn.closest('.orphan-link-popover');
+      const cpid = popover && popover.dataset.cpid;
+      if (!cpid) return;
+      unlinkBtn.disabled = true;
+      const ok = await linkCpToAmbassador(cpid, null);
+      closeLinkPopover();
+      if (ok) await poll();
+      return;
+    }
+
+    // Click outside any popover → close.
+    if (activeLinkPopover && !ev.target.closest('.orphan-link-popover')) {
+      closeLinkPopover();
+    }
+  });
+
+  document.addEventListener('keydown', function(ev) {
+    if (ev.key === 'Escape' && activeLinkPopover) closeLinkPopover();
   });
 
   // Per-row refund email button — sends to one buyer.

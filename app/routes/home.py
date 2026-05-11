@@ -285,6 +285,68 @@ def story_image(referral_code):
     return response
 
 
+@home_bp.route("/masterclass.ics")
+def masterclass_ics():
+    """Calendar file for the upcoming live masterclass — May 15, 2026 ·
+    18:00 Madrid (default). All knobs come from env vars so a new edition
+    just needs the env updated, no redeploy:
+
+      MASTERCLASS_START_UTC  → "20260515T160000Z"  (May 15 18:00 Madrid = 16:00 UTC in summer)
+      MASTERCLASS_END_UTC    → "20260515T173000Z"  (90-min duration)
+      MASTERCLASS_TOPIC      → "Musicality Masterclass · Hacking the Urbankiz Code"
+      MASTERCLASS_JOIN_URL   → Zoom URL placed in LOCATION + DESCRIPTION
+      MASTERCLASS_UID        → stable UID so re-imports update the same event
+
+    All clients (Apple Calendar, Outlook, Gmail "Add to Calendar", iOS,
+    Android) recognize .ics and offer one-click add.
+    """
+    import os
+    join_url = (os.getenv("MASTERCLASS_JOIN_URL", "").strip()
+                or "https://us06web.zoom.us/j/87205814207?pwd=k0ZugO56KMvaKLMdyjbDn7YH2mCzJw.1")
+    topic = (os.getenv("MASTERCLASS_TOPIC", "").strip()
+             or "Musicality Masterclass · Hacking the Urbankiz Code")
+    dtstart = os.getenv("MASTERCLASS_START_UTC", "").strip() or "20260515T160000Z"
+    dtend = os.getenv("MASTERCLASS_END_UTC", "").strip() or "20260515T173000Z"
+    uid = (os.getenv("MASTERCLASS_UID", "").strip()
+           or "musicality-masterclass-may15-2026@metakizzproject.com")
+
+    # Escape commas/semicolons in description per RFC 5545.
+    def _esc(s):
+        return (s or "").replace("\\", "\\\\").replace(",", "\\,").replace(";", "\\;").replace("\n", "\\n")
+
+    description = (
+        f"Live with Jesús & Anni · MetaKizz.\n\n"
+        f"Join the Zoom: {join_url}"
+    )
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//MetaKizz//Musicality Masterclass//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        f"UID:{uid}",
+        "DTSTAMP:20260511T000000Z",
+        f"DTSTART:{dtstart}",
+        f"DTEND:{dtend}",
+        f"SUMMARY:{_esc(topic)}",
+        f"DESCRIPTION:{_esc(description)}",
+        f"LOCATION:{_esc(join_url)}",
+        f"URL:{join_url}",
+        "STATUS:CONFIRMED",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ]
+    body = "\r\n".join(lines) + "\r\n"
+    response = Response(body, mimetype="text/calendar; charset=utf-8")
+    response.headers["Content-Disposition"] = (
+        'attachment; filename="musicality-masterclass.ics"'
+    )
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return response
+
+
 @home_bp.route("/webinar.ics")
 def webinar_ics():
     """Calendar file for the live session — May 7, 2026 · 19:00 Madrid.

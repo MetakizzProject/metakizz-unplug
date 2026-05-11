@@ -33,6 +33,7 @@ from app.mailer import (
     send_class2_ready_email,
     send_class3_ready_email,
     send_webinar_reminder_email,
+    send_masterclass_invitation_email,
     send_final_signal_email,
     send_live_imminent_email,
     send_class1_rewatch_reminder_email,
@@ -1910,6 +1911,7 @@ def emails():
     reachable_total = Ambassador.query.filter(Ambassador.unsubscribed_at.is_(None)).count()
 
     _MANUAL_TEMPLATES = [
+        ("masterclass_invitation", "masterclass_invitation_sent_at"),
         ("class1_ready",     "class1_email_sent_at"),
         ("class2_ready",     "class2_email_sent_at"),
         ("class3_ready",     "class3_email_sent_at"),
@@ -2241,6 +2243,17 @@ _SEGMENT_TEMPLATES = {
         "min_age_days": 0,
         # Skip those who've already joined or clicked the link
         "exclude_if_event_in": ["webinar_joined", "webinar_link_clicked"],
+    },
+    "masterclass_invitation": {
+        "fn": send_masterclass_invitation_email,
+        "default_segment": "all",
+        "flag": "masterclass_invitation_sent_at",
+        "label": "Masterclass invitation (Zoom link · save the date)",
+        "min_age_days": 0,
+        # Don't re-invite people who already joined a previous webinar in this
+        # series — they have the routine. If you want to send anyway, clear
+        # the flag manually.
+        "exclude_if_event_in": ["webinar_joined"],
     },
     "final_signal": {
         "fn": send_final_signal_email,
@@ -3074,6 +3087,10 @@ def test_email():
             elif email_type == "webinar_reminder":
                 fake.referral_count = 0
                 success = send_webinar_reminder_email(fake, app_url)
+
+            elif email_type == "masterclass_invitation":
+                fake.referral_count = 0
+                success = send_masterclass_invitation_email(fake, app_url)
 
             elif email_type == "final_signal":
                 fake.referral_count = 0
@@ -6197,6 +6214,53 @@ def delete_circle_payment(cp_id):
     return jsonify(ok=True, deleted=True, label=label)
 
 
+@admin_bp.route("/circle-payments/<int:cp_id>/link-ambassador", methods=["POST"])
+def link_circle_payment_to_ambassador(cp_id):
+    """Attach (or detach) an Ambassador to a CirclePayment.
+
+    Body: {"ambassador_id": <int>} to link, {"ambassador_id": null} to unlink.
+    Used for orphan payments (direct buyers without a matching Reservation)
+    where the Stripe email doesn't equal the Ambassador's email — the admin
+    knows it's the same person and links them by hand.
+    """
+    from flask import jsonify
+    cp = CirclePayment.query.get_or_404(cp_id)
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ambassador_id", "__missing__")
+    if raw == "__missing__":
+        return jsonify(ok=False, error="ambassador_id required (or null to unlink)"), 400
+
+    if raw is None or raw == "":
+        cp.ambassador_id = None
+        db.session.commit()
+        logger.info("unlinked CirclePayment %s from any ambassador", cp.id)
+        return jsonify(ok=True, linked=False, ambassador=None)
+
+    try:
+        amb_id = int(raw)
+    except (TypeError, ValueError):
+        return jsonify(ok=False, error="ambassador_id must be int or null"), 400
+
+    amb = Ambassador.query.get(amb_id)
+    if amb is None:
+        return jsonify(ok=False, error="ambassador not found"), 404
+
+    cp.ambassador_id = amb.id
+    db.session.commit()
+    logger.info("linked CirclePayment %s → Ambassador %s (%s)", cp.id, amb.id, amb.email)
+    return jsonify(
+        ok=True,
+        linked=True,
+        ambassador={
+            "id": amb.id,
+            "name": amb.name,
+            "email": amb.email,
+            "phone": amb.phone_number or "",
+            "profile_picture_url": amb.profile_picture_url or "",
+        },
+    )
+
+
 @admin_bp.route("/reservations")
 def reservations():
     """Admin control room for the MKOT 3.0 live event.
@@ -6303,6 +6367,11 @@ def reservations():
         if r.paid_at and not _reservation_has_phone(r) and not r.no_phone_email_sent_at
     )
 
+    # Pre-compute payment inference per CirclePayment so the template can
+    # render "chose vs paid" badges without re-running the helper per row.
+    from app.services.payment_inference import infer_from_payment
+    inferred_by_cp_id = {cp.id: infer_from_payment(cp) for cp in ordered_cps}
+
     return render_template(
         "admin_reservations.html",
         page_title="Reservas",
@@ -6321,6 +6390,7 @@ def reservations():
         order_index_by_email=order_index_by_email,
         top_n_video=TOP_N_VIDEO,
         orphan_payments=deduped_orphans,
+        inferred_by_cp_id=inferred_by_cp_id,
         cash_net_cents=cash_net_cents,
         cash_gross_cents=cash_gross_cents,
         refunds_out_cents=refunds_out_cents,
@@ -6396,6 +6466,7 @@ def reservations_json():
     )
 
     # Orphans for the JSON payload (emails that paid full but no Reservation).
+    from app.services.payment_inference import infer_from_payment
     reservation_emails = {r.email.lower() for r in rows if r.email}
     orphan_seen = set()
     orphan_rows_payload = []
@@ -6406,6 +6477,8 @@ def reservations_json():
         if key in reservation_emails or key in orphan_seen:
             continue
         orphan_seen.add(key)
+        inferred = infer_from_payment(cp)
+        linked_amb = cp.ambassador if cp.ambassador_id else None
         orphan_rows_payload.append({
             "id": cp.id,
             "email": cp.email,
@@ -6417,12 +6490,24 @@ def reservations_json():
             "is_top_50": (order_index_by_email.get(key) or 999) <= TOP_N_VIDEO,
             "invoice_sent_at": cp.invoice_sent_at.isoformat() if cp.invoice_sent_at else None,
             "invoice_id": cp.invoice_id or "",
+            "inferred_program": inferred["program"],
+            "inferred_modality": inferred["modality"],
+            "inferred_payment_plan": inferred["payment_plan"],
+            "inference_source": inferred["source"],
+            "linked_ambassador": ({
+                "id": linked_amb.id,
+                "name": linked_amb.name,
+                "email": linked_amb.email,
+                "phone": linked_amb.phone_number or "",
+                "profile_picture_url": linked_amb.profile_picture_url or "",
+            } if linked_amb else None),
         })
 
     rows_payload = []
     for r in rows:
         cp = circle_by_email.get(r.email.lower()) if r.email else None
         order_idx = order_index_by_email.get(r.email.lower()) if r.email else None
+        cp_inferred = infer_from_payment(cp) if cp else None
         rows_payload.append({
             "id": r.id,
             "paid_at": r.paid_at.isoformat() if r.paid_at else None,
@@ -6450,13 +6535,18 @@ def reservations_json():
             "refund_email_sent_at": r.refund_email_sent_at.isoformat() if r.refund_email_sent_at else None,
             "no_phone_email_sent_at": r.no_phone_email_sent_at.isoformat() if r.no_phone_email_sent_at else None,
             "has_phone": _reservation_has_phone(r),
-            # CirclePayment join (full plan paid)
+            # CirclePayment join (full plan paid) + auto-inferred fields
+            # so the admin can compare what the buyer ELECTED on the form
+            # vs what they actually PAID for in Stripe.
             "circle_payment": ({
                 "amount_cents": cp.amount_cents or 0,
                 "paid_at": cp.paid_at.isoformat() if cp.paid_at else None,
                 "description": cp.description or "",
                 "invoice_sent_at": cp.invoice_sent_at.isoformat() if cp.invoice_sent_at else None,
                 "invoice_id": cp.invoice_id or "",
+                "inferred_program": cp_inferred["program"] if cp_inferred else None,
+                "inferred_modality": cp_inferred["modality"] if cp_inferred else None,
+                "inferred_payment_plan": cp_inferred["payment_plan"] if cp_inferred else None,
             } if cp else None),
             "order_index": order_idx,
             "is_top_50": (order_idx is not None and order_idx <= TOP_N_VIDEO),
@@ -6894,6 +6984,58 @@ def preview_no_phone_email():
         sample = _Stub()
     html = build_no_phone_outreach_html(sample)
     return html
+
+
+@admin_bp.route("/preview-masterclass-email")
+def preview_masterclass_email():
+    """Render the "here's your prize" masterclass invitation email for
+    visual review in the browser.
+
+    Query params (all optional):
+      ?count=<int>   simulate referral_count (drives the personalization
+                     branch — 0 / 1-4 / 5+ each show different copy)
+      ?name=<str>    first name to address (default "Carla")
+    """
+    import os as _os
+    from flask import render_template
+    from app.mailer import _masterclass_calendar_urls
+
+    try:
+        referral_count = max(0, int(request.args.get("count", "5") or 5))
+    except ValueError:
+        referral_count = 5
+    first_name = (request.args.get("name") or "Carla").strip() or "Carla"
+
+    app_url = (current_app.config.get("APP_URL") or request.host_url or "https://example.com").rstrip("/")
+    ics_url, gcal_url, outlook_url = _masterclass_calendar_urls(app_url)
+
+    join_url = _os.getenv("MASTERCLASS_JOIN_URL", "").strip() or (
+        "https://us06web.zoom.us/j/87205814207?pwd=k0ZugO56KMvaKLMdyjbDn7YH2mCzJw.1"
+    )
+    topic = _os.getenv("MASTERCLASS_TOPIC", "").strip() or (
+        "Musicality Masterclass · Hacking the Urbankiz Code"
+    )
+    date_label = _os.getenv("MASTERCLASS_DATE_LABEL", "").strip() or "May 15 · 18:00 Madrid"
+    meeting_id = _os.getenv("MASTERCLASS_MEETING_ID", "").strip() or "872 0581 4207"
+    passcode = _os.getenv("MASTERCLASS_PASSCODE", "").strip() or "488349"
+
+    return render_template(
+        "emails/masterclass_invitation.html",
+        first_name=first_name,
+        community=True,
+        referral_count=referral_count,
+        join_url=join_url,
+        topic=topic,
+        date_label=date_label,
+        meeting_id=meeting_id,
+        passcode=passcode,
+        ics_url=ics_url,
+        google_calendar_url=gcal_url,
+        outlook_calendar_url=outlook_url,
+        dashboard_url=f"{app_url}/dashboard/preview",
+        unsubscribe_url=f"{app_url}/unsubscribe/preview",
+        app_url=app_url,
+    )
 
 
 # ─── BULK ACTIONS ON SELECTED RESERVATIONS ─────────────────────────

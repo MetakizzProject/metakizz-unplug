@@ -63,6 +63,10 @@ class Ambassador(db.Model):
     webinar_reminder_sent_at = db.Column(db.DateTime, nullable=True)
     final_signal_sent_at = db.Column(db.DateTime, nullable=True)
     live_imminent_sent_at = db.Column(db.DateTime, nullable=True)
+    # "Masterclass save-the-date" invite — fired by admin days before the
+    # live, with the Zoom link/date/passcode. Separate from webinar_reminder
+    # (1h-before reminder) on purpose: different timing, different copy.
+    masterclass_invitation_sent_at = db.Column(db.DateTime, nullable=True)
     # Weekend re-open reminders: one per class. Audience is "first-watched
     # during launch but didn't return during REWATCH_WINDOW_OPENS_AT".
     class1_rewatch_reminder_sent_at = db.Column(db.DateTime, nullable=True)
@@ -610,6 +614,17 @@ class CirclePayment(db.Model):
     # Immutable copy of the PDF as generated at send time. Stored in DB
     # because Render's filesystem is ephemeral. Postgres BYTEA / SQLite BLOB.
     invoice_pdf_bytes = db.Column(db.LargeBinary, nullable=True)
+
+    # Optional explicit link to an Ambassador, set by the admin from the
+    # reservations dashboard when an orphan payment matches a known launch
+    # profile but the email on Stripe doesn't equal the Ambassador's email
+    # (so the auto-match by email failed). Manually-curated identity.
+    ambassador_id = db.Column(
+        db.Integer, db.ForeignKey("ambassadors.id"),
+        nullable=True, index=True,
+    )
+    ambassador = db.relationship("Ambassador", foreign_keys=[ambassador_id])
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
 

@@ -60,6 +60,7 @@ def _ensure_unsubscribe_columns(db):
             "class2_rewatch_reminder_sent_at",
             "class3_rewatch_reminder_sent_at",
             "last_outreach_at",
+            "masterclass_invitation_sent_at",
         ):
             if col not in cols:
                 conn.execute(text(f"ALTER TABLE ambassadors ADD COLUMN {col} TIMESTAMP"))
@@ -196,6 +197,14 @@ def _ensure_unsubscribe_columns(db):
                 else:
                     conn.execute(text("ALTER TABLE circle_payments ADD COLUMN invoice_pdf_bytes BLOB"))
                 logger.info("added column circle_payments.invoice_pdf_bytes")
+            # CirclePayment.ambassador_id (added 2026-05-11). Optional FK so
+            # admins can manually link orphan payments to a known Ambassador
+            # profile when the Stripe email doesn't match the Ambassador
+            # email (different addresses for same person).
+            if "ambassador_id" not in cp_cols:
+                conn.execute(text("ALTER TABLE circle_payments ADD COLUMN ambassador_id INTEGER"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_circle_payments_ambassador_id ON circle_payments (ambassador_id)"))
+                logger.info("added column circle_payments.ambassador_id")
 
         # Reservation.no_phone_email_sent_at (added 2026-05-10). Tracks
         # the "tried to reach you on WhatsApp but no phone on file" email.
