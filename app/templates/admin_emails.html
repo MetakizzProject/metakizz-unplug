@@ -62,12 +62,13 @@
                   ▶ Send to {{ info.eligible }} (all)
                 </button>
 
-                {# Carrots & onions only: alternate audience = ambassadors who
-                   actually won the public challenge (5+ unplugs, source=public).
-                   Without this the only option is to blast all 2.8k ambassadors,
-                   which is wrong for this email — it's the masterclass launch
-                   email aimed at the people who unlocked the prize. #}
-                {% if key == "carrots_landing" and info.public_winners_total is defined %}
+                {# Alternate audience available on every manual email card:
+                   "public_winners" = ambassadors who unlocked the masterclass
+                   prize in the public challenge (5+ unplugs, source=public).
+                   Without this the only option is to blast all 2.8k
+                   ambassadors, which is wrong for any email aimed at the
+                   actual winners (Zoom invite, replay link, launch email…). #}
+                {% if info.public_winners_total is defined %}
                 <button type="button" onclick="document.getElementById('confirm-{{ key }}-winners').classList.remove('hidden')"
                         class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-yellow-400 hover:bg-yellow-300 px-3 py-2 rounded font-bold transition disabled:bg-gray-700 disabled:text-gray-500 mt-1"
                         {% if info.public_winners_eligible == 0 %}disabled{% endif %}
@@ -138,10 +139,12 @@
                 </form>
               </div>
 
-              {# Audience override modal — Carrots & onions → public winners only.
+              {# Audience override modal — "public winners only" variant.
                  Pointed at the `public_winners` segment so the send-time filter
-                 matches the count shown in the card. #}
-              {% if key == "carrots_landing" and info.public_winners_total is defined %}
+                 matches the count shown in the card. Available on every manual
+                 email so any of them (Zoom invite, replay, launch…) can be
+                 restricted to the actual challenge winners. #}
+              {% if info.public_winners_total is defined %}
               <div id="confirm-{{ key }}-winners" class="hidden fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm">
                 <form method="POST" action="{{ url_for('admin.segment_send_template', segment_name='public_winners') }}"
                       class="bg-gray-900 border-2 border-yellow-400/60 rounded-xl p-6 max-w-md w-full"

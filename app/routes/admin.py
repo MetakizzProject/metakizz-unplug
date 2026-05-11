@@ -1967,6 +1967,22 @@ def emails():
         .all() if e
     }
 
+    # Compute the "public winners" pool once — same set of people for every
+    # template card (5+ unplugs, source=public, reachable). What changes per
+    # template is the *_sent_at idempotency subtraction. Done outside the
+    # loop so we don't re-query for each template.
+    ref_counts_for_winners = _get_referral_counts()
+    public_winners_pool = [
+        a for a in (
+            Ambassador.query
+            .filter(Ambassador.unsubscribed_at.is_(None))
+            .filter(Ambassador.source == "public")
+            .all()
+        )
+        if ref_counts_for_winners.get(a.id, 0) >= 5
+    ]
+    public_winners_total = len(public_winners_pool)
+
     manual_email_eligibles = {}
     for key, flag in _MANUAL_TEMPLATES:
         already = Ambassador.query.filter(
@@ -1980,39 +1996,27 @@ def emails():
             if ev in excl and em
         }
         already_engaged = len(engaged_emails & reachable_emails)
+        # Public winners variant: same pool minus the ones who already
+        # received THIS template, minus those excluded by event filter
+        # (so the count matches what segment_send_template would fire).
+        pw_already_sent = sum(
+            1 for a in public_winners_pool
+            if getattr(a, flag, None) is not None
+        )
+        pw_emails = {(a.email or "").lower() for a in public_winners_pool if a.email}
+        pw_already_engaged = len(engaged_emails & pw_emails)
+        pw_eligible = max(public_winners_total - pw_already_sent - pw_already_engaged, 0)
         manual_email_eligibles[key] = {
             "eligible": max(reachable_total - already - already_engaged, 0),
             "already_sent": already,
             "already_engaged": already_engaged,
             "reachable_total": reachable_total,
             "label": _SEGMENT_TEMPLATES[key]["label"],
+            "public_winners_total": public_winners_total,
+            "public_winners_eligible": pw_eligible,
+            "public_winners_already_sent": pw_already_sent,
+            "public_winners_already_engaged": pw_already_engaged,
         }
-
-    # Carrots & onions is the only manual email with an alternate target
-    # audience: "public_winners" (5+ unplugs, public-source) — i.e. the
-    # actual challenge winners who unlocked the masterclass. Without
-    # this, the only option in the UI is "send to all 2.8k ambassadors",
-    # which is wrong for this email.
-    if "carrots_landing" in manual_email_eligibles:
-        ref_counts_for_winners = _get_referral_counts()
-        public_winners_pool = (
-            Ambassador.query
-            .filter(Ambassador.unsubscribed_at.is_(None))
-            .filter(Ambassador.source == "public")
-            .all()
-        )
-        public_winners_pool = [
-            a for a in public_winners_pool
-            if ref_counts_for_winners.get(a.id, 0) >= 5
-        ]
-        pw_already_sent = sum(
-            1 for a in public_winners_pool
-            if a.carrots_landing_sent_at is not None
-        )
-        pw_eligible = max(len(public_winners_pool) - pw_already_sent, 0)
-        manual_email_eligibles["carrots_landing"]["public_winners_total"] = len(public_winners_pool)
-        manual_email_eligibles["carrots_landing"]["public_winners_eligible"] = pw_eligible
-        manual_email_eligibles["carrots_landing"]["public_winners_already_sent"] = pw_already_sent
 
     # Cron kill-switch status (DISABLE_CRON_EMAILS env var).
     import os as _os
