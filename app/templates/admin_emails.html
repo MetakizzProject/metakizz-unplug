@@ -59,8 +59,26 @@
                 <button type="button" onclick="document.getElementById('confirm-{{ key }}').classList.remove('hidden')"
                         class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-brand-400 hover:bg-brand-300 px-3 py-2 rounded font-bold transition disabled:bg-gray-700 disabled:text-gray-500"
                         {% if info.eligible == 0 %}disabled{% endif %}>
-                  ▶ Send to {{ info.eligible }}
+                  ▶ Send to {{ info.eligible }} (all)
                 </button>
+
+                {# Carrots & onions only: alternate audience = ambassadors who
+                   actually won the public challenge (5+ unplugs, source=public).
+                   Without this the only option is to blast all 2.8k ambassadors,
+                   which is wrong for this email — it's the masterclass launch
+                   email aimed at the people who unlocked the prize. #}
+                {% if key == "carrots_landing" and info.public_winners_total is defined %}
+                <button type="button" onclick="document.getElementById('confirm-{{ key }}-winners').classList.remove('hidden')"
+                        class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-yellow-400 hover:bg-yellow-300 px-3 py-2 rounded font-bold transition disabled:bg-gray-700 disabled:text-gray-500 mt-1"
+                        {% if info.public_winners_eligible == 0 %}disabled{% endif %}
+                        title="Send only to public-source ambassadors with 5+ unplugs — the people who actually won the masterclass.">
+                  🏆 Send to {{ info.public_winners_eligible }} public winners
+                </button>
+                <p class="text-[10px] text-gray-500 font-mono-term -mt-1">
+                  {{ info.public_winners_total }} public winners total
+                  {% if info.public_winners_already_sent %} · <span class="text-yellow-300/70">{{ info.public_winners_already_sent }} already received</span>{% endif %}
+                </p>
+                {% endif %}
               </div>
 
               {# Confirmation modal — one per template #}
@@ -119,6 +137,68 @@
                     </div>
                 </form>
               </div>
+
+              {# Audience override modal — Carrots & onions → public winners only.
+                 Pointed at the `public_winners` segment so the send-time filter
+                 matches the count shown in the card. #}
+              {% if key == "carrots_landing" and info.public_winners_total is defined %}
+              <div id="confirm-{{ key }}-winners" class="hidden fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm">
+                <form method="POST" action="{{ url_for('admin.segment_send_template', segment_name='public_winners') }}"
+                      class="bg-gray-900 border-2 border-yellow-400/60 rounded-xl p-6 max-w-md w-full"
+                      style="box-shadow: 0 0 40px rgba(250,204,21,0.3);">
+                    <input type="hidden" name="template" value="{{ key }}">
+
+                    <div class="flex items-center justify-between mb-4">
+                        <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-yellow-300">▌ CONFIRM SEND · PUBLIC WINNERS</p>
+                        <button type="button" onclick="document.getElementById('confirm-{{ key }}-winners').classList.add('hidden')" class="text-gray-500 hover:text-white text-xl leading-none">×</button>
+                    </div>
+
+                    <h3 class="text-base font-bold text-white mb-2">🏆 {{ info.label }} → public winners only</h3>
+                    <p class="text-sm text-gray-300 mb-4">
+                        About to send to <strong class="text-yellow-300">{{ info.public_winners_eligible }}</strong> ambassadors who unlocked the masterclass prize in the <strong>public</strong> challenge (5+ unplugs, source=public).
+                        {% if info.public_winners_already_sent %}<br><span class="text-yellow-300/80">{{ info.public_winners_already_sent }} already received this — they'll be skipped.</span>{% endif %}
+                    </p>
+
+                    <div class="bg-yellow-900/20 border border-yellow-500/40 rounded p-3 mb-4 text-xs text-yellow-200">
+                        ⚠ Real production send. <strong>Canary first</strong> via the textarea below.
+                    </div>
+
+                    {# Canary mode — same pattern as the "all" modal #}
+                    <div class="bg-blue-900/20 border border-blue-500/40 rounded p-3 mb-5">
+                        <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-blue-300 mb-2">🧪 Canary send · test addresses first</p>
+                        <textarea name="only_emails" rows="3" placeholder="your@email.com&#10;teammate@email.com"
+                                  class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white font-mono"
+                                  oninput="
+                                    var lines = this.value.trim().split(/[\n,]/).map(function(l){return l.trim();}).filter(Boolean);
+                                    var n = lines.length;
+                                    var btn = document.getElementById('confirm-{{ key }}-winners-btn');
+                                    if (n > 0) {
+                                      btn.textContent = '🧪 Canary: send to ' + n + ' test address' + (n === 1 ? '' : 'es');
+                                      btn.classList.remove('bg-yellow-400'); btn.classList.add('bg-blue-500');
+                                      btn.classList.remove('text-black'); btn.classList.add('text-white');
+                                    } else {
+                                      btn.textContent = '🏆 Send to {{ info.public_winners_eligible }} public winners';
+                                      btn.classList.add('bg-yellow-400'); btn.classList.remove('bg-blue-500');
+                                      btn.classList.add('text-black'); btn.classList.remove('text-white');
+                                    }
+                                  "></textarea>
+                        <p class="text-[10px] text-gray-500 mt-1">
+                            One email per line (or comma-separated). Max 5. <strong class="text-blue-300">Recommended:</strong> canary to yourself first, verify, then send to all winners.
+                        </p>
+                    </div>
+
+                    <div class="flex gap-2 justify-end">
+                        <button type="button" onclick="document.getElementById('confirm-{{ key }}-winners').classList.add('hidden')"
+                                class="font-mono-term text-[11px] tracking-wider uppercase text-gray-400 hover:text-white px-4 py-2.5">Cancel</button>
+                        <button type="submit" id="confirm-{{ key }}-winners-btn"
+                                class="font-mono-term text-[11px] tracking-[0.2em] uppercase text-black bg-yellow-400 px-5 py-2.5 rounded-lg font-bold transition"
+                                style="box-shadow: 0 0 16px rgba(250,204,21,0.4);">
+                          🏆 Send to {{ info.public_winners_eligible }} public winners
+                        </button>
+                    </div>
+                </form>
+              </div>
+              {% endif %}
             {% endfor %}
         </div>
 
