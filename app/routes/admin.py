@@ -1999,13 +1999,21 @@ def emails():
         # Public winners variant: same pool minus the ones who already
         # received THIS template, minus those excluded by event filter
         # (so the count matches what segment_send_template would fire).
-        pw_already_sent = sum(
-            1 for a in public_winners_pool
-            if getattr(a, flag, None) is not None
-        )
-        pw_emails = {(a.email or "").lower() for a in public_winners_pool if a.email}
-        pw_already_engaged = len(engaged_emails & pw_emails)
-        pw_eligible = max(public_winners_total - pw_already_sent - pw_already_engaged, 0)
+        # Use a single set of skipped IDs so someone who is BOTH already-
+        # sent AND already-engaged gets counted once, not twice.
+        pw_skipped_ids = set()
+        pw_already_sent = 0
+        pw_already_engaged = 0
+        for a in public_winners_pool:
+            sent = getattr(a, flag, None) is not None
+            engaged = bool(a.email) and a.email.lower() in engaged_emails
+            if sent:
+                pw_already_sent += 1
+            if engaged:
+                pw_already_engaged += 1
+            if sent or engaged:
+                pw_skipped_ids.add(a.id)
+        pw_eligible = max(public_winners_total - len(pw_skipped_ids), 0)
         manual_email_eligibles[key] = {
             "eligible": max(reachable_total - already - already_engaged, 0),
             "already_sent": already,
