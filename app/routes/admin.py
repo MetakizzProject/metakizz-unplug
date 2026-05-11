@@ -2297,10 +2297,12 @@ _SEGMENT_TEMPLATES = {
         "flag": "masterclass_invitation_sent_at",
         "label": "Masterclass invitation (Zoom link · save the date)",
         "min_age_days": 0,
-        # Don't re-invite people who already joined a previous webinar in this
-        # series — they have the routine. If you want to send anyway, clear
-        # the flag manually.
-        "exclude_if_event_in": ["webinar_joined"],
+        # No event-based exclusion: this template invites winners to the
+        # NEW masterclass with a fresh Zoom link, so anyone who attended a
+        # past live (e.g. the launch sales webinar = webinar_joined event)
+        # should ALSO receive this invite. Dedup is handled by the
+        # masterclass_invitation_sent_at flag so it can never be sent twice
+        # to the same person regardless.
     },
     "carrots_landing": {
         "fn": send_carrots_landing_email,
