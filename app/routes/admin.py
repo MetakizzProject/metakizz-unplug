@@ -11,7 +11,7 @@ from flask import (
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
-from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent, Reservation, RaffleState, PartnerInvite, CirclePayment
+from app.models import db, Ambassador, Referral, RewardTier, MilestoneNotification, EmailEvent, PendingReferral, PrizeDelivery, LeadEvent, Reservation, RaffleState, PartnerInvite, CirclePayment, SavedAudience, EmailDraft
 from app.services.temperature import bucket_from_event_set
 from app.mailer import (
     build_refund_confirmation_html,
@@ -41,6 +41,8 @@ from app.mailer import (
     send_class2_rewatch_reminder_email,
     send_class3_rewatch_reminder_email,
     send_reservation_first50_email,
+    send_custom_html_email,
+    render_custom_html_preview,
     _send as _mailer_send,  # low-level Resend POST, used by /admin/broadcast
     # legacy:
     send_first_referral_email,
@@ -1851,7 +1853,17 @@ def emails():
     """Email Control Center — central visibility for every email the
     system can send. Per-template lifecycle stats, recent activity feed,
     Resend webhook health, unsubscribe count, scheduled sends.
+
+    Also boots the Email Hub: seeds the baseline saved audiences
+    (`public_unpaid` etc.) on first page load so the admin sees them
+    immediately without needing a migration script.
     """
+    # Idempotent — safe to call every page load.
+    try:
+        _seed_default_audiences()
+    except Exception:
+        logger.exception("_seed_default_audiences failed (continuing)")
+
     lifecycle = _compute_email_lifecycle()
     summary = _compute_email_health_summary()
 
@@ -8855,3 +8867,436 @@ def stripe_health():
         active_section="stripe_health",
         **_admin_layout_context(),
     )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# EMAIL HUB — saved audiences + custom HTML drafts + filtered send
+# ═══════════════════════════════════════════════════════════════════
+# Sits behind /admin/emails (the page itself is unchanged URL). Lets the
+# admin (a) build a saved Audience by combining filter dimensions over
+# Ambassador / Reservation / CirclePayment, (b) compose a one-off HTML
+# email draft, (c) preview the recipient list, (d) canary to a test
+# address, (e) fire the real send. Designed for sales-week workflows
+# where the same audience (e.g. "public_unpaid") is reused across many
+# different emails.
+
+
+def resolve_audience(criteria):
+    """Apply a criteria dict to Ambassador, return a list of Ambassador rows.
+
+    Supported keys (all optional, omitted = no filter on that dimension):
+      source:         "public" | "community"
+      has_paid_full:  True (joined CirclePayment.paid_at) / False (not paid)
+      has_reservation: True (joined Reservation row exists) / False
+      program_choice: "dancers" | "instructors" | "not_sure"  (from Reservation)
+      dance_level:    string (exact match on Ambassador.dance_level form answer)
+      never_contacted: True (last_outreach_at IS NULL) / False (IS NOT NULL)
+      include_unsubscribed: True (rare; default False excludes unsubscribed)
+    """
+    q = Ambassador.query
+
+    if not criteria.get("include_unsubscribed", False):
+        q = q.filter(Ambassador.unsubscribed_at.is_(None))
+
+    src = criteria.get("source")
+    if src in ("public", "community"):
+        q = q.filter(Ambassador.source == src)
+
+    lvl = criteria.get("dance_level")
+    if lvl:
+        q = q.filter(Ambassador.dance_level == lvl)
+
+    nc = criteria.get("never_contacted")
+    if nc is True:
+        q = q.filter(Ambassador.last_outreach_at.is_(None))
+    elif nc is False:
+        q = q.filter(Ambassador.last_outreach_at.isnot(None))
+
+    base_rows = q.all()
+
+    # Email-keyed filters: Reservation and CirclePayment are joined to
+    # Ambassador via email string (no FK column). Do those in Python
+    # with single bulk queries up-front so we stay O(N) instead of
+    # firing 2 queries per ambassador.
+    needs_rsv = (
+        criteria.get("has_reservation") is not None
+        or criteria.get("program_choice") is not None
+    )
+    needs_paid = criteria.get("has_paid_full") is not None
+
+    rsv_by_email = {}
+    if needs_rsv:
+        for r in Reservation.query.all():
+            if r.email:
+                rsv_by_email.setdefault(r.email.lower(), []).append(r)
+
+    paid_emails = set()
+    if needs_paid:
+        paid_emails = {
+            (cp.email or "").lower()
+            for cp in CirclePayment.query
+                .filter(CirclePayment.paid_at.isnot(None)).all()
+            if cp.email
+        }
+
+    has_rsv_flag = criteria.get("has_reservation")
+    has_paid_flag = criteria.get("has_paid_full")
+    program_choice = criteria.get("program_choice")
+
+    out = []
+    for a in base_rows:
+        email_l = (a.email or "").lower()
+
+        if has_rsv_flag is not None:
+            has = email_l in rsv_by_email if email_l else False
+            if has_rsv_flag and not has:
+                continue
+            if not has_rsv_flag and has:
+                continue
+
+        if has_paid_flag is not None:
+            has = email_l in paid_emails if email_l else False
+            if has_paid_flag and not has:
+                continue
+            if not has_paid_flag and has:
+                continue
+
+        if program_choice:
+            rsvs = rsv_by_email.get(email_l, []) if email_l else []
+            if not any(r.program_choice == program_choice for r in rsvs):
+                continue
+
+        out.append(a)
+
+    return out
+
+
+def _serialize_audience(a):
+    return {
+        "id": a.id,
+        "name": a.name,
+        "description": a.description or "",
+        "criteria": a.criteria(),
+        "is_preset": bool(a.is_preset),
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+        "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+    }
+
+
+def _serialize_draft(d):
+    return {
+        "id": d.id,
+        "name": d.name,
+        "subject": d.subject or "",
+        "body_html": d.body_html or "",
+        "last_sent_at": d.last_sent_at.isoformat() if d.last_sent_at else None,
+        "last_sent_audience_id": d.last_sent_audience_id,
+        "last_sent_count": d.last_sent_count,
+        "created_at": d.created_at.isoformat() if d.created_at else None,
+        "updated_at": d.updated_at.isoformat() if d.updated_at else None,
+    }
+
+
+def _serialize_ambassador_for_preview(a):
+    return {
+        "id": a.id,
+        "name": a.name or "(no name)",
+        "email": a.email or "",
+        "source": a.source or "",
+        "country_code": a.country_code or "",
+        "dance_level": a.dance_level or "",
+    }
+
+
+# ── Saved audiences ────────────────────────────────────────────────
+
+@admin_bp.route("/emails/audiences", methods=["GET"])
+def email_hub_list_audiences():
+    from flask import jsonify
+    audiences = SavedAudience.query.order_by(SavedAudience.is_preset.desc(), SavedAudience.name).all()
+    return jsonify(audiences=[_serialize_audience(a) for a in audiences])
+
+
+@admin_bp.route("/emails/audiences", methods=["POST"])
+def email_hub_create_audience():
+    from flask import jsonify
+    import json as _json
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "").strip()
+    if not name:
+        return jsonify(ok=False, error="name_required"), 400
+    if SavedAudience.query.filter_by(name=name).first():
+        return jsonify(ok=False, error="name_taken"), 409
+    criteria = body.get("criteria") or {}
+    a = SavedAudience(
+        name=name,
+        description=(body.get("description") or "").strip() or None,
+        criteria_json=_json.dumps(criteria),
+        is_preset=False,
+    )
+    db.session.add(a)
+    db.session.commit()
+    return jsonify(ok=True, audience=_serialize_audience(a))
+
+
+@admin_bp.route("/emails/audiences/<int:audience_id>", methods=["PUT", "PATCH"])
+def email_hub_update_audience(audience_id):
+    from flask import jsonify
+    import json as _json
+    a = SavedAudience.query.get_or_404(audience_id)
+    body = request.get_json(silent=True) or {}
+    if "name" in body:
+        new_name = (body["name"] or "").strip()
+        if not new_name:
+            return jsonify(ok=False, error="name_required"), 400
+        if new_name != a.name and SavedAudience.query.filter_by(name=new_name).first():
+            return jsonify(ok=False, error="name_taken"), 409
+        a.name = new_name
+    if "description" in body:
+        a.description = (body["description"] or "").strip() or None
+    if "criteria" in body:
+        a.criteria_json = _json.dumps(body["criteria"] or {})
+    db.session.commit()
+    return jsonify(ok=True, audience=_serialize_audience(a))
+
+
+@admin_bp.route("/emails/audiences/<int:audience_id>", methods=["DELETE"])
+def email_hub_delete_audience(audience_id):
+    from flask import jsonify
+    a = SavedAudience.query.get_or_404(audience_id)
+    if a.is_preset:
+        return jsonify(ok=False, error="preset_protected"), 400
+    db.session.delete(a)
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+@admin_bp.route("/emails/audiences/<int:audience_id>/preview", methods=["POST", "GET"])
+def email_hub_preview_audience(audience_id):
+    """Resolve a saved audience to a recipient list (id, name, email)."""
+    from flask import jsonify
+    a = SavedAudience.query.get_or_404(audience_id)
+    rows = resolve_audience(a.criteria())
+    return jsonify(
+        ok=True,
+        audience_id=a.id,
+        audience_name=a.name,
+        total=len(rows),
+        recipients=[_serialize_ambassador_for_preview(r) for r in rows],
+    )
+
+
+@admin_bp.route("/emails/audiences/preview-ad-hoc", methods=["POST"])
+def email_hub_preview_ad_hoc():
+    """Resolve a criteria dict on the fly (without saving). Used by the
+    audience builder UI to live-update the recipient count as the admin
+    toggles filter checkboxes."""
+    from flask import jsonify
+    body = request.get_json(silent=True) or {}
+    criteria = body.get("criteria") or {}
+    rows = resolve_audience(criteria)
+    return jsonify(
+        ok=True,
+        total=len(rows),
+        recipients=[_serialize_ambassador_for_preview(r) for r in rows[:500]],  # cap for payload size
+        truncated=len(rows) > 500,
+    )
+
+
+# ── Email drafts ───────────────────────────────────────────────────
+
+@admin_bp.route("/emails/drafts", methods=["GET"])
+def email_hub_list_drafts():
+    from flask import jsonify
+    drafts = EmailDraft.query.order_by(EmailDraft.updated_at.desc()).all()
+    return jsonify(drafts=[_serialize_draft(d) for d in drafts])
+
+
+@admin_bp.route("/emails/drafts", methods=["POST"])
+def email_hub_create_draft():
+    from flask import jsonify
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "").strip() or "Untitled draft"
+    d = EmailDraft(
+        name=name,
+        subject=(body.get("subject") or "").strip(),
+        body_html=body.get("body_html") or "",
+    )
+    db.session.add(d)
+    db.session.commit()
+    return jsonify(ok=True, draft=_serialize_draft(d))
+
+
+@admin_bp.route("/emails/drafts/<int:draft_id>", methods=["PUT", "PATCH"])
+def email_hub_update_draft(draft_id):
+    from flask import jsonify
+    d = EmailDraft.query.get_or_404(draft_id)
+    body = request.get_json(silent=True) or {}
+    if "name" in body:
+        d.name = (body["name"] or "").strip() or "Untitled draft"
+    if "subject" in body:
+        d.subject = (body["subject"] or "").strip()
+    if "body_html" in body:
+        d.body_html = body["body_html"] or ""
+    db.session.commit()
+    return jsonify(ok=True, draft=_serialize_draft(d))
+
+
+@admin_bp.route("/emails/drafts/<int:draft_id>", methods=["DELETE"])
+def email_hub_delete_draft(draft_id):
+    from flask import jsonify
+    d = EmailDraft.query.get_or_404(draft_id)
+    db.session.delete(d)
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+@admin_bp.route("/emails/drafts/<int:draft_id>/render-preview", methods=["GET"])
+def email_hub_render_draft_preview(draft_id):
+    """Return the shell-wrapped HTML of a draft for visual preview in a
+    new tab (no send). Useful before firing canary or real send."""
+    d = EmailDraft.query.get_or_404(draft_id)
+    return render_custom_html_preview(d.body_html or "")
+
+
+@admin_bp.route("/emails/drafts/<int:draft_id>/test-send", methods=["POST"])
+def email_hub_send_test(draft_id):
+    """Canary send a draft to a specific email address. Does NOT touch
+    last_sent_at on the draft (it's a test). Subject is prefixed [TEST].
+    """
+    from flask import jsonify
+    d = EmailDraft.query.get_or_404(draft_id)
+    body = request.get_json(silent=True) or {}
+    to = (body.get("to") or "").strip()
+    if not to or "@" not in to:
+        return jsonify(ok=False, error="invalid_email"), 400
+    # Use a fake Ambassador-like object so unsubscribe block can still render
+    # (or none — _wrap accepts unsubscribe_url=None for tests).
+    wrapped = render_custom_html_preview(d.body_html or "")
+    sent = bool(_mailer_send(to, f"[TEST] {d.subject or d.name}", wrapped))
+    return jsonify(ok=True, sent=sent, to=to)
+
+
+@admin_bp.route("/emails/drafts/<int:draft_id>/send", methods=["POST"])
+def email_hub_send_draft(draft_id):
+    """Real send: dispatch the draft to every Ambassador in the audience.
+
+    Body: { audience_id: int, dry_run: bool? }
+
+    dry_run=True returns the recipient list without sending. Real send
+    iterates synchronously (per-ambassador unsub-link injection + Resend
+    HTTP call) and returns counts.
+    """
+    from flask import jsonify
+    d = EmailDraft.query.get_or_404(draft_id)
+    body = request.get_json(silent=True) or {}
+    audience_id = body.get("audience_id")
+    if not audience_id:
+        return jsonify(ok=False, error="audience_required"), 400
+    aud = SavedAudience.query.get_or_404(int(audience_id))
+
+    recipients = resolve_audience(aud.criteria())
+
+    if str(body.get("dry_run") or "").strip().lower() in ("1", "true", "yes", "on") or body.get("dry_run") is True:
+        return jsonify(
+            ok=True, dry_run=True,
+            audience_id=aud.id, audience_name=aud.name,
+            total=len(recipients),
+            recipients=[_serialize_ambassador_for_preview(r) for r in recipients[:500]],
+            truncated=len(recipients) > 500,
+        )
+
+    if not recipients:
+        return jsonify(ok=False, error="empty_audience"), 400
+
+    if not d.subject:
+        return jsonify(ok=False, error="subject_required"), 400
+    if not (d.body_html or "").strip():
+        return jsonify(ok=False, error="body_required"), 400
+
+    sent = 0
+    failed = 0
+    app_url = current_app.config.get("APP_URL", "") if current_app else ""
+    for amb in recipients:
+        try:
+            ok = send_custom_html_email(
+                amb,
+                subject=d.subject,
+                body_html=d.body_html,
+                app_url=app_url,
+                template_key=f"draft_{d.id}",
+            )
+            if ok:
+                sent += 1
+            else:
+                failed += 1
+        except Exception:
+            logger.exception("email_hub_send_draft: failed for ambassador %s", amb.id)
+            failed += 1
+
+    d.last_sent_at = datetime.now(timezone.utc)
+    d.last_sent_audience_id = aud.id
+    d.last_sent_count = sent
+    db.session.commit()
+
+    logger.info(
+        "email_hub_send_draft: draft=%s audience=%s sent=%d failed=%d",
+        d.id, aud.id, sent, failed,
+    )
+    return jsonify(
+        ok=True, dry_run=False,
+        sent=sent, failed=failed, total=len(recipients),
+        audience_name=aud.name, draft_name=d.name,
+    )
+
+
+def _seed_default_audiences():
+    """Idempotent: ensure the baseline preset audiences exist. Called from
+    the /admin/emails view so they materialize on first page load instead
+    of requiring a migration step.
+    """
+    import json as _json
+    presets = [
+        {
+            "name": "public_unpaid",
+            "description": "Public-source ambassadors who have not made a reservation AND have not paid the full plan. The natural audience for sales-week outreach.",
+            "criteria": {
+                "source": "public",
+                "has_reservation": False,
+                "has_paid_full": False,
+                "exclude_unsubscribed": True,
+            },
+        },
+        {
+            "name": "public_paid",
+            "description": "Public-source ambassadors who already paid the full plan. Use for post-purchase comms.",
+            "criteria": {
+                "source": "public",
+                "has_paid_full": True,
+            },
+        },
+        {
+            "name": "public_reserved_not_paid",
+            "description": "Public-source ambassadors who put down the €100 deposit but haven't completed the full plan. Closing audience.",
+            "criteria": {
+                "source": "public",
+                "has_reservation": True,
+                "has_paid_full": False,
+            },
+        },
+    ]
+    created = 0
+    for p in presets:
+        if SavedAudience.query.filter_by(name=p["name"]).first():
+            continue
+        a = SavedAudience(
+            name=p["name"],
+            description=p["description"],
+            criteria_json=_json.dumps(p["criteria"]),
+            is_preset=True,
+        )
+        db.session.add(a)
+        created += 1
+    if created:
+        db.session.commit()
+        logger.info("seeded %d default audience preset(s)", created)

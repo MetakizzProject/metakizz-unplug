@@ -7,7 +7,299 @@
         <span class="text-gray-500">▶ live · auto-refresh on reload</span>
     </div>
     <h1 class="text-2xl font-display font-bold mb-1">Email Control Center</h1>
-    <p class="text-sm text-gray-400 mb-6">Every template the system can send, what's working, what's not, and the most recent 50 deliveries. Refresh for live data.</p>
+    <p class="text-sm text-gray-400 mb-6">Compose custom HTML emails, target them with saved audiences, canary first, send. Lifecycle health below.</p>
+
+    {# ──────────────────────────────────────────────────────────
+       EMAIL HUB (NEW · drafts + saved audiences + filtered send)
+       The primary workflow lives here. Two columns:
+         · Drafts:    custom HTML emails the admin composed.
+         · Audiences: named filter combinations (source, paid,
+                      reservation, program, level, contacted).
+       Send flow: pick draft → pick audience → preview → canary → fire.
+       Legacy tools (8 pre-built template cards, Zoom import, recent
+       activity feed) are collapsed at the bottom of the page.
+       ────────────────────────────────────────────────────────── #}
+    <div class="mb-7 p-5 rounded-xl border-2 border-brand-400/60 bg-gradient-to-br from-black/80 via-gray-950/60 to-brand-950/30"
+         style="box-shadow: 0 0 32px rgba(46,219,153,0.12);">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div>
+                <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ EMAIL HUB · drafts + audiences + send</p>
+                <h2 class="text-xl font-display font-bold text-white mt-1">Compose, target, canary, send.</h2>
+                <p class="text-xs text-gray-400 mt-1">All your custom sales emails live here. Saved audiences are reusable across sends — set them once, use them all week.</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {# DRAFTS column #}
+            <div class="border border-brand-400/30 rounded-lg p-4 bg-gray-900/40">
+                <div class="flex items-center justify-between mb-3">
+                    <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-brand-400">▌ DRAFTS · 📩</p>
+                    <button type="button" id="hub-new-draft-btn"
+                            class="font-mono-term text-[10px] tracking-wider uppercase text-black bg-brand-400 hover:bg-brand-300 px-3 py-1.5 rounded font-bold transition">
+                        + New email
+                    </button>
+                </div>
+                <ul id="hub-drafts-list" class="space-y-2">
+                    <li class="text-sm text-gray-500 font-mono-term">Loading drafts…</li>
+                </ul>
+            </div>
+
+            {# AUDIENCES column #}
+            <div class="border border-yellow-400/30 rounded-lg p-4 bg-gray-900/40">
+                <div class="flex items-center justify-between mb-3">
+                    <p class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-yellow-400">▌ SAVED AUDIENCES · 🎯</p>
+                    <button type="button" id="hub-new-audience-btn"
+                            class="font-mono-term text-[10px] tracking-wider uppercase text-black bg-yellow-400 hover:bg-yellow-300 px-3 py-1.5 rounded font-bold transition">
+                        + New audience
+                    </button>
+                </div>
+                <ul id="hub-audiences-list" class="space-y-2">
+                    <li class="text-sm text-gray-500 font-mono-term">Loading audiences…</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    {# ── HUB MODAL · Draft editor ── #}
+    <div id="hub-draft-modal" class="hidden fixed inset-0 z-[70] bg-black/85 backdrop-blur-sm overflow-y-auto">
+        <div class="min-h-full flex items-start justify-center p-4">
+            <div class="bg-gray-900 border-2 border-brand-400/60 rounded-xl p-6 max-w-3xl w-full my-8"
+                 style="box-shadow: 0 0 40px rgba(46,219,153,0.3);">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ <span id="hub-draft-modal-title">EDIT DRAFT</span></p>
+                    <button type="button" class="text-gray-500 hover:text-white text-2xl leading-none" onclick="hub.closeDraftModal()">×</button>
+                </div>
+                <input type="hidden" id="hub-draft-id">
+                <div class="space-y-3">
+                    <div>
+                        <label class="font-mono-term text-[10px] tracking-wider uppercase text-gray-400 block mb-1">Internal name</label>
+                        <input type="text" id="hub-draft-name" placeholder="Sales day 1 · intro"
+                               class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-400">
+                    </div>
+                    <div>
+                        <label class="font-mono-term text-[10px] tracking-wider uppercase text-gray-400 block mb-1">Subject line</label>
+                        <input type="text" id="hub-draft-subject" placeholder="The masterclass is live · grab your seat"
+                               class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-400">
+                    </div>
+                    <div>
+                        <label class="font-mono-term text-[10px] tracking-wider uppercase text-gray-400 block mb-1">
+                            HTML body <span class="text-gray-500">(inner content — auto-wrapped in MetaKizz brand shell on send)</span>
+                        </label>
+                        <textarea id="hub-draft-body" rows="14" placeholder="<h1>Hey {first_name},</h1>&#10;<p>...</p>"
+                                  class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-brand-400"></textarea>
+                        <p class="text-[10px] text-gray-500 mt-1">
+                            ▌ The shell adds the logo, footer, and a one-click unsubscribe link automatically. Just write the email body.
+                        </p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 mt-5">
+                    <div class="flex gap-2">
+                        <button type="button" onclick="hub.previewDraft()"
+                                class="font-mono-term text-[10px] tracking-wider uppercase text-gray-300 hover:text-white border border-gray-600 px-3 py-2 rounded">
+                            👁 Preview in new tab ↗
+                        </button>
+                        <button type="button" onclick="hub.openSendFlowFromDraftEditor()"
+                                class="font-mono-term text-[10px] tracking-wider uppercase text-black bg-brand-400 hover:bg-brand-300 px-3 py-2 rounded font-bold">
+                            📤 Save and send →
+                        </button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="hub.closeDraftModal()"
+                                class="font-mono-term text-[10px] tracking-wider uppercase text-gray-400 hover:text-white px-3 py-2">Cancel</button>
+                        <button type="button" onclick="hub.saveDraft()"
+                                class="font-mono-term text-[10px] tracking-wider uppercase text-black bg-brand-400 hover:bg-brand-300 px-4 py-2 rounded font-bold">
+                            💾 Save draft
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ── HUB MODAL · Audience editor ── #}
+    <div id="hub-audience-modal" class="hidden fixed inset-0 z-[70] bg-black/85 backdrop-blur-sm overflow-y-auto">
+        <div class="min-h-full flex items-start justify-center p-4">
+            <div class="bg-gray-900 border-2 border-yellow-400/60 rounded-xl p-6 max-w-3xl w-full my-8"
+                 style="box-shadow: 0 0 40px rgba(250,204,21,0.3);">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-yellow-300">▌ <span id="hub-audience-modal-title">EDIT AUDIENCE</span></p>
+                    <button type="button" class="text-gray-500 hover:text-white text-2xl leading-none" onclick="hub.closeAudienceModal()">×</button>
+                </div>
+                <input type="hidden" id="hub-audience-id">
+                <input type="hidden" id="hub-audience-is-preset" value="0">
+                <div class="space-y-3">
+                    <div>
+                        <label class="font-mono-term text-[10px] tracking-wider uppercase text-gray-400 block mb-1">Name <span class="text-yellow-300">(snake_case, unique)</span></label>
+                        <input type="text" id="hub-audience-name" placeholder="public_instructors_unpaid"
+                               class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-400">
+                    </div>
+                    <div>
+                        <label class="font-mono-term text-[10px] tracking-wider uppercase text-gray-400 block mb-1">Description (optional)</label>
+                        <textarea id="hub-audience-description" rows="2" placeholder="Instructors in the public challenge who haven't paid yet"
+                                  class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-400"></textarea>
+                    </div>
+                    <div class="border border-gray-800 rounded-lg p-3 bg-black/40">
+                        <p class="font-mono-term text-[10px] tracking-wider uppercase text-yellow-300 mb-2">▌ Filters</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-mono-term tracking-wider uppercase text-gray-500 block mb-1">Source</label>
+                                <select id="hub-filter-source" class="w-full bg-black/60 border border-gray-700 rounded px-2 py-1.5 text-sm text-white">
+                                    <option value="">Any (public + community)</option>
+                                    <option value="public">Public only</option>
+                                    <option value="community">Community only</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-mono-term tracking-wider uppercase text-gray-500 block mb-1">Has paid full plan</label>
+                                <select id="hub-filter-paid" class="w-full bg-black/60 border border-gray-700 rounded px-2 py-1.5 text-sm text-white">
+                                    <option value="">No filter</option>
+                                    <option value="true">Has paid (CirclePayment)</option>
+                                    <option value="false">Has NOT paid</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-mono-term tracking-wider uppercase text-gray-500 block mb-1">Has reservation (€100 deposit)</label>
+                                <select id="hub-filter-reservation" class="w-full bg-black/60 border border-gray-700 rounded px-2 py-1.5 text-sm text-white">
+                                    <option value="">No filter</option>
+                                    <option value="true">Has reservation</option>
+                                    <option value="false">No reservation</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-mono-term tracking-wider uppercase text-gray-500 block mb-1">Program choice (from Reservation)</label>
+                                <select id="hub-filter-program" class="w-full bg-black/60 border border-gray-700 rounded px-2 py-1.5 text-sm text-white">
+                                    <option value="">No filter</option>
+                                    <option value="dancers">Dancers</option>
+                                    <option value="instructors">Instructors</option>
+                                    <option value="not_sure">Not sure</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-mono-term tracking-wider uppercase text-gray-500 block mb-1">Dance level (signup form answer)</label>
+                                <select id="hub-filter-dance-level" class="w-full bg-black/60 border border-gray-700 rounded px-2 py-1.5 text-sm text-white">
+                                    <option value="">No filter</option>
+                                    <option value="I teach">I teach (Instructor)</option>
+                                    <option value="I'm just getting started">I'm just getting started</option>
+                                    <option value="1-2 years">1-2 years</option>
+                                    <option value="3+ years">3+ years</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-mono-term tracking-wider uppercase text-gray-500 block mb-1">Outreach status</label>
+                                <select id="hub-filter-never-contacted" class="w-full bg-black/60 border border-gray-700 rounded px-2 py-1.5 text-sm text-white">
+                                    <option value="">No filter</option>
+                                    <option value="true">Never contacted</option>
+                                    <option value="false">Already contacted</option>
+                                </select>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-500 mt-2">▌ Unsubscribed ambassadors are ALWAYS excluded.</p>
+                    </div>
+
+                    <div class="border border-yellow-700/40 rounded-lg p-3 bg-yellow-950/20">
+                        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+                            <span class="font-mono-term text-[10px] tracking-wider uppercase text-yellow-300">▌ Live recipient count</span>
+                            <button type="button" onclick="hub.previewAudienceAdHoc()"
+                                    class="font-mono-term text-[10px] tracking-wider uppercase text-yellow-300 hover:text-yellow-200 border border-yellow-500/40 px-2 py-1 rounded">
+                                🔍 Re-resolve
+                            </button>
+                        </div>
+                        <p class="text-sm text-gray-300">
+                            <strong class="text-yellow-300 text-2xl font-orbitron" id="hub-audience-preview-count">—</strong>
+                            <span class="text-gray-500 text-xs ml-1">recipients matched</span>
+                        </p>
+                        <div id="hub-audience-preview-list" class="hidden mt-3 max-h-48 overflow-y-auto bg-black/60 border border-gray-800 rounded text-xs">
+                        </div>
+                        <button type="button" id="hub-audience-toggle-list-btn" onclick="hub.toggleAudiencePreviewList()"
+                                class="font-mono-term text-[10px] tracking-wider uppercase text-gray-400 hover:text-yellow-300 mt-2 underline">
+                            Show full list
+                        </button>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-5">
+                    <button type="button" onclick="hub.closeAudienceModal()"
+                            class="font-mono-term text-[10px] tracking-wider uppercase text-gray-400 hover:text-white px-3 py-2">Cancel</button>
+                    <button type="button" id="hub-audience-delete-btn" onclick="hub.deleteAudience()"
+                            class="font-mono-term text-[10px] tracking-wider uppercase text-red-400 hover:text-red-300 border border-red-500/40 px-3 py-2 rounded hidden">
+                        🗑 Delete
+                    </button>
+                    <button type="button" onclick="hub.saveAudience()"
+                            class="font-mono-term text-[10px] tracking-wider uppercase text-black bg-yellow-400 hover:bg-yellow-300 px-4 py-2 rounded font-bold">
+                        💾 Save audience
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ── HUB MODAL · Send flow (preview + canary + real send) ── #}
+    <div id="hub-send-modal" class="hidden fixed inset-0 z-[70] bg-black/85 backdrop-blur-sm overflow-y-auto">
+        <div class="min-h-full flex items-start justify-center p-4">
+            <div class="bg-gray-900 border-2 border-brand-400/60 rounded-xl p-6 max-w-2xl w-full my-8"
+                 style="box-shadow: 0 0 40px rgba(46,219,153,0.3);">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="font-mono-term text-[10px] tracking-[0.25em] uppercase text-brand-400">▌ SEND DRAFT</p>
+                    <button type="button" class="text-gray-500 hover:text-white text-2xl leading-none" onclick="hub.closeSendModal()">×</button>
+                </div>
+
+                <h3 class="text-base font-bold text-white mb-1" id="hub-send-draft-name">—</h3>
+                <p class="text-xs text-gray-500 mb-4">Subject: <span class="text-gray-300" id="hub-send-subject">—</span></p>
+
+                <div class="border border-gray-800 rounded-lg p-3 bg-black/40 mb-4">
+                    <label class="font-mono-term text-[10px] tracking-wider uppercase text-gray-400 block mb-1">Audience</label>
+                    <select id="hub-send-audience-select" class="w-full bg-black/60 border border-gray-700 rounded px-2 py-2 text-sm text-white">
+                        <option value="">Select an audience…</option>
+                    </select>
+                    <p class="text-sm text-gray-300 mt-2">
+                        <strong class="text-brand-400 text-2xl font-orbitron" id="hub-send-recipient-count">—</strong>
+                        <span class="text-gray-500 text-xs ml-1">recipients will receive this email</span>
+                    </p>
+                    <button type="button" id="hub-send-show-list-btn" onclick="hub.toggleSendRecipientList()"
+                            class="font-mono-term text-[10px] tracking-wider uppercase text-gray-400 hover:text-brand-300 mt-1 underline">
+                        Show recipient list
+                    </button>
+                    <div id="hub-send-recipient-list" class="hidden mt-2 max-h-48 overflow-y-auto bg-black/60 border border-gray-800 rounded text-xs"></div>
+                </div>
+
+                <div class="border border-purple-700/40 rounded-lg p-3 bg-purple-950/20 mb-4">
+                    <p class="font-mono-term text-[10px] tracking-wider uppercase text-purple-300 mb-2">🧪 Canary test (no audience impact)</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <input type="email" id="hub-send-test-email" value="alvarohertinez@gmail.com"
+                               class="flex-1 min-w-[200px] bg-black/60 border border-gray-700 focus:border-purple-400 rounded px-3 py-2 text-sm text-white focus:outline-none">
+                        <button type="button" onclick="hub.sendCanary()"
+                                class="font-mono-term text-[10px] tracking-wider uppercase text-purple-200 hover:text-white bg-purple-900/40 hover:bg-purple-800/60 border border-purple-700/50 px-3 py-2 rounded font-bold">
+                            🧪 Send test
+                        </button>
+                    </div>
+                    <p id="hub-send-test-result" class="text-[11px] font-mono-term mt-2 min-h-[1em]"></p>
+                </div>
+
+                <div class="bg-yellow-900/20 border border-yellow-500/40 rounded p-3 mb-4 text-xs text-yellow-200">
+                    ⚠ <strong>Real production send</strong>. Test on yourself first via the purple box above.
+                </div>
+
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="hub.closeSendModal()"
+                            class="font-mono-term text-[10px] tracking-wider uppercase text-gray-400 hover:text-white px-3 py-2">Cancel</button>
+                    <button type="button" id="hub-send-real-btn" onclick="hub.sendReal()"
+                            class="font-mono-term text-[10px] tracking-wider uppercase text-black bg-brand-400 hover:bg-brand-300 px-5 py-2 rounded font-bold disabled:bg-gray-700 disabled:text-gray-500">
+                        ▶ Send to <span id="hub-send-real-btn-count">0</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ──────────────────────────────────────────────────────────
+       LEGACY TOOLS (collapsed) — pre-built template cards + Zoom
+       import. Kept available for one-off use (e.g. masterclass_invitation
+       can still be fired from here), but not the primary workflow.
+       ────────────────────────────────────────────────────────── #}
+    <details class="mb-7 group">
+        <summary class="px-4 py-3 cursor-pointer font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-400 hover:text-brand-300 transition bg-gray-900/40 border border-gray-700 rounded-lg">
+            ⚙ Pre-built template cards + Zoom import (legacy, click to expand)
+        </summary>
+        <div class="pt-3">
 
     {# ──────────────────────────────────────────────────────────
        MANUAL CONTENT-DROP EMAILS
@@ -282,6 +574,9 @@
         </p>
     </div>
 
+        </div>
+    </details>
+
 
     {# ── HEALTH HEADER ── #}
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
@@ -421,6 +716,18 @@
             <span class="flex items-center gap-1.5"><span class="email-health-dot bg-gray-600"></span> Idle (not yet sent)</span>
         </div>
     </div>
+
+    {# ──────────────────────────────────────────────────────────
+       LEGACY OPS BLOCK (collapsed) — leaked-recipient escape hatch,
+       activation push modal (launch campaign — past), backfill button,
+       recent activity feed. Rarely used post-launch but kept for
+       one-off debugging / data hygiene tasks.
+       ────────────────────────────────────────────────────────── #}
+    <details class="mb-7 group">
+        <summary class="px-4 py-3 cursor-pointer font-mono-term text-[10px] tracking-[0.2em] uppercase text-gray-400 hover:text-brand-300 transition bg-gray-900/40 border border-gray-700 rounded-lg">
+            ⚙ Activation push + leaked-recipient hatches + recent activity feed (legacy, click to expand)
+        </summary>
+        <div class="pt-3">
 
     {# ── ESCAPE HATCH: Auto-mark the 61 leaked recipients (one click) ── #}
     <div class="bg-yellow-900/15 border border-yellow-500/40 rounded-xl p-4 mb-5">
@@ -667,6 +974,9 @@
         </div>
         {% endif %}
     </div>
+
+        </div>
+    </details>
 </div>
 
 <style>
@@ -707,4 +1017,509 @@
     box-shadow: 0 0 6px currentColor;
 }
 </style>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// EMAIL HUB · client-side controller
+// All CRUD + send orchestration on /admin/emails for drafts +
+// audiences. Endpoints live under /admin/emails/* in admin.py.
+// ═══════════════════════════════════════════════════════════════
+(function() {
+  const hub = {};
+
+  // Cached state
+  let drafts = [];
+  let audiences = [];
+  let editingDraft = null;     // {id, name, subject, body_html} or null when creating
+  let editingAudience = null;  // SavedAudience JSON or null when creating
+  let sendingDraft = null;     // draft being sent in send-flow modal
+  let lastResolvedCount = 0;   // for send button label
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]
+    );
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleString('es-ES', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}); }
+    catch (e) { return iso; }
+  }
+
+  function fmtCriteria(crit) {
+    if (!crit) return '';
+    const parts = [];
+    if (crit.source) parts.push('source=' + crit.source);
+    if (crit.has_paid_full === true) parts.push('paid');
+    if (crit.has_paid_full === false) parts.push('not paid');
+    if (crit.has_reservation === true) parts.push('reserved');
+    if (crit.has_reservation === false) parts.push('no reservation');
+    if (crit.program_choice) parts.push('program=' + crit.program_choice);
+    if (crit.dance_level) parts.push('level=' + crit.dance_level);
+    if (crit.never_contacted === true) parts.push('never contacted');
+    if (crit.never_contacted === false) parts.push('already contacted');
+    return parts.join(' · ') || 'all reachable';
+  }
+
+  // ── LOADERS ────────────────────────────────────────────────────
+  async function loadDrafts() {
+    try {
+      const r = await fetch('/admin/emails/drafts');
+      const d = await r.json();
+      drafts = d.drafts || [];
+      renderDrafts();
+    } catch (e) {
+      document.getElementById('hub-drafts-list').innerHTML =
+        '<li class="text-red-400 text-xs">Failed to load drafts: ' + escapeHtml(String(e)) + '</li>';
+    }
+  }
+
+  async function loadAudiences() {
+    try {
+      const r = await fetch('/admin/emails/audiences');
+      const d = await r.json();
+      audiences = d.audiences || [];
+      renderAudiences();
+      // Also refresh the audience select inside the send modal if open
+      refreshSendAudienceSelect();
+    } catch (e) {
+      document.getElementById('hub-audiences-list').innerHTML =
+        '<li class="text-red-400 text-xs">Failed to load audiences: ' + escapeHtml(String(e)) + '</li>';
+    }
+  }
+
+  // ── RENDERERS ──────────────────────────────────────────────────
+  function renderDrafts() {
+    const ul = document.getElementById('hub-drafts-list');
+    if (!drafts.length) {
+      ul.innerHTML = '<li class="text-sm text-gray-500 font-mono-term">No drafts yet. Click + New email to compose your first sales email.</li>';
+      return;
+    }
+    ul.innerHTML = drafts.map(d => {
+      const lastSent = d.last_sent_at
+        ? '<span class="text-gray-500">· last sent ' + fmtDate(d.last_sent_at) + ' to ' + (d.last_sent_count || 0) + '</span>'
+        : '<span class="text-gray-600">· never sent</span>';
+      const subjLine = d.subject ? escapeHtml(d.subject) : '<em class="text-gray-600">(no subject)</em>';
+      return '<li class="border border-gray-800 rounded p-2 bg-black/40 flex items-center justify-between gap-2">'
+           +   '<div class="flex-1 min-w-0">'
+           +     '<p class="text-sm text-white truncate"><strong>' + escapeHtml(d.name) + '</strong></p>'
+           +     '<p class="text-xs text-gray-400 truncate">' + subjLine + '</p>'
+           +     '<p class="text-[10px] font-mono-term text-gray-500 mt-1">' + lastSent + '</p>'
+           +   '</div>'
+           +   '<div class="flex gap-1 shrink-0">'
+           +     '<button onclick="hub.editDraft(' + d.id + ')" class="text-[10px] font-mono-term uppercase tracking-wider text-gray-300 hover:text-brand-300 border border-gray-700 px-2 py-1 rounded">✏ Edit</button>'
+           +     '<button onclick="hub.openSendFlow(' + d.id + ')" class="text-[10px] font-mono-term uppercase tracking-wider text-black bg-brand-400 hover:bg-brand-300 px-2 py-1 rounded font-bold">📤 Send</button>'
+           +   '</div>'
+           + '</li>';
+    }).join('');
+  }
+
+  function renderAudiences() {
+    const ul = document.getElementById('hub-audiences-list');
+    if (!audiences.length) {
+      ul.innerHTML = '<li class="text-sm text-gray-500 font-mono-term">No audiences yet.</li>';
+      return;
+    }
+    ul.innerHTML = audiences.map(a => {
+      const presetBadge = a.is_preset
+        ? '<span class="text-[9px] font-mono-term uppercase tracking-wider text-yellow-300 bg-yellow-900/30 border border-yellow-700/40 px-1.5 py-0.5 rounded ml-1">preset</span>'
+        : '';
+      return '<li class="border border-gray-800 rounded p-2 bg-black/40 flex items-center justify-between gap-2">'
+           +   '<div class="flex-1 min-w-0">'
+           +     '<p class="text-sm text-white truncate"><strong>' + escapeHtml(a.name) + '</strong>' + presetBadge + '</p>'
+           +     '<p class="text-[10px] font-mono-term text-yellow-300/70 truncate">' + escapeHtml(fmtCriteria(a.criteria)) + '</p>'
+           +     (a.description ? '<p class="text-[10px] text-gray-500 truncate">' + escapeHtml(a.description) + '</p>' : '')
+           +   '</div>'
+           +   '<div class="flex gap-1 shrink-0">'
+           +     '<button onclick="hub.editAudience(' + a.id + ')" class="text-[10px] font-mono-term uppercase tracking-wider text-gray-300 hover:text-yellow-300 border border-gray-700 px-2 py-1 rounded">✏ Edit</button>'
+           +   '</div>'
+           + '</li>';
+    }).join('');
+  }
+
+  // ── DRAFT EDITOR ───────────────────────────────────────────────
+  hub.newDraft = function() {
+    editingDraft = null;
+    document.getElementById('hub-draft-modal-title').textContent = 'NEW DRAFT';
+    document.getElementById('hub-draft-id').value = '';
+    document.getElementById('hub-draft-name').value = '';
+    document.getElementById('hub-draft-subject').value = '';
+    document.getElementById('hub-draft-body').value = '';
+    document.getElementById('hub-draft-modal').classList.remove('hidden');
+  };
+
+  hub.editDraft = function(id) {
+    const d = drafts.find(x => x.id === id);
+    if (!d) return alert('Draft not found');
+    editingDraft = d;
+    document.getElementById('hub-draft-modal-title').textContent = 'EDIT DRAFT';
+    document.getElementById('hub-draft-id').value = d.id;
+    document.getElementById('hub-draft-name').value = d.name;
+    document.getElementById('hub-draft-subject').value = d.subject;
+    document.getElementById('hub-draft-body').value = d.body_html;
+    document.getElementById('hub-draft-modal').classList.remove('hidden');
+  };
+
+  hub.closeDraftModal = function() {
+    document.getElementById('hub-draft-modal').classList.add('hidden');
+  };
+
+  hub.saveDraft = async function() {
+    const name = document.getElementById('hub-draft-name').value.trim();
+    const subject = document.getElementById('hub-draft-subject').value.trim();
+    const body_html = document.getElementById('hub-draft-body').value;
+    if (!name) return alert('Draft name is required.');
+    const id = document.getElementById('hub-draft-id').value;
+    const url = id ? '/admin/emails/drafts/' + id : '/admin/emails/drafts';
+    const method = id ? 'PATCH' : 'POST';
+    try {
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, subject, body_html }),
+      });
+      const data = await r.json();
+      if (!data.ok) return alert('Save failed: ' + (data.error || 'unknown'));
+      await loadDrafts();
+      // Update editingDraft so "Save and send" can use the new id
+      editingDraft = data.draft;
+      document.getElementById('hub-draft-id').value = data.draft.id;
+      document.getElementById('hub-draft-modal-title').textContent = 'EDIT DRAFT';
+      return data.draft;
+    } catch (e) {
+      alert('Save failed: ' + e);
+    }
+  };
+
+  hub.previewDraft = function() {
+    const id = document.getElementById('hub-draft-id').value;
+    if (!id) return alert('Save the draft first to preview the brand-wrapped version.');
+    window.open('/admin/emails/drafts/' + id + '/render-preview', '_blank');
+  };
+
+  hub.openSendFlowFromDraftEditor = async function() {
+    const saved = await hub.saveDraft();
+    if (saved && saved.id) {
+      hub.closeDraftModal();
+      hub.openSendFlow(saved.id);
+    }
+  };
+
+  // ── AUDIENCE EDITOR ────────────────────────────────────────────
+  hub.newAudience = function() {
+    editingAudience = null;
+    document.getElementById('hub-audience-modal-title').textContent = 'NEW AUDIENCE';
+    document.getElementById('hub-audience-id').value = '';
+    document.getElementById('hub-audience-is-preset').value = '0';
+    document.getElementById('hub-audience-name').value = '';
+    document.getElementById('hub-audience-description').value = '';
+    document.getElementById('hub-filter-source').value = '';
+    document.getElementById('hub-filter-paid').value = '';
+    document.getElementById('hub-filter-reservation').value = '';
+    document.getElementById('hub-filter-program').value = '';
+    document.getElementById('hub-filter-dance-level').value = '';
+    document.getElementById('hub-filter-never-contacted').value = '';
+    document.getElementById('hub-audience-preview-count').textContent = '—';
+    document.getElementById('hub-audience-preview-list').classList.add('hidden');
+    document.getElementById('hub-audience-preview-list').innerHTML = '';
+    document.getElementById('hub-audience-delete-btn').classList.add('hidden');
+    document.getElementById('hub-audience-modal').classList.remove('hidden');
+  };
+
+  hub.editAudience = function(id) {
+    const a = audiences.find(x => x.id === id);
+    if (!a) return alert('Audience not found');
+    editingAudience = a;
+    document.getElementById('hub-audience-modal-title').textContent = 'EDIT AUDIENCE · ' + a.name;
+    document.getElementById('hub-audience-id').value = a.id;
+    document.getElementById('hub-audience-is-preset').value = a.is_preset ? '1' : '0';
+    document.getElementById('hub-audience-name').value = a.name;
+    document.getElementById('hub-audience-description').value = a.description || '';
+    const c = a.criteria || {};
+    document.getElementById('hub-filter-source').value = c.source || '';
+    document.getElementById('hub-filter-paid').value = c.has_paid_full === true ? 'true' : c.has_paid_full === false ? 'false' : '';
+    document.getElementById('hub-filter-reservation').value = c.has_reservation === true ? 'true' : c.has_reservation === false ? 'false' : '';
+    document.getElementById('hub-filter-program').value = c.program_choice || '';
+    document.getElementById('hub-filter-dance-level').value = c.dance_level || '';
+    document.getElementById('hub-filter-never-contacted').value = c.never_contacted === true ? 'true' : c.never_contacted === false ? 'false' : '';
+    document.getElementById('hub-audience-delete-btn').classList.toggle('hidden', !!a.is_preset);
+    document.getElementById('hub-audience-modal').classList.remove('hidden');
+    hub.previewAudienceAdHoc();
+  };
+
+  hub.closeAudienceModal = function() {
+    document.getElementById('hub-audience-modal').classList.add('hidden');
+  };
+
+  function buildCriteriaFromForm() {
+    const c = {};
+    const src = document.getElementById('hub-filter-source').value;
+    if (src) c.source = src;
+    const paid = document.getElementById('hub-filter-paid').value;
+    if (paid === 'true') c.has_paid_full = true;
+    else if (paid === 'false') c.has_paid_full = false;
+    const rsv = document.getElementById('hub-filter-reservation').value;
+    if (rsv === 'true') c.has_reservation = true;
+    else if (rsv === 'false') c.has_reservation = false;
+    const prog = document.getElementById('hub-filter-program').value;
+    if (prog) c.program_choice = prog;
+    const lvl = document.getElementById('hub-filter-dance-level').value;
+    if (lvl) c.dance_level = lvl;
+    const nc = document.getElementById('hub-filter-never-contacted').value;
+    if (nc === 'true') c.never_contacted = true;
+    else if (nc === 'false') c.never_contacted = false;
+    return c;
+  }
+
+  hub.previewAudienceAdHoc = async function() {
+    const criteria = buildCriteriaFromForm();
+    document.getElementById('hub-audience-preview-count').textContent = '…';
+    try {
+      const r = await fetch('/admin/emails/audiences/preview-ad-hoc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ criteria }),
+      });
+      const data = await r.json();
+      if (!data.ok) {
+        document.getElementById('hub-audience-preview-count').textContent = 'ERR';
+        return;
+      }
+      document.getElementById('hub-audience-preview-count').textContent = data.total;
+      const listEl = document.getElementById('hub-audience-preview-list');
+      listEl.innerHTML = (data.recipients || []).map(r =>
+        '<div class="px-3 py-1.5 border-b border-gray-900 flex items-center gap-2">'
+        + '<span class="text-white truncate flex-1">' + escapeHtml(r.name) + '</span>'
+        + '<span class="text-gray-500 font-mono-term truncate flex-1">' + escapeHtml(r.email) + '</span>'
+        + '<span class="text-[10px] text-yellow-300/70 font-mono-term">' + escapeHtml(r.source) + '</span>'
+        + '</div>'
+      ).join('') + (data.truncated ? '<div class="px-3 py-2 text-[10px] text-yellow-300 italic">… and more (showing first 500)</div>' : '');
+    } catch (e) {
+      document.getElementById('hub-audience-preview-count').textContent = 'ERR';
+    }
+  };
+
+  hub.toggleAudiencePreviewList = function() {
+    const list = document.getElementById('hub-audience-preview-list');
+    const btn = document.getElementById('hub-audience-toggle-list-btn');
+    if (list.classList.contains('hidden')) {
+      list.classList.remove('hidden');
+      btn.textContent = 'Hide list';
+    } else {
+      list.classList.add('hidden');
+      btn.textContent = 'Show full list';
+    }
+  };
+
+  hub.saveAudience = async function() {
+    const name = document.getElementById('hub-audience-name').value.trim();
+    if (!name) return alert('Audience name is required.');
+    const description = document.getElementById('hub-audience-description').value.trim();
+    const criteria = buildCriteriaFromForm();
+    const id = document.getElementById('hub-audience-id').value;
+    const url = id ? '/admin/emails/audiences/' + id : '/admin/emails/audiences';
+    const method = id ? 'PATCH' : 'POST';
+    try {
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description, criteria }),
+      });
+      const data = await r.json();
+      if (!data.ok) {
+        if (data.error === 'name_taken') return alert('That name is already used. Pick another.');
+        return alert('Save failed: ' + (data.error || 'unknown'));
+      }
+      await loadAudiences();
+      hub.closeAudienceModal();
+    } catch (e) {
+      alert('Save failed: ' + e);
+    }
+  };
+
+  hub.deleteAudience = async function() {
+    const id = document.getElementById('hub-audience-id').value;
+    if (!id) return;
+    if (!confirm('Delete this audience? Drafts that reference it will lose their last-sent link, but won\'t be deleted.')) return;
+    try {
+      const r = await fetch('/admin/emails/audiences/' + id, { method: 'DELETE' });
+      const data = await r.json();
+      if (!data.ok) {
+        if (data.error === 'preset_protected') return alert('Preset audiences cannot be deleted.');
+        return alert('Delete failed: ' + (data.error || 'unknown'));
+      }
+      await loadAudiences();
+      hub.closeAudienceModal();
+    } catch (e) {
+      alert('Delete failed: ' + e);
+    }
+  };
+
+  // ── SEND FLOW ──────────────────────────────────────────────────
+  function refreshSendAudienceSelect() {
+    const sel = document.getElementById('hub-send-audience-select');
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">Select an audience…</option>'
+      + audiences.map(a =>
+        '<option value="' + a.id + '">' + escapeHtml(a.name) + (a.is_preset ? ' (preset)' : '') + '</option>'
+      ).join('');
+    if (prev) sel.value = prev;
+  }
+
+  hub.openSendFlow = function(draftId) {
+    const d = drafts.find(x => x.id === draftId);
+    if (!d) return alert('Draft not found');
+    if (!d.subject) {
+      if (!confirm('This draft has no subject line. Open it to add one?')) return;
+      hub.editDraft(d.id);
+      return;
+    }
+    if (!d.body_html || !d.body_html.trim()) {
+      if (!confirm('This draft has an empty body. Open it to add content?')) return;
+      hub.editDraft(d.id);
+      return;
+    }
+    sendingDraft = d;
+    document.getElementById('hub-send-draft-name').textContent = d.name;
+    document.getElementById('hub-send-subject').textContent = d.subject;
+    document.getElementById('hub-send-recipient-count').textContent = '—';
+    document.getElementById('hub-send-real-btn-count').textContent = '0';
+    document.getElementById('hub-send-real-btn').disabled = true;
+    document.getElementById('hub-send-recipient-list').classList.add('hidden');
+    document.getElementById('hub-send-recipient-list').innerHTML = '';
+    document.getElementById('hub-send-test-result').textContent = '';
+    refreshSendAudienceSelect();
+    document.getElementById('hub-send-audience-select').value = '';
+    document.getElementById('hub-send-modal').classList.remove('hidden');
+  };
+
+  hub.closeSendModal = function() {
+    document.getElementById('hub-send-modal').classList.add('hidden');
+    sendingDraft = null;
+  };
+
+  hub.toggleSendRecipientList = function() {
+    const list = document.getElementById('hub-send-recipient-list');
+    const btn = document.getElementById('hub-send-show-list-btn');
+    if (list.classList.contains('hidden')) {
+      list.classList.remove('hidden');
+      btn.textContent = 'Hide recipient list';
+    } else {
+      list.classList.add('hidden');
+      btn.textContent = 'Show recipient list';
+    }
+  };
+
+  async function resolveSendAudience() {
+    const audId = document.getElementById('hub-send-audience-select').value;
+    if (!audId) {
+      document.getElementById('hub-send-recipient-count').textContent = '—';
+      document.getElementById('hub-send-real-btn-count').textContent = '0';
+      document.getElementById('hub-send-real-btn').disabled = true;
+      document.getElementById('hub-send-recipient-list').innerHTML = '';
+      return;
+    }
+    document.getElementById('hub-send-recipient-count').textContent = '…';
+    try {
+      const r = await fetch('/admin/emails/audiences/' + audId + '/preview', { method: 'POST' });
+      const data = await r.json();
+      if (!data.ok) {
+        document.getElementById('hub-send-recipient-count').textContent = 'ERR';
+        return;
+      }
+      lastResolvedCount = data.total;
+      document.getElementById('hub-send-recipient-count').textContent = data.total;
+      document.getElementById('hub-send-real-btn-count').textContent = data.total;
+      document.getElementById('hub-send-real-btn').disabled = data.total === 0;
+      const list = document.getElementById('hub-send-recipient-list');
+      list.innerHTML = (data.recipients || []).map(r =>
+        '<div class="px-3 py-1.5 border-b border-gray-900 flex items-center gap-2">'
+        + '<span class="text-white truncate flex-1">' + escapeHtml(r.name) + '</span>'
+        + '<span class="text-gray-500 font-mono-term truncate flex-1">' + escapeHtml(r.email) + '</span>'
+        + '<span class="text-[10px] text-yellow-300/70 font-mono-term">' + escapeHtml(r.source) + '</span>'
+        + '</div>'
+      ).join('');
+    } catch (e) {
+      document.getElementById('hub-send-recipient-count').textContent = 'ERR';
+    }
+  }
+
+  hub.sendCanary = async function() {
+    if (!sendingDraft) return;
+    const to = document.getElementById('hub-send-test-email').value.trim();
+    if (!to || to.indexOf('@') === -1) {
+      document.getElementById('hub-send-test-result').textContent = '✕ Invalid email';
+      document.getElementById('hub-send-test-result').className = 'text-[11px] font-mono-term mt-2 text-red-400';
+      return;
+    }
+    document.getElementById('hub-send-test-result').textContent = '⏳ Sending test to ' + to + '…';
+    document.getElementById('hub-send-test-result').className = 'text-[11px] font-mono-term mt-2 text-gray-400';
+    try {
+      const r = await fetch('/admin/emails/drafts/' + sendingDraft.id + '/test-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to }),
+      });
+      const data = await r.json();
+      if (data.ok && data.sent) {
+        document.getElementById('hub-send-test-result').textContent = '✓ Test sent to ' + to + '. Check your inbox.';
+        document.getElementById('hub-send-test-result').className = 'text-[11px] font-mono-term mt-2 text-brand-300';
+      } else {
+        document.getElementById('hub-send-test-result').textContent = '✕ Failed: ' + (data.error || 'unknown');
+        document.getElementById('hub-send-test-result').className = 'text-[11px] font-mono-term mt-2 text-red-400';
+      }
+    } catch (e) {
+      document.getElementById('hub-send-test-result').textContent = '✕ Error: ' + e;
+      document.getElementById('hub-send-test-result').className = 'text-[11px] font-mono-term mt-2 text-red-400';
+    }
+  };
+
+  hub.sendReal = async function() {
+    if (!sendingDraft) return;
+    const audId = document.getElementById('hub-send-audience-select').value;
+    if (!audId) return alert('Pick an audience first.');
+    if (!confirm('Send "' + sendingDraft.name + '" to ' + lastResolvedCount + ' recipients? This is a REAL production send and cannot be undone.')) return;
+    const btn = document.getElementById('hub-send-real-btn');
+    btn.disabled = true;
+    const origText = btn.innerHTML;
+    btn.innerHTML = '⏳ Sending…';
+    try {
+      const r = await fetch('/admin/emails/drafts/' + sendingDraft.id + '/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audience_id: parseInt(audId, 10) }),
+      });
+      const data = await r.json();
+      if (!data.ok) {
+        alert('Send failed: ' + (data.error || 'unknown'));
+      } else {
+        alert('✓ Sent ' + data.sent + ' of ' + data.total + ' · Failed: ' + data.failed);
+        hub.closeSendModal();
+        await loadDrafts();
+      }
+    } catch (e) {
+      alert('Send failed: ' + e);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = origText;
+    }
+  };
+
+  // ── BOOT ───────────────────────────────────────────────────────
+  document.getElementById('hub-new-draft-btn')?.addEventListener('click', hub.newDraft);
+  document.getElementById('hub-new-audience-btn')?.addEventListener('click', hub.newAudience);
+  document.getElementById('hub-send-audience-select')?.addEventListener('change', resolveSendAudience);
+  // Live re-resolve in audience editor on any filter change
+  ['hub-filter-source','hub-filter-paid','hub-filter-reservation','hub-filter-program','hub-filter-dance-level','hub-filter-never-contacted']
+    .forEach(id => document.getElementById(id)?.addEventListener('change', hub.previewAudienceAdHoc));
+
+  loadDrafts();
+  loadAudiences();
+
+  // Expose for inline onclick handlers
+  window.hub = hub;
+})();
+</script>
 {% endblock %}

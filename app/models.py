@@ -647,3 +647,72 @@ class RaffleState(db.Model):
     spun_at = db.Column(db.DateTime, nullable=True)
 
     winner = db.relationship("Reservation", foreign_keys=[winner_reservation_id])
+
+
+class SavedAudience(db.Model):
+    """Named, reusable audience filter for the Email Hub.
+
+    Criteria are JSON-encoded so filter dimensions can be extended
+    without a schema migration. Resolved at preview/send time by
+    `resolve_audience(criteria)` in `app/routes/admin.py`.
+
+    Schema for the criteria dict:
+        {
+          "source":         "public" | "community" | null,
+          "has_paid_full":  true | false | null,
+          "has_reservation": true | false | null,
+          "program_choice": "dancers" | "instructors" | "not_sure" | null,
+          "dance_level":    "<form answer string>" | null,
+          "never_contacted": true | false | null,
+          "exclude_unsubscribed": true,   # always-on safety
+        }
+    """
+    __tablename__ = "saved_audiences"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), unique=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    criteria_json = db.Column(db.Text, nullable=False, default="{}")
+    is_preset = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    def criteria(self):
+        """Decode the JSON column into a dict; empty dict on parse error."""
+        import json
+        try:
+            return json.loads(self.criteria_json or "{}")
+        except (TypeError, ValueError):
+            return {}
+
+
+class EmailDraft(db.Model):
+    """Custom HTML email composed by the admin and ready to fire to any
+    audience. The body is the *inner* HTML — at send time it's wrapped
+    in the MetaKizz brand shell (header, footer, unsubscribe link).
+
+    last_sent_* columns are a lightweight history: most-recent-send wins.
+    """
+    __tablename__ = "email_drafts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    subject = db.Column(db.String(300), nullable=False, default="")
+    body_html = db.Column(db.Text, nullable=False, default="")
+    last_sent_at = db.Column(db.DateTime, nullable=True)
+    last_sent_audience_id = db.Column(
+        db.Integer, db.ForeignKey("saved_audiences.id"), nullable=True,
+    )
+    last_sent_count = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    last_sent_audience = db.relationship("SavedAudience", foreign_keys=[last_sent_audience_id])

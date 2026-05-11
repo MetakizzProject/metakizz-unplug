@@ -1949,6 +1949,58 @@ def send_invoice_email(circle_payment, invoice_number, pdf_bytes, app_url=None):
     )
 
 
+# ─── EMAIL HUB: CUSTOM HTML SEND ─────────────────────────────────
+
+def send_custom_html_email(ambassador, subject, body_html, app_url=None,
+                           template_key="custom_email", preview_text=None):
+    """Send an admin-composed HTML email wrapped in the MetaKizz brand shell.
+
+    Used by the /admin/emails Email Hub for one-off sales / announcement
+    emails that don't justify their own pre-built Jinja template. The
+    `body_html` argument is the *inner* content — header/footer/unsubscribe
+    block come from the shell so we get RFC 8058 List-Unsubscribe headers
+    and a consistent look automatically.
+
+    Returns True on success, False otherwise.
+    """
+    if not ambassador or not ambassador.email:
+        return False
+    if app_url is None:
+        from flask import current_app
+        try:
+            app_url = current_app.config.get("APP_URL", "")
+        except Exception:
+            app_url = ""
+    unsub_url = _unsubscribe_url(ambassador, app_url) if app_url else None
+    wrapped = _wrap(
+        body_html,
+        app_url,
+        preview_text=preview_text,
+        unsubscribe_url=unsub_url,
+    )
+    return _send(
+        ambassador.email,
+        subject,
+        wrapped,
+        template_key=template_key,
+        ambassador=ambassador,
+    )
+
+
+def render_custom_html_preview(body_html, app_url=None, preview_text=None):
+    """Render the brand-wrapped HTML for a preview (no send). Used by the
+    Email Hub's "Preview" button so the admin can eyeball the shell-wrapped
+    output before firing the real send.
+    """
+    if app_url is None:
+        from flask import current_app
+        try:
+            app_url = current_app.config.get("APP_URL", "")
+        except Exception:
+            app_url = ""
+    return _wrap(body_html, app_url, preview_text=preview_text, unsubscribe_url=None)
+
+
 # ─── BUDDY FINDER ─────────────────────────────────────────────────
 
 def send_buddy_contact_relay(post, contactor_name, contactor_email, message_text, app_url=None):
