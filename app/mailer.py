@@ -789,6 +789,63 @@ def send_masterclass_invitation_email(ambassador, app_url):
     )
 
 
+def send_carrots_landing_email(ambassador, app_url):
+    """Manual admin send: "🥕 If You Eat Carrots, You'll Poop Carrots"
+    email pointing at the MKOT 3.0 landing page with two doors
+    (Metadancers / Metainstructors). Fired post-launch as a follow-up
+    answer to "what is MetaKizz, what's inside, is it for me?" questions.
+
+    Env-driven knobs:
+      METADANCERS_URL     — landing for the Dancers track
+      METAINSTRUCTORS_URL — landing for the Instructors track
+      RABBIT_HERO_URL     — top hero image (rabbit eating carrot)
+      RABBIT_HOLE_URL     — mid image (the white rabbit at the threshold)
+      RABBIT_ONION_URL    — bottom image (rabbit and onion)
+
+    Image vars are optional — the template hides the <img> when missing
+    so the email still ships clean if the assets aren't uploaded yet.
+    """
+    if is_unsubscribed(ambassador):
+        return False
+
+    metadancers_url = os.getenv("METADANCERS_URL", "").strip() or (
+        "https://inevitable.metakizzproject.com/mkot3"
+    )
+    metainstructors_url = os.getenv("METAINSTRUCTORS_URL", "").strip() or (
+        "https://inevitable.metakizzproject.com/mkot3-instructors"
+    )
+
+    base = app_url.rstrip("/")
+    # Default the rabbit asset URLs to the server's own static files so the
+    # email renders correctly without any env-var setup. Override via env
+    # to point at a CDN if/when assets move.
+    rabbit_hero = os.getenv("RABBIT_HERO_URL", "").strip() or f"{base}/static/email/rabbit-carrot.png"
+    rabbit_hole = os.getenv("RABBIT_HOLE_URL", "").strip() or f"{base}/static/email/rabbit-portal.png"
+    rabbit_onion = os.getenv("RABBIT_ONION_URL", "").strip() or f"{base}/static/email/rabbit-onion.png"
+
+    html = render_template(
+        "emails/carrots_landing.html",
+        first_name=_first_name(ambassador),
+        community=(ambassador.source == "community"),
+        metadancers_url=metadancers_url,
+        metainstructors_url=metainstructors_url,
+        hero_image_url=rabbit_hero,
+        rabbithole_image_url=rabbit_hole,
+        onion_image_url=rabbit_onion,
+        dashboard_url=f"{base}/dashboard/{ambassador.dashboard_code}",
+        unsubscribe_url=_unsubscribe_url(ambassador, base),
+        app_url=base,
+    )
+
+    return _send(
+        ambassador.email,
+        "🥕 If You Eat Carrots, You'll Poop Carrots 💩",
+        html,
+        template_key="carrots_landing",
+        ambassador=ambassador,
+    )
+
+
 def send_webinar_reminder_email(ambassador, app_url):
     """Manual admin send: 1-hour-before reminder for the live webinar.
 

@@ -34,6 +34,7 @@ from app.mailer import (
     send_class3_ready_email,
     send_webinar_reminder_email,
     send_masterclass_invitation_email,
+    send_carrots_landing_email,
     send_final_signal_email,
     send_live_imminent_email,
     send_class1_rewatch_reminder_email,
@@ -1912,6 +1913,7 @@ def emails():
 
     _MANUAL_TEMPLATES = [
         ("masterclass_invitation", "masterclass_invitation_sent_at"),
+        ("carrots_landing",  "carrots_landing_sent_at"),
         ("class1_ready",     "class1_email_sent_at"),
         ("class2_ready",     "class2_email_sent_at"),
         ("class3_ready",     "class3_email_sent_at"),
@@ -2254,6 +2256,13 @@ _SEGMENT_TEMPLATES = {
         # series — they have the routine. If you want to send anyway, clear
         # the flag manually.
         "exclude_if_event_in": ["webinar_joined"],
+    },
+    "carrots_landing": {
+        "fn": send_carrots_landing_email,
+        "default_segment": "all",
+        "flag": "carrots_landing_sent_at",
+        "label": "Carrots & onions (landing page · 2 doors)",
+        "min_age_days": 0,
     },
     "final_signal": {
         "fn": send_final_signal_email,
@@ -3091,6 +3100,10 @@ def test_email():
             elif email_type == "masterclass_invitation":
                 fake.referral_count = 0
                 success = send_masterclass_invitation_email(fake, app_url)
+
+            elif email_type == "carrots_landing":
+                fake.referral_count = 0
+                success = send_carrots_landing_email(fake, app_url)
 
             elif email_type == "final_signal":
                 fake.referral_count = 0
@@ -6984,6 +6997,58 @@ def preview_no_phone_email():
         sample = _Stub()
     html = build_no_phone_outreach_html(sample)
     return html
+
+
+@admin_bp.route("/preview-carrots-landing-email")
+def preview_carrots_landing_email():
+    """Render the "Carrots & onions → landing page" email for visual
+    review in the browser. Query params:
+      ?name=<str>   first name (default "Carla")
+      ?hero=1       force-include the hero rabbit image (uses placeholder)
+      ?hole=1       force-include the rabbit-hole image
+      ?onion=1      force-include the onion image
+    """
+    import os as _os
+    from flask import render_template
+
+    first_name = (request.args.get("name") or "Carla").strip() or "Carla"
+    app_url = (current_app.config.get("APP_URL") or request.host_url or "https://example.com").rstrip("/")
+
+    # Image URLs come from env (so production uses uploaded assets). Allow
+    # ?hero=1 / ?hole=1 / ?onion=1 to force a placeholder so the admin
+    # can preview the layout WITH the rabbit slots filled even before
+    # the artwork ships.
+    placeholder = f"{app_url}/static/brand/rabbit/placeholder.png"
+    hero = _os.getenv("RABBIT_HERO_URL", "").strip() or (
+        placeholder if request.args.get("hero") else None
+    )
+    hole = _os.getenv("RABBIT_HOLE_URL", "").strip() or (
+        placeholder if request.args.get("hole") else None
+    )
+    onion = _os.getenv("RABBIT_ONION_URL", "").strip() or (
+        placeholder if request.args.get("onion") else None
+    )
+
+    metadancers_url = _os.getenv("METADANCERS_URL", "").strip() or (
+        "https://inevitable.metakizzproject.com/mkot3"
+    )
+    metainstructors_url = _os.getenv("METAINSTRUCTORS_URL", "").strip() or (
+        "https://inevitable.metakizzproject.com/mkot3-instructors"
+    )
+
+    return render_template(
+        "emails/carrots_landing.html",
+        first_name=first_name,
+        community=True,
+        metadancers_url=metadancers_url,
+        metainstructors_url=metainstructors_url,
+        hero_image_url=hero,
+        rabbithole_image_url=hole,
+        onion_image_url=onion,
+        dashboard_url=f"{app_url}/dashboard/preview",
+        unsubscribe_url=f"{app_url}/unsubscribe/preview",
+        app_url=app_url,
+    )
 
 
 @admin_bp.route("/preview-masterclass-email")

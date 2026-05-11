@@ -67,6 +67,9 @@ class Ambassador(db.Model):
     # live, with the Zoom link/date/passcode. Separate from webinar_reminder
     # (1h-before reminder) on purpose: different timing, different copy.
     masterclass_invitation_sent_at = db.Column(db.DateTime, nullable=True)
+    # "Carrots & onions" landing-page email — fired post-launch with two
+    # CTAs (Metadancers / Metainstructors) pointing at the program page.
+    carrots_landing_sent_at = db.Column(db.DateTime, nullable=True)
     # Weekend re-open reminders: one per class. Audience is "first-watched
     # during launch but didn't return during REWATCH_WINDOW_OPENS_AT".
     class1_rewatch_reminder_sent_at = db.Column(db.DateTime, nullable=True)
