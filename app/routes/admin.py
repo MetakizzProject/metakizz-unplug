@@ -918,6 +918,12 @@ def _compute_segments(ambassadors, referral_counts=None):
     sleeping = [a for a in reachable if 1 <= _count(a) < 5]
     needs_activation = [a for a in reachable if _count(a) < 5]  # cold ∪ sleeping
     champions = [a for a in reachable if _count(a) >= 5]
+    # "Public winners" = champions restricted to the public-source challenge.
+    # These are the people who actually completed the Hacking the Urbankiz
+    # Code unplug challenge and unlocked the musicality masterclass — used
+    # by the Carrots & onions launch email so it doesn't blast the whole
+    # ambassador list (community + public + non-winners alike).
+    public_winners = [a for a in champions if a.source == "public"]
     top10 = sorted(reachable, key=lambda a: -_count(a))[:10]
     inactive_7d = [a for a in reachable if days_since_last_referral(a) >= 7]
     never_visited = [a for a in reachable if a.last_dashboard_visit_at is None]
@@ -979,6 +985,7 @@ def _compute_segments(ambassadors, referral_counts=None):
         "sleeping": sleeping,                  # 1-4 unplugs (need momentum)
         "needs_activation": needs_activation,  # 0-4 unplugs (haven't unlocked yet)
         "champions": champions,                # 5+ unplugs (lock the prize)
+        "public_winners": public_winners,      # 5+ unplugs · public source only
         "top10": top10,                        # current top performers
         "inactive_7d": inactive_7d,            # no activity in 7 days
         "never_visited": never_visited,        # never opened their dashboard
@@ -1980,6 +1987,32 @@ def emails():
             "reachable_total": reachable_total,
             "label": _SEGMENT_TEMPLATES[key]["label"],
         }
+
+    # Carrots & onions is the only manual email with an alternate target
+    # audience: "public_winners" (5+ unplugs, public-source) — i.e. the
+    # actual challenge winners who unlocked the masterclass. Without
+    # this, the only option in the UI is "send to all 2.8k ambassadors",
+    # which is wrong for this email.
+    if "carrots_landing" in manual_email_eligibles:
+        ref_counts_for_winners = _get_referral_counts()
+        public_winners_pool = (
+            Ambassador.query
+            .filter(Ambassador.unsubscribed_at.is_(None))
+            .filter(Ambassador.source == "public")
+            .all()
+        )
+        public_winners_pool = [
+            a for a in public_winners_pool
+            if ref_counts_for_winners.get(a.id, 0) >= 5
+        ]
+        pw_already_sent = sum(
+            1 for a in public_winners_pool
+            if a.carrots_landing_sent_at is not None
+        )
+        pw_eligible = max(len(public_winners_pool) - pw_already_sent, 0)
+        manual_email_eligibles["carrots_landing"]["public_winners_total"] = len(public_winners_pool)
+        manual_email_eligibles["carrots_landing"]["public_winners_eligible"] = pw_eligible
+        manual_email_eligibles["carrots_landing"]["public_winners_already_sent"] = pw_already_sent
 
     # Cron kill-switch status (DISABLE_CRON_EMAILS env var).
     import os as _os
@@ -6406,6 +6439,8 @@ def reservations():
         inferred_by_cp_id=inferred_by_cp_id,
         cash_net_cents=cash_net_cents,
         cash_gross_cents=cash_gross_cents,
+        deposits_in_cents=deposits_in_cents,
+        full_in_cents=full_in_cents,
         refunds_out_cents=refunds_out_cents,
         pending_refund_emails=pending_refund_emails,
         pending_invoices=pending_invoices,
@@ -6579,6 +6614,8 @@ def reservations_json():
         "full_paid_amount_cents": full_paid_amount_cents,
         "cash_net_cents": cash_net_cents,
         "cash_gross_cents": cash_gross_cents,
+        "deposits_in_cents": deposits_in_cents,
+        "full_in_cents": full_in_cents,
         "refunds_out_cents": refunds_out_cents,
         "pending_refund_emails": pending_refund_emails,
         "pending_invoices": pending_invoices,

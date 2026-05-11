@@ -18,7 +18,7 @@
   </div>
 
   <!-- KPI strip -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
     <div class="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
       <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">Total invoices</p>
       <p class="font-display font-bold text-2xl text-white">{{ total_count }}</p>
@@ -35,6 +35,16 @@
       <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono mb-1">In view €</p>
       <p class="font-display font-bold text-2xl text-purple-300">€{{ "{:,}".format((filtered_amount_cents/100)|round|int).replace(',', '.') }}</p>
     </div>
+  </div>
+
+  <!-- Reconciliation note — explains why Total billed ≠ Cash collected -->
+  <div class="bg-gray-900/40 border border-gray-800 rounded-xl px-4 py-2.5 mb-5">
+    <p class="text-[10px] text-gray-500 font-mono leading-relaxed">
+      ▌ <strong class="text-gray-400">Total billed</strong> = suma de CirclePayments con factura enviada.
+      NO incluye los €100 de depósito (no se facturan), NI descuenta devoluciones posteriores (la factura ya estaba emitida).
+      Para el cash real cobrado mira <strong class="text-brand-400">Cash collected (net)</strong> en
+      <a href="{{ url_for('admin.reservations') }}" class="text-brand-400 hover:underline">/admin/reservations</a>.
+    </p>
   </div>
 
   <!-- Filters -->

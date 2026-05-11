@@ -65,9 +65,10 @@
   </div>
 
   <!-- KPI strip -->
-  <!-- Hero KPI: Cash collected (NET) -->
+  <!-- Hero KPI: Cash collected (NET) with full breakdown so it reconciles
+       with /admin/invoices (which only counts invoiced full-plan payments) -->
   <div class="bg-gradient-to-br from-brand-900/40 via-black/60 to-brand-950/30 border-2 border-brand-700/50 rounded-2xl px-6 py-5 mb-3">
-    <div class="flex items-center justify-between flex-wrap gap-4">
+    <div class="flex items-center justify-between flex-wrap gap-4 mb-3">
       <div>
         <p class="text-[11px] uppercase tracking-[0.3em] text-brand-400 font-mono mb-1">💰 // Cash collected (net)</p>
         <p id="kpi-cash-net" class="font-display font-bold text-4xl md:text-5xl text-brand-400">
@@ -79,6 +80,31 @@
         <p>Devuelto: <span id="kpi-refunds-out" class="text-yellow-300">−€{{ "{:,}".format((refunds_out_cents/100)|round|int).replace(',', '.') }}</span></p>
       </div>
     </div>
+    <!-- Breakdown — explains how Cash collected is composed and why it
+         differs from /admin/invoices Total billed -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-brand-800/40">
+      <div>
+        <p class="text-[9px] uppercase tracking-widest text-gray-500 font-mono">Depósitos €100</p>
+        <p class="text-base font-mono text-white" id="kpi-deposits-in">€{{ "{:,}".format((deposits_in_cents/100)|round|int).replace(',', '.') }}</p>
+      </div>
+      <div>
+        <p class="text-[9px] uppercase tracking-widest text-gray-500 font-mono">Plan completo (Circle)</p>
+        <p class="text-base font-mono text-white" id="kpi-full-in">€{{ "{:,}".format((full_in_cents/100)|round|int).replace(',', '.') }}</p>
+      </div>
+      <div>
+        <p class="text-[9px] uppercase tracking-widest text-gray-500 font-mono">Devoluciones</p>
+        <p class="text-base font-mono text-yellow-300">−€{{ "{:,}".format((refunds_out_cents/100)|round|int).replace(',', '.') }}</p>
+      </div>
+      <div>
+        <p class="text-[9px] uppercase tracking-widest text-gray-500 font-mono">= Net cash</p>
+        <p class="text-base font-mono text-brand-400 font-bold">€{{ "{:,}".format((cash_net_cents/100)|round|int).replace(',', '.') }}</p>
+      </div>
+    </div>
+    <p class="text-[10px] text-gray-600 font-mono mt-3 leading-relaxed">
+      ▌ Total billed en <a href="{{ url_for('admin.invoices') }}" class="text-brand-400 hover:underline">/admin/invoices</a> = sólo CirclePayments con factura enviada.
+      No incluye los €100 de depósito (no se facturan), ni descuenta devoluciones (la factura ya estaba enviada).
+      Diferencia esperada = depósitos no completados + full payments aún sin invoice.
+    </p>
   </div>
 
   <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
@@ -255,9 +281,9 @@
     <div class="flex flex-wrap items-center gap-2">
       <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-2 w-20 inline-block">▌ Status</span>
       <button data-filter="all"       class="filter-btn active text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">All</button>
-      <button data-filter="paid"      class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">💰 Paid</button>
-      <button data-filter="not_paid"  class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">⏳ Not paid</button>
-      <button data-filter="paid_full" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">✓ Full plan</button>
+      <button data-filter="paid"          class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">💰 Paid deposit</button>
+      <button data-filter="paid_full"     class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">✓ Full plan</button>
+      <button data-filter="not_paid_full" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">⏳ Missing full</button>
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-2 w-20 inline-block">▌ Profile</span>
@@ -910,8 +936,8 @@
     // STATUS
     if (f === 'all')                    pass = true;
     else if (f === 'paid')              pass = row.dataset.paid === '1';
-    else if (f === 'not_paid')          pass = row.dataset.paid === '0';
     else if (f === 'paid_full')         pass = row.dataset.paidFull === '1';
+    else if (f === 'not_paid_full')     pass = row.dataset.paidFull === '0';
 
     // PROFILE — closed combinations of program + modality. Excludes
     // orphans (they have empty program/modality, never match).
@@ -1503,12 +1529,14 @@
         }
       }
 
-      // Cash KPIs
+      // Cash KPIs (incl. the breakdown that reconciles with /admin/invoices)
       if (data.cash_net_cents !== undefined) {
         const $$ = id => document.getElementById(id);
-        if ($$('kpi-cash-net'))    $$('kpi-cash-net').textContent    = fmtEur(data.cash_net_cents);
-        if ($$('kpi-cash-gross'))  $$('kpi-cash-gross').textContent  = fmtEur(data.cash_gross_cents);
-        if ($$('kpi-refunds-out')) $$('kpi-refunds-out').textContent = '−' + fmtEur(data.refunds_out_cents);
+        if ($$('kpi-cash-net'))     $$('kpi-cash-net').textContent     = fmtEur(data.cash_net_cents);
+        if ($$('kpi-cash-gross'))   $$('kpi-cash-gross').textContent   = fmtEur(data.cash_gross_cents);
+        if ($$('kpi-refunds-out'))  $$('kpi-refunds-out').textContent  = '−' + fmtEur(data.refunds_out_cents);
+        if ($$('kpi-deposits-in'))  $$('kpi-deposits-in').textContent  = fmtEur(data.deposits_in_cents);
+        if ($$('kpi-full-in'))      $$('kpi-full-in').textContent      = fmtEur(data.full_in_cents);
       }
       // Cash collected progress bar
       if (data.cash_net_cents !== undefined && data.revenue && data.revenue.estimated_total) {
