@@ -72,12 +72,13 @@
                 <button type="button" onclick="document.getElementById('confirm-{{ key }}-winners').classList.remove('hidden')"
                         class="font-mono-term text-[10px] tracking-[0.2em] uppercase text-black bg-yellow-400 hover:bg-yellow-300 px-3 py-2 rounded font-bold transition disabled:bg-gray-700 disabled:text-gray-500 mt-1"
                         {% if info.public_winners_eligible == 0 %}disabled{% endif %}
-                        title="Send only to public-source ambassadors with 5+ unplugs — the people who actually won the masterclass.">
-                  🏆 Send to {{ info.public_winners_eligible }} public winners
+                        title="{{ info.public_winners_total }} ambassadors won the public challenge (5+ unplugs, public source). {{ info.public_winners_eligible }} are eligible to receive this email now; the rest are skipped because they already received it or are excluded by the template's event filter.">
+                  🏆 Send to {{ info.public_winners_eligible }} of {{ info.public_winners_total }} public winners
                 </button>
-                <p class="text-[10px] text-gray-500 font-mono-term -mt-1">
-                  {{ info.public_winners_total }} public winners total
-                  {% if info.public_winners_already_sent %} · <span class="text-yellow-300/70">{{ info.public_winners_already_sent }} already received</span>{% endif %}
+                <p class="text-[10px] text-gray-500 font-mono-term -mt-1 leading-relaxed">
+                  <strong class="text-yellow-300/90">{{ info.public_winners_total }}</strong> public winners total
+                  {% if info.public_winners_already_sent %} · <span class="text-yellow-300/70">{{ info.public_winners_already_sent }} already received this email</span>{% endif %}
+                  {% if info.public_winners_already_engaged %} · <span class="text-gray-400">{{ info.public_winners_already_engaged }} excluded by event filter</span>{% endif %}
                 </p>
                 {% endif %}
               </div>
