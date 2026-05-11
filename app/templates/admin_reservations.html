@@ -253,52 +253,25 @@
   <!-- Filters -->
   <div class="space-y-2 mb-3">
     <div class="flex flex-wrap items-center gap-2">
-      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Status:</span>
-      <button data-filter="all" class="filter-btn active text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-        All
-      </button>
-      <button data-filter="paid" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-        Paid
-      </button>
-      <button data-filter="eligible" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-        Eligible (raffle)
-      </button>
-      <button data-filter="pending" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-        Form pending
-      </button>
-      <button data-filter="doubts" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-        Has doubts
-      </button>
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-2 w-20 inline-block">▌ Status</span>
+      <button data-filter="all"       class="filter-btn active text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">All</button>
+      <button data-filter="paid"      class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">💰 Paid</button>
+      <button data-filter="not_paid"  class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">⏳ Not paid</button>
+      <button data-filter="paid_full" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">✓ Full plan</button>
     </div>
     <div class="flex flex-wrap items-center gap-2">
-      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Follow-up:</span>
-      <button data-filter="not_contacted" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-        ❌ Not contacted
-      </button>
-      <button data-filter="contacted" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-        ✓ Contacted
-      </button>
-      <button data-filter="has_note" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">
-        ✎ Has note
-      </button>
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-2 w-20 inline-block">▌ Profile</span>
+      <button data-filter="solo_dancer"        class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Solo Dancer</button>
+      <button data-filter="couple_dancer"      class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Couple Dancer</button>
+      <button data-filter="solo_instructor"    class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Solo Instructor</button>
+      <button data-filter="couple_instructor"  class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Couple Instructor</button>
     </div>
     <div class="flex flex-wrap items-center gap-2">
-      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Program:</span>
-      <button data-filter="dancers"     class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Dancers</button>
-      <button data-filter="instructors" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Instructors</button>
-      <button data-filter="solo"        class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Solo</button>
-      <button data-filter="couple"      class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Couple</button>
-      <button data-filter="notsure"     class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Not sure</button>
-    </div>
-    <div class="flex flex-wrap items-center gap-2">
-      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Plan completo:</span>
-      <button data-filter="paid_full"     class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">💰 Pagó plan</button>
-      <button data-filter="not_paid_full" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">⏳ Falta plan</button>
-      <button data-filter="refunded"      class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">✓ Devuelto €100</button>
-      <button data-filter="needs_refund"  class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">⚠ Devolución pendiente</button>
-      <button data-filter="invoice_sent"  class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">📄 Factura enviada</button>
-      <button data-filter="no_invoice"    class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">📭 Sin factura</button>
-      <button data-filter="top_50"        class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">🎬 Top 50</button>
+      <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-2 w-20 inline-block">▌ Plan/Contact</span>
+      <button data-filter="pay_1x"        class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Plan 1×</button>
+      <button data-filter="pay_6x"        class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">Plan 6×</button>
+      <button data-filter="contacted"     class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">✓ Contacted</button>
+      <button data-filter="not_contacted" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">❌ Not contacted</button>
     </div>
     <div class="flex items-center gap-2">
       <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-1">Search:</span>
@@ -386,6 +359,7 @@
               data-has-note="{{ '1' if r.admin_notes else '0' }}"
               data-program="{{ r.program_choice or '' }}"
               data-modality="{{ r.modality_choice or '' }}"
+              data-payment-plan="{{ r.payment_plan or '' }}"
               data-paid-full="{{ '1' if cp else '0' }}"
               data-needs-refund="{{ '1' if (cp and r.refund_status != 'success') else '0' }}"
               data-refunded="{{ '1' if r.refund_status == 'success' else '0' }}"
@@ -932,26 +906,28 @@
   function rowMatchesFilter(row) {
     const f = currentFilter;
     let pass = true;
+
+    // STATUS
     if (f === 'all')                    pass = true;
     else if (f === 'paid')              pass = row.dataset.paid === '1';
-    else if (f === 'eligible')          pass = row.dataset.eligible === '1';
-    else if (f === 'pending')           pass = row.dataset.pending === '1';
-    else if (f === 'doubts')            pass = row.dataset.doubts === '1';
-    else if (f === 'not_contacted')     pass = row.dataset.contacted === '0' && row.dataset.paid === '1';
-    else if (f === 'contacted')         pass = row.dataset.contacted === '1';
-    else if (f === 'has_note')          pass = row.dataset.hasNote === '1';
-    else if (f === 'dancers')           pass = row.dataset.program === 'dancers';
-    else if (f === 'instructors')       pass = row.dataset.program === 'instructors';
-    else if (f === 'solo')              pass = row.dataset.modality === 'solo';
-    else if (f === 'couple')            pass = row.dataset.modality === 'duo';
-    else if (f === 'notsure')           pass = row.dataset.program === 'not_sure' || row.dataset.modality === 'not_sure';
+    else if (f === 'not_paid')          pass = row.dataset.paid === '0';
     else if (f === 'paid_full')         pass = row.dataset.paidFull === '1';
-    else if (f === 'not_paid_full')     pass = row.dataset.paidFull === '0';
-    else if (f === 'refunded')          pass = row.dataset.refunded === '1';
-    else if (f === 'needs_refund')      pass = row.dataset.needsRefund === '1';
-    else if (f === 'invoice_sent')      pass = row.dataset.invoiceSent === '1';
-    else if (f === 'no_invoice')        pass = row.dataset.paidFull === '1' && row.dataset.invoiceSent === '0';
-    else if (f === 'top_50')            pass = row.dataset.top50 === '1';
+
+    // PROFILE — closed combinations of program + modality. Excludes
+    // orphans (they have empty program/modality, never match).
+    else if (f === 'solo_dancer')       pass = row.dataset.program === 'dancers'     && row.dataset.modality === 'solo';
+    else if (f === 'couple_dancer')     pass = row.dataset.program === 'dancers'     && row.dataset.modality === 'duo';
+    else if (f === 'solo_instructor')   pass = row.dataset.program === 'instructors' && row.dataset.modality === 'solo';
+    else if (f === 'couple_instructor') pass = row.dataset.program === 'instructors' && row.dataset.modality === 'duo';
+
+    // PLAN — what the buyer ELECTED on the reservation form.
+    else if (f === 'pay_1x')            pass = row.dataset.paymentPlan === 'one_payment';
+    else if (f === 'pay_6x')            pass = row.dataset.paymentPlan === 'six_installments';
+
+    // CONTACT — "not_contacted" only highlights paying buyers we haven't
+    // reached yet (no point flagging unpaid leads).
+    else if (f === 'contacted')         pass = row.dataset.contacted === '1';
+    else if (f === 'not_contacted')     pass = row.dataset.contacted === '0' && row.dataset.paid === '1';
 
     if (!pass) return false;
 
@@ -1588,6 +1564,7 @@
           + 'data-has-note="' + (hasNote ? '1' : '0') + '" '
           + 'data-program="' + escapeHtml(r.program_choice || '') + '" '
           + 'data-modality="' + escapeHtml(r.modality_choice || '') + '" '
+          + 'data-payment-plan="' + escapeHtml(r.payment_plan || '') + '" '
           + 'data-paid-full="' + (paidFull ? '1' : '0') + '" '
           + 'data-needs-refund="' + (needsRefund ? '1' : '0') + '" '
           + 'data-refunded="' + (refunded ? '1' : '0') + '" '
