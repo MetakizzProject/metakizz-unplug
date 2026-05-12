@@ -1,18 +1,97 @@
 {% extends "admin_pulse/_base.html" %}
 
 {% block pulse_content %}
-<section class="pulse-placeholder" data-pulse-section="acquisition">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-    <h2 class="pulse-section-h2" style="margin:0;">Where leads come from</h2>
-    <span class="pulse-status-pill">⏳ Scaffold</span>
+<section data-pulse-section="acquisition">
+
+  {# ─── Headline KPIs ────────────────────────────────────────── #}
+  <div class="pulse-section-head">
+    <h2 class="pulse-section-h2">Where leads come from</h2>
+    <p class="pulse-section-lead">
+      Volume and source attribution for everyone who has ever signed up.
+      Delta compares the last 7 days against the 7 days before that.
+    </p>
   </div>
-  <p class="pulse-section-lead">
-    Source attribution, per-source conversion, and the geographic spread
-    of signups. KPIs and charts land in the next iteration.
-  </p>
-  <div class="pulse-empty-card">
-    <span class="pulse-empty-icon">📈</span>
-    <p>Acquisition dashboard scaffolded · data wiring in progress.</p>
+
+  <div class="pulse-kpi-grid" style="margin-bottom: 28px;">
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">Total leads</span>
+      <span class="pulse-kpi-value">{{ "{:,}".format(summary.total_leads).replace(",", ".") }}</span>
+      <span class="pulse-kpi-delta">Ever-signed-up</span>
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">New · last 7d</span>
+      <span class="pulse-kpi-value">{{ "{:,}".format(summary.new_7d).replace(",", ".") }}</span>
+      {% if summary.delta_7d > 0 %}
+        <span class="pulse-kpi-delta up">▲ +{{ summary.delta_7d }} vs prev 7d ({{ summary.delta_7d_pct }}%)</span>
+      {% elif summary.delta_7d < 0 %}
+        <span class="pulse-kpi-delta down">▼ {{ summary.delta_7d }} vs prev 7d ({{ summary.delta_7d_pct }}%)</span>
+      {% else %}
+        <span class="pulse-kpi-delta">― flat vs prev 7d</span>
+      {% endif %}
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">Prev 7d (reference)</span>
+      <span class="pulse-kpi-value">{{ "{:,}".format(summary.new_prev_7d).replace(",", ".") }}</span>
+      <span class="pulse-kpi-delta">Day 8 → Day 14</span>
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">Active sources</span>
+      <span class="pulse-kpi-value">{{ summary.source_breakdown|length }}</span>
+      <span class="pulse-kpi-delta">Distinct attribution buckets</span>
+    </div>
   </div>
+
+  {# ─── Source breakdown ────────────────────────────────────── #}
+  <div class="pulse-card">
+    <h3 class="pulse-card-title">▌ Source breakdown · who sent them</h3>
+
+    {% if summary.source_breakdown %}
+      <ol class="pulse-source-list">
+        {% for s in summary.source_breakdown %}
+          <li class="pulse-source-row" data-source-key="{{ s.key }}">
+            <div class="pulse-source-meta">
+              <span class="pulse-source-emoji" aria-hidden="true">{{ s.emoji or '·' }}</span>
+              <span class="pulse-source-label">{{ s.label }}</span>
+            </div>
+            <div class="pulse-source-bar-track" role="presentation">
+              <div class="pulse-source-bar-fill" style="width: {{ s.share_pct }}%;"></div>
+            </div>
+            <div class="pulse-source-numbers">
+              <span class="pulse-source-count">{{ "{:,}".format(s.count).replace(",", ".") }}</span>
+              <span class="pulse-source-pct">{{ s.share_pct }}%</span>
+            </div>
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="pulse-muted">No source attribution data yet.</p>
+    {% endif %}
+  </div>
+
+  {# ─── Pending panels (clearly labeled scaffold) ─────────── #}
+  <div class="pulse-card" style="margin-top: 18px;">
+    <h3 class="pulse-card-title">▌ Per-source funnel · signup → masterclass → deposit → full</h3>
+    <div class="pulse-empty-card">
+      <span class="pulse-empty-icon">🚧</span>
+      <p>Funnel rendering ships in the next iteration. Source data is already wired (see above) — funnel adds the per-source conversion steps.</p>
+    </div>
+  </div>
+
+  <div class="pulse-card" style="margin-top: 18px;">
+    <h3 class="pulse-card-title">▌ Top referrers · individuals who brought the most</h3>
+    <div class="pulse-empty-card">
+      <span class="pulse-empty-icon">🤝</span>
+      <p>Top 10 referrers list coming in the next iteration.</p>
+    </div>
+  </div>
+
+  <div class="pulse-card" style="margin-top: 18px;">
+    <h3 class="pulse-card-title">▌ Geographic spread · where in the world they are</h3>
+    <div class="pulse-empty-card">
+      <span class="pulse-empty-icon">🌍</span>
+      <p>Country breakdown lands in iteration 3 (uses existing <code>lookup_country</code> helper).</p>
+    </div>
+  </div>
+
 </section>
 {% endblock %}

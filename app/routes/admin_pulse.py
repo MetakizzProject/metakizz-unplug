@@ -66,11 +66,13 @@ def index():
 @admin_pulse_bp.route("/acquisition")
 def acquisition():
     """Where leads come from — source attribution + per-source funnel."""
+    from app.services.pulse_aggregations import acquisition_summary
     return render_template(
         "admin_pulse/acquisition.html",
         active_section="pulse",
         pulse_active="acquisition",
         page_title="Pulse · Acquisition",
+        summary=acquisition_summary(),
         **_pulse_layout_context(),
     )
 

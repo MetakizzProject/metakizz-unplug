@@ -227,6 +227,117 @@
   margin: 0 0 14px;
 }
 
+/* ── Section header (above a KPI block or panel set) ──────── */
+.pulse-section-head {
+  margin-bottom: 16px;
+}
+
+.pulse-muted {
+  color: var(--pulse-muted);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+}
+
+/* ── Source list (acquisition page) ─────────────────────────── */
+.pulse-source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pulse-source-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.2fr) 4fr minmax(120px, auto);
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.pulse-source-row:hover {
+  border-color: var(--pulse-border-strong);
+  background: var(--pulse-card-bg-hover);
+}
+
+.pulse-source-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--pulse-fg);
+}
+
+.pulse-source-emoji {
+  font-size: 18px;
+  line-height: 1;
+  width: 22px;
+  text-align: center;
+  filter: grayscale(0.15);
+}
+
+.pulse-source-label {
+  font-weight: 500;
+}
+
+.pulse-source-bar-track {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(46, 219, 153, 0.06);
+  overflow: hidden;
+}
+
+.pulse-source-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, rgba(46,219,153,0.55) 0%, var(--pulse-accent) 100%);
+  border-radius: 99px;
+  min-width: 2px;
+  transition: width 240ms ease;
+}
+
+.pulse-source-numbers {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+  justify-content: flex-end;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+.pulse-source-count {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.pulse-source-pct {
+  color: var(--pulse-muted);
+  font-size: 11px;
+  min-width: 48px;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .pulse-source-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .pulse-source-numbers {
+    justify-content: flex-start;
+  }
+}
+
 /* ── Status pill (used for "scaffold" / "draft" / "live" states) ─ */
 .pulse-status-pill {
   display: inline-flex;
