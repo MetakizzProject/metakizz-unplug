@@ -520,6 +520,36 @@
   </div>
 
   <!-- ────────────────────────────────────────────────────────────
+       SEGMENTS · filter + dedicated WA template per segment.
+       Clicking a card filters the audience AND forces the segment's
+       Spanish message template on the 💬 WA button for every row.
+       ──────────────────────────────────────────────────────────── -->
+  <div class="section-label">▌ Segmentos · click para filtrar + usar plantilla dedicada</div>
+  <div class="cards-row">
+    {% for seg_key, seg_meta in segment_labels.items() %}
+      {% set emoji = seg_meta[0] %}
+      {% set label = seg_meta[1] %}
+      {% set color = seg_meta[2] %}
+      {% set qs = request.args.to_dict() %}
+      {% if f_seg == seg_key %}
+        {% set _ = qs.pop('seg', None) %}
+        {% set is_active = true %}
+      {% else %}
+        {% set _ = qs.update({'seg': seg_key}) %}
+        {% set _ = qs.pop('page', None) %}
+        {% set is_active = false %}
+      {% endif %}
+      <a href="?{{ qs|urlencode }}"
+         class="filter-card {% if is_active %}filter-active{% endif %}"
+         style="--accent: {{ color }};"
+         title="Filtra el segmento y usa plantilla dedicada en 💬 WA">
+        <div class="label">{{ emoji }} {{ label }}</div>
+        <div class="value" style="color: {{ color }};">{{ seg_counts.get(seg_key, 0) }}</div>
+      </a>
+    {% endfor %}
+  </div>
+
+  <!-- ────────────────────────────────────────────────────────────
        TEMPERATURE DISTRIBUTION (clickable filters)
        ──────────────────────────────────────────────────────────── -->
   <div class="section-label">▌ Temperature · click to filter</div>

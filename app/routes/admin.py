@@ -4887,6 +4887,7 @@ def leads():
     from app.services.temperature import (
         compute_temperature, fetch_signals_bulk, build_whatsapp_message,
         classify_source, SOURCE_BUCKETS, TEMP_BUCKETS, temp_label_to_key,
+        SEGMENT_LABELS,
     )
     from app.services.ghl import RELEVANT_LEAD_TAGS
     from urllib.parse import quote
@@ -4903,6 +4904,9 @@ def leads():
     class_3    = request.args.get("class_3") == "1"
     webinar_joined_filter = request.args.get("webinar") == "1"
     not_contacted_filter = request.args.get("not_contacted") == "1"
+    seg        = (request.args.get("seg") or "").strip().lower()
+    if seg and seg not in SEGMENT_LABELS:
+        seg = ""  # ignore unknown segment names
     # Default sort = hottest first. The user wants opening /admin/leads to
     # immediately surface high-temperature leads for outreach without an
     # extra click. Pass ?sort=recent to fall back to recency-sorted view.
@@ -5028,6 +5032,62 @@ def leads():
     # Outreach status filter (?not_contacted=1)
     if not_contacted_filter:
         base = base.filter(Ambassador.last_outreach_at.is_(None))
+
+    # ── Segment filter (?seg=NAME) ──
+    # Each segment is a named filter combo that the WA button matches
+    # with a specific Spanish template (see _segment_message). Designed
+    # for the "segment first, then send" workflow on /admin/leads.
+    if seg:
+        from app.models import Reservation as _Res
+        _paid_res_exists = (
+            db.session.query(_Res.id)
+            .filter(_Res.paid_at.isnot(None))
+            .filter(or_(
+                _Res.ambassador_id == Ambassador.id,
+                func.lower(_Res.email) == func.lower(Ambassador.email),
+            ))
+            .exists()
+        )
+        if seg == "client_community":
+            # Community = imported community members (already paid prior
+            # programs, not part of the MKOT 3.0 reservation flow).
+            base = base.filter(Ambassador.source == "community")
+        elif seg == "hot_no_reserve":
+            # Burning/hot bucket who haven't put €100 down yet.
+            hot_emails = {
+                em for em, b in _build_email_buckets().items()
+                if b in ("burning", "hot")
+            }
+            if hot_emails:
+                base = base.filter(func.lower(Ambassador.email).in_(hot_emails))
+            else:
+                base = base.filter(Ambassador.id == -1)
+            base = base.filter(~_paid_res_exists)
+        elif seg == "watched_no_reserve":
+            # Touched any class progress event (≥25% watched), but no
+            # paid reservation. The "almost there" segment.
+            any_class_progress = [
+                f"class{n}_progress_{p}" for n in (1, 2, 3)
+                for p in (25, 50, 75, 95)
+            ] + [f"class{n}_completed" for n in (1, 2, 3)]
+            _watched = (
+                db.session.query(LeadEvent.id)
+                .filter(func.lower(LeadEvent.email) == func.lower(Ambassador.email))
+                .filter(LeadEvent.event_type.in_(any_class_progress))
+                .exists()
+            )
+            base = base.filter(_watched).filter(~_paid_res_exists)
+        elif seg == "no_engagement":
+            # No LeadEvent at all (signed up, never engaged). No reservation.
+            _has_any_event = (
+                db.session.query(LeadEvent.id)
+                .filter(or_(
+                    LeadEvent.ambassador_id == Ambassador.id,
+                    func.lower(LeadEvent.email) == func.lower(Ambassador.email),
+                ))
+                .exists()
+            )
+            base = base.filter(~_has_any_event).filter(~_paid_res_exists)
 
     # Sort: default = hottest first (?sort=temp). ?sort=temp_asc reverses.
     # ?sort=recent falls back to dashboard-visit recency (the previous default).
@@ -5190,9 +5250,11 @@ def leads():
     origin_dist = _safe(_quick_origin_dist_sql, {key: 0 for key, _ in SOURCE_BUCKETS})
 
     # Pre-compute WhatsApp message URLs (template-friendly)
+    # When a segment is active, force its template so every row in the
+    # filtered audience gets the same consistent pitch.
     for amb, t in rows_with_temp:
         if amb.phone_number:
-            msg = build_whatsapp_message(amb, t)
+            msg = build_whatsapp_message(amb, t, force_segment=seg or None)
             t["wa_msg_url"] = quote(msg, safe="")
         else:
             t["wa_msg_url"] = None
@@ -5220,6 +5282,9 @@ def leads():
     if origin:     active_chips.append({"label": f"origin: {origin}", "url": _without("origin")})
     if tag_filter: active_chips.append({"label": f"tag: {tag_filter}", "url": _without("tag")})
     if temp_bucket:active_chips.append({"label": f"temp: {temp_bucket}", "url": _without("temp")})
+    if seg:
+        _seg_emoji, _seg_label, _ = SEGMENT_LABELS.get(seg, ("", seg, ""))
+        active_chips.append({"label": f"segmento: {_seg_emoji} {_seg_label}", "url": _without("seg")})
     if has_phone:  active_chips.append({"label": "has phone", "url": _without("has_phone")})
     if class_1:    active_chips.append({"label": "watched C1", "url": _without("class_1")})
     if class_2:    active_chips.append({"label": "watched C2", "url": _without("class_2")})
@@ -5287,6 +5352,85 @@ def leads():
         "in_queue": in_queue_count,
     }
 
+    # ── Segment audience counts ──
+    # Quick approximations for the segment cards. Same filter semantics
+    # as the seg=NAME branch above; recomputed in one batch so the cards
+    # always reflect current state regardless of which seg is active.
+    seg_counts = {k: 0 for k in SEGMENT_LABELS}
+    try:
+        # client_community
+        seg_counts["client_community"] = (
+            Ambassador.query.filter(Ambassador.source == "community").count()
+        )
+        # paid-reservation email/id sets (reused across hot/watched/no_eng)
+        from app.models import Reservation as _R
+        paid_rows = (
+            _R.query.filter(_R.paid_at.isnot(None))
+            .with_entities(_R.ambassador_id, _R.email).all()
+        )
+        paid_amb_ids_set = {r[0] for r in paid_rows if r[0]}
+        paid_emails_set  = {(r[1] or "").lower() for r in paid_rows if r[1]}
+
+        # hot_no_reserve: burning/hot bucket minus paid
+        hot_emails = {
+            em for em, b in _build_email_buckets().items()
+            if b in ("burning", "hot")
+        } - paid_emails_set
+        if hot_emails:
+            seg_counts["hot_no_reserve"] = (
+                Ambassador.query
+                .filter(func.lower(Ambassador.email).in_(hot_emails))
+                .filter(~Ambassador.id.in_(paid_amb_ids_set) if paid_amb_ids_set else True)
+                .count()
+            )
+
+        # watched_no_reserve: anyone with ≥25% on any class, no paid res
+        any_class_progress = [
+            f"class{n}_progress_{p}" for n in (1, 2, 3) for p in (25, 50, 75, 95)
+        ] + [f"class{n}_completed" for n in (1, 2, 3)]
+        watched_emails = {
+            r[0].lower() for r in
+            db.session.query(LeadEvent.email)
+            .filter(LeadEvent.email.isnot(None))
+            .filter(LeadEvent.event_type.in_(any_class_progress))
+            .distinct()
+            .all() if r[0]
+        } - paid_emails_set
+        if watched_emails:
+            seg_counts["watched_no_reserve"] = (
+                Ambassador.query
+                .filter(func.lower(Ambassador.email).in_(watched_emails))
+                .filter(~Ambassador.id.in_(paid_amb_ids_set) if paid_amb_ids_set else True)
+                .count()
+            )
+
+        # no_engagement: any ambassador with NO LeadEvent and no paid res
+        engaged_amb_ids = {
+            r[0] for r in
+            db.session.query(LeadEvent.ambassador_id)
+            .filter(LeadEvent.ambassador_id.isnot(None))
+            .distinct().all() if r[0]
+        }
+        engaged_emails = {
+            r[0].lower() for r in
+            db.session.query(LeadEvent.email)
+            .filter(LeadEvent.email.isnot(None))
+            .distinct().all() if r[0]
+        }
+        q_ne = Ambassador.query
+        if engaged_amb_ids:
+            q_ne = q_ne.filter(~Ambassador.id.in_(engaged_amb_ids))
+        if engaged_emails:
+            q_ne = q_ne.filter(~func.lower(Ambassador.email).in_(engaged_emails))
+        if paid_amb_ids_set:
+            q_ne = q_ne.filter(~Ambassador.id.in_(paid_amb_ids_set))
+        if paid_emails_set:
+            q_ne = q_ne.filter(~func.lower(Ambassador.email).in_(paid_emails_set))
+        seg_counts["no_engagement"] = q_ne.count()
+    except Exception:
+        # Cards still render; counts just show 0 on failure.
+        pass
+
     return render_template(
         "admin_leads.html",
         rows=rows_with_temp,
@@ -5305,7 +5449,10 @@ def leads():
         f_class_1=class_1, f_class_2=class_2, f_class_3=class_3,
         f_webinar=webinar_joined_filter,
         f_not_contacted=not_contacted_filter,
+        f_seg=seg,
         f_sort=sort_mode,
+        segment_labels=SEGMENT_LABELS,
+        seg_counts=seg_counts,
         relevant_tags=sorted(RELEVANT_LEAD_TAGS),
         lookup_country=lookup_country,
         plf_counters=plf_counters,

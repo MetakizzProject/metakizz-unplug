@@ -679,10 +679,66 @@ def temp_label_to_key(label: str) -> str:
     return label.split(" ")[-1].lower()
 
 
-def build_whatsapp_message(ambassador, temp_result, app_lang: str = "en") -> str:
+# ── Segment-specific WhatsApp templates ─────────────────────────────
+# When the admin selects a segment on /admin/leads, the WA button forces
+# the segment's template instead of letting build_whatsapp_message auto-
+# pick by signals. This keeps messaging consistent across the segment
+# (every lead in "calientes sin reservar" gets the same pitch, etc.).
+#
+# Adding a segment = (1) define filters in admin._apply_segment_filters,
+# (2) add the template here, (3) add the card in admin_leads.html.
+
+SEGMENT_LABELS = {
+    "client_community":   ("💎", "Clientes comunidad",     "#A78BFA"),
+    "hot_no_reserve":     ("🔥", "Calientes sin reservar",  "#DC2626"),
+    "watched_no_reserve": ("📺", "Vieron clases sin reservar", "#F97316"),
+    "no_engagement":      ("🌑", "Sin engagement",           "#6B7280"),
+}
+
+
+def _segment_message(seg: str, first_name: str) -> Optional[str]:
+    """Return the WA message text for a forced segment, or None if seg
+    is unknown (caller falls back to auto-pick)."""
+    if seg == "client_community":
+        return (
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Pasaba a saludar y ver cómo va tu kizz desde que estás con nosotros. "
+            f"¿Hay algo en lo que podamos echarte un cable ahora mismo? "
+            f"Sin presión, cualquier cosa que te ronde por la cabeza me dices."
+        )
+    if seg == "hot_no_reserve":
+        return (
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"He visto que estás siguiendo el lanzamiento bastante de cerca y la verdad me alegra. "
+            f"Quería preguntarte directamente. ¿Qué te está frenando para reservar tu spot en MKOT 3.0? "
+            f"Si hay alguna duda concreta, me la sueltas y la resolvemos."
+        )
+    if seg == "watched_no_reserve":
+        return (
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Vi que has estado viendo parte del contenido de las clases y quería preguntarte qué te ha parecido. "
+            f"¿Hay algo que te haya hecho dudar a la hora de unirte a MKOT 3.0? "
+            f"Cuéntame sin filtro, así te puedo ayudar mejor."
+        )
+    if seg == "no_engagement":
+        return (
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Te apuntaste hace un rato y aún no te he visto entrar en el contenido. "
+            f"¿Te lié con algún email o se te pasó? Si quieres, te paso el acceso directo "
+            f"y le echas un ojo sin compromiso."
+        )
+    return None
+
+
+def build_whatsapp_message(ambassador, temp_result, app_lang: str = "en",
+                            force_segment: Optional[str] = None) -> str:
     """Build a contextual WhatsApp message based on what the lead has done.
 
-    Order of preference (from highest-intent signal to fallback):
+    When `force_segment` is set, that segment's template wins regardless
+    of per-lead signals — used by the segments UI on /admin/leads to
+    keep messaging consistent across the chosen audience.
+
+    Otherwise, picks by signal in order:
       1. Paid reservation → close-the-loop (no pitch, just service)
       2. Long live attendance (60+m / 30+m) → emotional anchor
       3. Class 3 (replay) completed/in-progress → distinct from 1/2
@@ -702,6 +758,12 @@ def build_whatsapp_message(ambassador, temp_result, app_lang: str = "en") -> str
 
     classes_watched = [cn for cn, pct in max_pct.items() if pct >= 25]
     completed = [cn for cn, pct in max_pct.items() if pct >= 95]
+
+    # 0. Segment override — forced template wins over signal-based picker.
+    if force_segment:
+        seg_msg = _segment_message(force_segment, first_name)
+        if seg_msg:
+            return seg_msg
 
     # 1. Paid customer — close the loop, not pitch.
     if has_paid:
