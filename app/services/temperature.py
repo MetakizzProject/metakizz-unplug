@@ -706,75 +706,84 @@ def build_whatsapp_message(ambassador, temp_result, app_lang: str = "en") -> str
     # 1. Paid customer — close the loop, not pitch.
     if has_paid:
         return (
-            f"Hola {first_name}, gracias por reservar tu spot en MKOT 3.0. "
-            f"Solo quería preguntarte: ¿necesitas algo de mí antes de empezar? "
-            f"Si tienes 5 min, te llamo y aclaramos lo que sea. "
-            f"Sin presión — solo asegurarme de que tienes todo claro."
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Gracias por reservar tu spot en MKOT 3.0. "
+            f"¿Necesitas algo de mí antes de que arranquemos? "
+            f"Si te van bien 5 min, te llamo y aclaramos lo que sea. "
+            f"Sin presión, solo asegurarme de que tienes todo claro."
         )
 
     # 2. Long live attendance — strong emotional anchor.
     if webinar_dur and webinar_dur >= 60:
         return (
-            f"Hola {first_name}, te vi en la live hasta el final ({webinar_dur} min). "
-            f"Me hizo ilusión. ¿Qué te llevaste? ¿Hay algo que no te haya quedado claro "
-            f"o que te frene de reservar tu spot? Sin presión, solo curiosidad."
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Te vi en la live hasta el final ({webinar_dur} min) y la verdad me hizo ilusión. "
+            f"¿Qué te llevaste? ¿Hay algo que no te haya quedado claro o que te frene "
+            f"a la hora de reservar tu spot? Sin presión, solo curiosidad."
         )
     if webinar_dur and webinar_dur >= 30:
         return (
-            f"Hola {first_name}, vi que estuviste en la live un buen rato ({webinar_dur} min). "
-            f"¿Qué te pareció? Cualquier duda que te haya quedado, te respondo."
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Vi que estuviste en la live un buen rato ({webinar_dur} min), gracias por estar. "
+            f"¿Qué te pareció? Cualquier duda que te haya quedado, te respondo encantado."
         )
 
     # 3. Class 3 (replay) — distinct narrative from class 1/2.
     if max_pct.get(3, 0) >= 95:
         return (
-            f"Hola {first_name}, vi que terminaste el replay de la masterclass. "
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Vi que terminaste el replay de la masterclass entero. "
             f"¿Qué te pareció? ¿Cuál fue tu momento favorito? "
-            f"Si tienes alguna duda, te la respondo encantado."
+            f"Si te quedó alguna duda, te la resuelvo sin problema."
         )
     if max_pct.get(3, 0) >= 50:
         return (
-            f"Hola {first_name}, vi que has empezado a ver el replay de la masterclass. "
-            f"¿Cómo va? ¿Hay algo que no te haya quedado claro?"
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Vi que has empezado a ver el replay de la masterclass. "
+            f"¿Cómo lo llevas? ¿Hay algo que no te haya quedado claro?"
         )
 
     # 4. Multiple classes completed — progress recognition.
     if completed:
+        clases_str = ", ".join(str(c) for c in completed)
         return (
-            f"Hey {first_name} — saw you watched class "
-            f"{', '.join(str(c) for c in completed)} all the way through, "
-            f"that's a lot of focus. Curious what stood out and what you're "
-            f"trying to figure out with your kizz right now?"
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Vi que te terminaste las clases {clases_str} enteras, eso es focus de verdad. "
+            f"Tengo curiosidad. ¿Qué se te quedó grabado? "
+            f"¿En qué parte de tu kizz estás intentando avanzar ahora mismo?"
         )
 
     # 5. 2+ classes started — engagement check-in.
     if len(classes_watched) >= 2:
+        clases_str = ", ".join(str(c) for c in classes_watched)
         return (
-            f"Hey {first_name} — saw you've already started "
-            f"classes {', '.join(str(c) for c in classes_watched)}. "
-            f"Wanted to check in: how's it landing? Any specific bit you'd want "
-            f"us to go deeper on?"
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Vi que ya empezaste las clases {clases_str}. "
+            f"¿Cómo te están aterrizando? ¿Hay alguna parte concreta en la que "
+            f"quieras que profundicemos más?"
         )
 
     # 6. Single class started — "what stopped you" prompt.
     if classes_watched:
         return (
-            f"Hey {first_name} — saw you started class {classes_watched[0]}, "
-            f"that's a good first move. Anything stopping you from finishing it? "
-            f"Happy to help if it's a question of timing or content."
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Vi que empezaste la clase {classes_watched[0]}, buen primer paso. "
+            f"¿Algo te está frenando para terminarla? Si es tema de tiempo o de "
+            f"contenido, te echamos un cable."
         )
 
     # 7. Past-masterclass tag — reactivation.
     if "attended past masterclass" in signals:
         return (
-            f"Hey {first_name} — you joined our masterclass back in March, "
-            f"and we just kicked off Hacking the Urbankizz Code. "
-            f"Wanted to make sure you saw the new classes are live."
+            f"Hola {first_name}, soy Jesús de MetaKizz. "
+            f"Viniste a nuestra masterclass de marzo y acabamos de arrancar "
+            f"\"Hacking the Urbankiz Code\". Quería asegurarme de que sabes que las "
+            f"clases nuevas ya están abiertas. ¿Les has podido echar un ojo?"
         )
 
     # 8. Generic fallback.
     return (
-        f"Hey {first_name} — Jesus & Anni from MetaKizz here. "
-        f"Just checking in to see how you're doing with the launch content "
-        f"and if there's anything we can help with."
+        f"Hola {first_name}, soy Jesús de MetaKizz. "
+        f"Pasaba a saludar y ver cómo llevas el contenido del lanzamiento. "
+        f"Si hay cualquier cosa en la que podamos ayudarte, dime y te leo."
     )

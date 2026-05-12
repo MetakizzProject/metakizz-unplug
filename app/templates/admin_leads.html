@@ -497,9 +497,14 @@
        Combines temperature + has_phone + sort=temp into one click.
        ──────────────────────────────────────────────────────────── -->
   <div style="margin: 10px 0 18px 0;">
+    <a href="{{ url_for('admin.leads') }}?temp=burning&not_contacted=1&sort=temp"
+       style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: linear-gradient(180deg, #DC2626 0%, #7F1D1D 100%); color: #FFFFFF; font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; text-decoration: none; box-shadow: 0 0 22px rgba(220, 38, 38, 0.5);"
+       title="Burning bucket who haven't been contacted yet — contact via any channel (WA / email / IG)">
+      🔥 Priority
+    </a>
     <a href="{{ url_for('admin.leads') }}?temp=burning&has_phone=1&sort=temp"
-       style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: linear-gradient(180deg, #DC2626 0%, #991B1B 100%); color: #FFFFFF; font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; text-decoration: none; box-shadow: 0 0 18px rgba(220, 38, 38, 0.35);"
-       title="Show only the burning bucket with phone numbers, sorted hottest first">
+       style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.4); color: #DC2626; font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; text-decoration: none; margin-left: 8px;"
+       title="Burning with phone numbers — WhatsApp-ready outreach">
       🔥 Outreach ready
     </a>
     <a href="{{ url_for('admin.leads') }}?temp=burning&sort=temp"
