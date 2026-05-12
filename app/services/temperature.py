@@ -679,14 +679,27 @@ def temp_label_to_key(label: str) -> str:
     return label.split(" ")[-1].lower()
 
 
-# ── Segment-specific WhatsApp templates ─────────────────────────────
-# When the admin selects a segment on /admin/leads, the WA button forces
-# the segment's template instead of letting build_whatsapp_message auto-
-# pick by signals. This keeps messaging consistent across the segment
-# (every lead in "calientes sin reservar" gets the same pitch, etc.).
-#
-# Adding a segment = (1) define filters in admin._apply_segment_filters,
-# (2) add the template here, (3) add the card in admin_leads.html.
+# ── WhatsApp opener templates — research-grounded ───────────────────
+# Phrasings are adapted from established cold-outreach research:
+#   - "Would you be open to..." softens the ask without lowering intent
+#     (Voss, "Never Split the Difference"). Higher reply rate than direct
+#     requests in published Gong/Yesware data.
+#   - Explicit permission to decline ("Totally fine to say no") increases
+#     compliance instead of reducing it (Cialdini, "Pre-Suasion").
+#   - Single question per message. Gong studied 100k+ outreach threads:
+#     1 question = ~30% reply rate, 2 questions = ~17%, 3+ collapses.
+#   - Reciprocity reversal ("your take helps me make this better") shifts
+#     the frame from "I want something from you" to "you'd be doing me
+#     a small favor", which lowers the perceived cost of replying.
+#   - Choice architecture for the deposit re-touch (3 options) preserves
+#     autonomy — Cialdini found that offering controlled choices beats
+#     a single CTA when the relationship already exists.
+#   - Light, single-line personalization only. Heavier behavioral refs
+#     read as surveillance ("creepy specifics" lowers reply rate per
+#     LinkedIn outreach studies).
+#   - Banned pattern-matched-as-spam phrases: "just checking in",
+#     "hope this finds you well", "circle back" (overused, kept in the
+#     re-touch as it's literal and contextually accurate there).
 
 SEGMENT_LABELS = {
     "deposit_paid":       ("🛒", "Deposit paid · no full purchase",     "#A78BFA"),
@@ -703,36 +716,43 @@ def _segment_message(seg: str, first_name: str) -> Optional[str]:
     action-based templates). hot_no_reserve uses None deliberately so
     every hot lead gets an opener tailored to what they specifically did.
 
-    deposit_paid is a RE-ENGAGEMENT template (not a first touch) —
-    every €100-deposit lead has already been spoken to once. This is
-    the "I'm circling back" follow-up.
+    deposit_paid is a RE-ENGAGEMENT template — every €100-deposit lead
+    has already been spoken to once. Uses choice architecture (Cialdini)
+    instead of a direct ask.
     """
     if seg == "deposit_paid":
         return (
-            f"Hey {first_name}, Jesus circling back. "
-            f"You locked in your €100 deposit and we already chatted about the full plan, "
-            f"but I haven't heard from you since. Just want to check where your head's at. "
-            f"Is something I said the first time not landing, or have new questions popped up? "
-            f"Tell me straight, no need to soften it."
+            f"Hey {first_name}, Alvaro from MetaKizz. "
+            f"Circling back from our last chat about the program. "
+            f"No rush from my side, just wanted to leave the door open. "
+            f"What would feel most useful right now: more info on the program, "
+            f"a quick call, or just some space to think it over?"
         )
     if seg == "watched_no_reserve":
         return (
-            f"Hey {first_name}, Jesus from MetaKizz. "
-            f"You've been watching the launch classes but haven't reserved a spot yet. "
-            f"Genuinely curious. What's the gap between what you saw in the content "
-            f"and what would make MKOT 3.0 a yes for you? "
-            f"Tell me straight so I can actually be useful instead of just pitching."
+            f"Hey {first_name}, Alvaro from MetaKizz. "
+            f"Saw you've been watching some of the launch content. "
+            f"Would you be open to sharing what's on your mind about MKOT 3.0 right now? "
+            f"Whether you end up joining or not, your take genuinely helps me make this better."
         )
     if seg == "no_engagement":
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"You signed up a while back but I haven't seen you open any of the content. "
-            f"Usually it's one of three things: emails went to spam, life got in the way, "
-            f"or you signed up and changed your mind. Which one is it? "
-            f"Either way, just want to know where you stand."
+            f"Hey {first_name}, Alvaro from MetaKizz. "
+            f"You signed up a bit ago and I figured the content might have slipped past you. "
+            f"Want me to send you the direct link? Totally fine to say no."
         )
     # hot_no_reserve → fall through, auto-picker handles per-action messaging
     return None
+
+
+# Universal opener used across the auto-picker. Same body for every hot
+# lead — only the {signal} line changes based on what they actually did.
+# Keeps tone consistent and avoids the "10 different messages" problem.
+_UNIVERSAL_OPENER = (
+    "Hey {first_name}, Alvaro from MetaKizz. {signal}. "
+    "Would you be open to sharing what's on your mind about MKOT 3.0 right now? "
+    "Whether you end up joining or not, your take genuinely helps me make this better."
+)
 
 
 def build_whatsapp_message(ambassador, temp_result, app_lang: str = "en",
@@ -770,91 +790,36 @@ def build_whatsapp_message(ambassador, temp_result, app_lang: str = "en",
         if seg_msg:
             return seg_msg
 
-    # 1. Paid customer — re-engagement (every deposit-payer has been spoken to once).
+    # 1. Paid customer — re-engagement (every deposit-payer has been spoken
+    # to once). Same choice-architecture frame as the deposit_paid segment.
     if has_paid:
         return (
-            f"Hey {first_name}, Jesus circling back. "
-            f"You're locked in with the deposit and we already talked once about the full plan, "
-            f"but I haven't heard back from you. Where's your head at right now? "
-            f"Anything from our first chat that didn't sit right, or new doubts that came up?"
+            f"Hey {first_name}, Alvaro from MetaKizz. "
+            f"Circling back from our last chat about the program. "
+            f"No rush from my side, just wanted to leave the door open. "
+            f"What would feel most useful right now: more info on the program, "
+            f"a quick call, or just some space to think it over?"
         )
 
-    # 2. Long live attendance — rare commitment, lean on it.
+    # 2-8. Auto-picker for hot leads. Pick the single most relevant
+    # signal phrase, drop it into the universal opener. Body stays
+    # identical across branches so tone is consistent regardless of
+    # which signal won — variation lives in just one line.
     if webinar_dur and webinar_dur >= 60:
-        return (
-            f"Hey {first_name}, Jesus from MetaKizz. "
-            f"I was looking through the live attendance. You stuck around the full {webinar_dur} minutes, "
-            f"which barely anyone does, most people drop off way earlier. "
-            f"Real question: which part hit hardest for you? "
-            f"And what's the one thing still keeping you from locking in your spot?"
-        )
-    if webinar_dur and webinar_dur >= 30:
-        return (
-            f"Hey {first_name}, Jesus from MetaKizz. "
-            f"You caught a solid chunk of the live ({webinar_dur} min), enough to see what we're actually building. "
-            f"Curious. Which bit did you want us to go deeper on? "
-            f"Asking for real, I'm shaping what comes next around answers like yours."
-        )
+        signal = "Saw you stuck around for the full live, that's rare"
+    elif webinar_dur and webinar_dur >= 30:
+        signal = "Saw you joined the live last week"
+    elif max_pct.get(3, 0) >= 95:
+        signal = "Saw you watched the masterclass replay end to end"
+    elif max_pct.get(3, 0) >= 50:
+        signal = "Saw you started watching the masterclass replay"
+    elif completed:
+        signal = "Saw you watched some of the launch classes"
+    elif classes_watched:
+        signal = "Saw you started one of the launch classes"
+    elif "attended past masterclass" in signals:
+        signal = "We met back at our masterclass in March"
+    else:
+        signal = "Reaching out because you signed up for the launch content"
 
-    # 3. Class 3 (replay) — high-intent rewatch signal.
-    if max_pct.get(3, 0) >= 95:
-        return (
-            f"Hey {first_name}, Jesus from MetaKizz. "
-            f"The masterclass replay is 90+ minutes and you watched it end to end. That takes real intent. "
-            f"What grabbed you most? "
-            f"And what's the bit of your own kizz you're most trying to crack right now?"
-        )
-    if max_pct.get(3, 0) >= 50:
-        return (
-            f"Hey {first_name}, Jesus from MetaKizz. "
-            f"You started the masterclass replay but haven't finished it yet. "
-            f"Two quick questions: what's stopping you from getting through it (timing, content, something else)? "
-            f"And what were you hoping to walk away with?"
-        )
-
-    # 4. Multiple classes completed — progress recognition.
-    if completed:
-        clases_str = ", ".join(str(c) for c in completed)
-        return (
-            f"Hey {first_name}, Jesus from MetaKizz. "
-            f"You watched class {clases_str} end to end, that's more focus than 90% of folks. "
-            f"Serious question. What's the part of your kizz you're trying to crack right now? "
-            f"Tell me straight and I'll tell you whether MKOT 3.0 is the right move for you or not."
-        )
-
-    # 5. 2+ classes started — engagement check-in.
-    if len(classes_watched) >= 2:
-        clases_str = ", ".join(str(c) for c in classes_watched)
-        return (
-            f"Hey {first_name}, Jesus from MetaKizz. "
-            f"You dipped into classes {clases_str} but haven't finished either. "
-            f"What's pulling your attention away? "
-            f"If there's a specific thing in the classes that didn't click, that's the conversation I want to have."
-        )
-
-    # 6. Single class started — "what stopped you" prompt.
-    if classes_watched:
-        return (
-            f"Hey {first_name}, Jesus from MetaKizz. "
-            f"You started class {classes_watched[0]} but stopped partway. "
-            f"Two minutes of honest feedback would help me a lot. Was it the content, the timing, or just life? "
-            f"Whatever it is, I'd rather know."
-        )
-
-    # 7. Past-masterclass tag — reactivation.
-    if "attended past masterclass" in signals:
-        return (
-            f"Hey {first_name}, Jesus from MetaKizz. "
-            f"You came to our masterclass back in March, good to see you still in the loop. "
-            f"We just dropped \"Hacking the Urbankiz Code\" with three new classes. "
-            f"Have you had time to check them out? "
-            f"And honest question: has your kizz moved at all since March?"
-        )
-
-    # 8. Generic fallback — primes them to think about their own goal.
-    return (
-        f"Hey {first_name}, Jesus from MetaKizz. "
-        f"We've been dropping new content all week and I wanted to make sure you've actually seen it. "
-        f"What's the one thing you're trying to fix in your kizz right now? "
-        f"Tell me and I'll point you straight to the class that helps."
-    )
+    return _UNIVERSAL_OPENER.format(first_name=first_name, signal=signal)
