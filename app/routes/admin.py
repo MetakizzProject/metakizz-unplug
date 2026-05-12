@@ -5629,18 +5629,20 @@ def leads_segment_json():
         base = base.filter(~_has_any_event).filter(~_paid_res_exists)
 
     amb_list = base.all()
-    if limit is not None:
-        amb_list = amb_list[:limit]
     if not amb_list:
         return jsonify({"seg": seg, "count": 0, "rows": []})
 
+    # Compute temp for every candidate so we can sort by bucket+score
+    # BEFORE applying the limit. Critical for hot_no_reserve where the
+    # user wants "top N hottest" — without this we'd return whatever
+    # SQL row order happens to be (~random).
     amb_ids = [a.id for a in amb_list]
     lead_evts_by_id, email_evts_by_id = fetch_signals_bulk(amb_ids, max_ids=None)
     webinar_dur_by_amb, webinar_dur_by_email = bulk_webinar_durations(amb_list)
     paid_amb_ids, paid_emails_set = bulk_paid_reservations(amb_list)
     ref_counts = _get_referral_counts()
 
-    rows = []
+    temped = []
     for a in amb_list:
         em_lower = (a.email or "").lower()
         webinar_dur = webinar_dur_by_amb.get(a.id) or webinar_dur_by_email.get(em_lower)
@@ -5653,12 +5655,28 @@ def leads_segment_json():
             webinar_duration_min=webinar_dur,
             has_paid_reservation=has_paid,
         )
+        temped.append((a, t))
+
+    # Sort hottest first (burning > hot > warm > cool > cold), then by score.
+    _PRIORITY = {"customer": 6, "burning": 5, "hot": 4, "warm": 3, "cool": 2, "cold": 1}
+    temped.sort(
+        key=lambda x: (_PRIORITY.get(x[1].get("bucket_key", "cold"), 1), x[1].get("score", 0)),
+        reverse=True,
+    )
+
+    if limit is not None:
+        temped = temped[:limit]
+
+    rows = []
+    for a, t in temped:
         msg = build_whatsapp_message(a, t, force_segment=seg)
         rows.append({
             "id": a.id,
             "name": a.name or "",
             "phone": a.phone_number or "",
             "email": a.email or "",
+            "bucket": t.get("bucket_key", ""),
+            "score": t.get("score", 0),
             "message": msg,
         })
 
@@ -6627,6 +6645,233 @@ def delete_circle_payment(cp_id):
     return jsonify(ok=True, deleted=True, label=label)
 
 
+def _execute_deposit_refund(reservation, *, trigger_label, buyer_email):
+    """Issue the €100 deposit refund against the deposit Stripe account.
+
+    Mirrors the live-mode path in stripe_circle_webhook.py — same env flags
+    (STRIPE_REFUND_ENABLED, STRIPE_DEPOSIT_API_KEY), same Refund.create
+    metadata shape, same admin-alert + buyer-confirmation side effects.
+
+    Returns a dict {status: success|dry_run|failed, reason, refund_id,
+    amount_cents, email_sent}. Caller persists nothing extra — this
+    function commits the Reservation row itself.
+    """
+    from app.mailer import send_refund_admin_alert
+    result = {
+        "status": None,
+        "reason": None,
+        "refund_id": None,
+        "amount_cents": None,
+        "email_sent": False,
+    }
+
+    try:
+        import stripe
+    except ImportError:
+        result["status"] = "failed"
+        result["reason"] = "stripe package missing"
+        reservation.refund_status = "failed"
+        reservation.refund_error = result["reason"]
+        db.session.commit()
+        return result
+
+    now = datetime.now(timezone.utc)
+    reservation.refund_attempted_at = now
+
+    refund_enabled = os.getenv("STRIPE_REFUND_ENABLED", "").strip() in ("1", "true", "True", "yes")
+    refund_amount = reservation.amount_cents or 10000
+
+    if not refund_enabled:
+        reservation.refund_status = "dry_run"
+        db.session.commit()
+        logger.info(
+            "manual link refund: DRY-RUN — would refund %d cents on reservation %s "
+            "(trigger=%s, email=%s). Set STRIPE_REFUND_ENABLED=1 to go live.",
+            refund_amount, reservation.id, trigger_label, buyer_email,
+        )
+        result["status"] = "dry_run"
+        result["amount_cents"] = refund_amount
+        return result
+
+    deposit_key = os.getenv("STRIPE_DEPOSIT_API_KEY", "").strip()
+    if not deposit_key:
+        msg = "STRIPE_DEPOSIT_API_KEY not configured — cannot issue refund"
+        logger.error("manual link refund: %s (reservation %s)", msg, reservation.id)
+        reservation.refund_status = "failed"
+        reservation.refund_error = msg
+        db.session.commit()
+        try:
+            send_refund_admin_alert(
+                email=buyer_email,
+                reason=msg,
+                reservations=[reservation],
+                circle_charge_id=reservation.circle_payment_id or "",
+                circle_amount_cents=None,
+            )
+        except Exception:
+            logger.exception("manual link refund: admin alert failed")
+        result["status"] = "failed"
+        result["reason"] = "missing_key"
+        return result
+
+    if not reservation.stripe_payment_intent_id:
+        msg = "Reservation missing stripe_payment_intent_id — cannot refund"
+        logger.error("manual link refund: %s id=%s", msg, reservation.id)
+        reservation.refund_status = "failed"
+        reservation.refund_error = msg
+        db.session.commit()
+        try:
+            send_refund_admin_alert(
+                email=buyer_email,
+                reason=msg,
+                reservations=[reservation],
+                circle_charge_id=reservation.circle_payment_id or "",
+                circle_amount_cents=None,
+            )
+        except Exception:
+            logger.exception("manual link refund: admin alert failed")
+        result["status"] = "failed"
+        result["reason"] = "missing_payment_intent"
+        return result
+
+    try:
+        refund = stripe.Refund.create(
+            api_key=deposit_key,
+            payment_intent=reservation.stripe_payment_intent_id,
+            reason="requested_by_customer",
+            metadata={
+                "reservation_id": str(reservation.id),
+                "trigger": trigger_label,
+                "circle_charge_id": reservation.circle_payment_id or "",
+                "buyer_email": buyer_email,
+            },
+        )
+    except Exception as e:
+        msg = f"{type(e).__name__}: {e}"
+        logger.exception("manual link refund: refund failed for reservation %s", reservation.id)
+        reservation.refund_status = "failed"
+        reservation.refund_error = msg[:2000]
+        db.session.commit()
+        try:
+            send_refund_admin_alert(
+                email=buyer_email,
+                reason=f"Stripe refund call failed: {msg}",
+                reservations=[reservation],
+                circle_charge_id=reservation.circle_payment_id or "",
+                circle_amount_cents=None,
+            )
+        except Exception:
+            logger.exception("manual link refund: admin alert failed")
+        result["status"] = "failed"
+        result["reason"] = msg
+        return result
+
+    reservation.refund_id = refund.get("id")
+    reservation.refund_amount_cents = refund.get("amount") or refund_amount
+    reservation.refund_status = "success"
+    reservation.refunded_at = now
+    db.session.commit()
+
+    try:
+        if send_refund_confirmation_email(reservation):
+            reservation.refund_email_sent_at = datetime.now(timezone.utc)
+            db.session.commit()
+            result["email_sent"] = True
+    except Exception:
+        logger.exception(
+            "manual link refund: refund OK but confirmation email failed (reservation %s)",
+            reservation.id,
+        )
+
+    result["status"] = "success"
+    result["refund_id"] = reservation.refund_id
+    result["amount_cents"] = reservation.refund_amount_cents
+    logger.info(
+        "manual link refund: OK reservation=%s refund_id=%s amount=%s email=%s",
+        reservation.id, reservation.refund_id, reservation.refund_amount_cents, buyer_email,
+    )
+    return result
+
+
+@admin_bp.route("/reservations/<int:reservation_id>/link-payment", methods=["POST"])
+def link_reservation_to_payment(reservation_id):
+    """Attach (or detach) a CirclePayment to a Reservation by hand.
+
+    Body: {"circle_payment_id": <int>, "also_refund": <bool>}
+          {"circle_payment_id": null} to unlink.
+
+    Used when the buyer paid the full plan with a different email than the
+    one on their deposit reservation — the email-based auto-match fails,
+    so the admin links them manually. Stores cp.stripe_charge_id on
+    Reservation.circle_payment_id (same column the webhook uses, keeps the
+    auto-refund logic and idempotency consistent).
+
+    If also_refund=true and the reservation has paid_at set and no prior
+    successful refund, fires the same €100 refund the webhook would have.
+    """
+    from flask import jsonify
+    r = Reservation.query.get_or_404(reservation_id)
+    body = request.get_json(silent=True) or {}
+    raw = body.get("circle_payment_id", "__missing__")
+    if raw == "__missing__":
+        return jsonify(ok=False, error="circle_payment_id required (or null to unlink)"), 400
+
+    if raw is None or raw == "":
+        prior = r.circle_payment_id
+        r.circle_payment_id = None
+        db.session.commit()
+        logger.info("unlinked Reservation %s from CirclePayment %s", r.id, prior)
+        return jsonify(ok=True, linked=False, circle_payment=None)
+
+    try:
+        cp_id = int(raw)
+    except (TypeError, ValueError):
+        return jsonify(ok=False, error="circle_payment_id must be int or null"), 400
+
+    cp = CirclePayment.query.get(cp_id)
+    if cp is None:
+        return jsonify(ok=False, error="circle_payment not found"), 404
+    if not cp.stripe_charge_id:
+        return jsonify(ok=False, error="circle_payment has no stripe_charge_id"), 400
+
+    # Idempotent: if already pointing at this charge, no-op (but still
+    # respect also_refund — admin may have forgotten to tick it the first time).
+    r.circle_payment_id = cp.stripe_charge_id
+    db.session.commit()
+    logger.info(
+        "linked Reservation %s → CirclePayment %s (charge=%s, email=%s)",
+        r.id, cp.id, cp.stripe_charge_id, cp.email,
+    )
+
+    refund_payload = None
+    also_refund = bool(body.get("also_refund"))
+    if also_refund:
+        if not r.paid_at:
+            refund_payload = {"status": "skipped", "reason": "deposit_not_paid"}
+        elif r.refund_status == "success":
+            refund_payload = {"status": "skipped", "reason": "already_refunded"}
+        else:
+            refund_payload = _execute_deposit_refund(
+                r,
+                trigger_label="admin_manual_link",
+                buyer_email=(r.email or cp.email or ""),
+            )
+
+    return jsonify(
+        ok=True,
+        linked=True,
+        circle_payment={
+            "id": cp.id,
+            "stripe_charge_id": cp.stripe_charge_id,
+            "email": cp.email,
+            "amount_cents": cp.amount_cents or 0,
+            "paid_at": cp.paid_at.isoformat() if cp.paid_at else None,
+            "description": cp.description or "",
+        },
+        refund=refund_payload,
+    )
+
+
 @admin_bp.route("/circle-payments/<int:cp_id>/link-ambassador", methods=["POST"])
 def link_circle_payment_to_ambassador(cp_id):
     """Attach (or detach) an Ambassador to a CirclePayment.
@@ -6735,11 +6980,31 @@ def reservations():
         order_index_by_email[key] = rank_counter
     TOP_N_VIDEO = 50
 
-    # Orphan buyers: paid the full plan but never went through reservation.
+    # Manual links (Reservation.circle_payment_id holds a stripe_charge_id):
+    # build a charge_id → CirclePayment index, plus the inverse to know which
+    # CirclePayments are already claimed by some reservation (so they don't
+    # also appear in the orphan list).
+    cp_by_charge_id = {cp.stripe_charge_id: cp for cp in ordered_cps if cp.stripe_charge_id}
+    manually_linked_charge_ids = {
+        r.circle_payment_id for r in all_rows
+        if r.circle_payment_id and r.circle_payment_id in cp_by_charge_id
+    }
+    # Per-reservation effective CirclePayment: manual link wins over email.
+    cp_for_reservation = {}
+    for r in all_rows:
+        if r.circle_payment_id and r.circle_payment_id in cp_by_charge_id:
+            cp_for_reservation[r.id] = cp_by_charge_id[r.circle_payment_id]
+        elif r.email and r.email.lower() in circle_by_email:
+            cp_for_reservation[r.id] = circle_by_email[r.email.lower()]
+
+    # Orphan buyers: paid the full plan but never went through reservation —
+    # AND haven't been claimed by a manual link.
     reservation_emails = {r.email.lower() for r in all_rows if r.email}
     orphan_payments = [
         cp for cp in ordered_cps
-        if cp.email and cp.email.lower() not in reservation_emails
+        if cp.email
+        and cp.email.lower() not in reservation_emails
+        and cp.stripe_charge_id not in manually_linked_charge_ids
     ]
     # De-dup by email (latest payment per orphan email wins for display).
     seen_orphan_emails = set()
@@ -6804,6 +7069,8 @@ def reservations():
         top_n_video=TOP_N_VIDEO,
         orphan_payments=deduped_orphans,
         inferred_by_cp_id=inferred_by_cp_id,
+        cp_for_reservation=cp_for_reservation,
+        manually_linked_charge_ids=manually_linked_charge_ids,
         cash_net_cents=cash_net_cents,
         cash_gross_cents=cash_gross_cents,
         deposits_in_cents=deposits_in_cents,
@@ -6880,7 +7147,15 @@ def reservations_json():
         if r.paid_at and not _reservation_has_phone(r) and not r.no_phone_email_sent_at
     )
 
-    # Orphans for the JSON payload (emails that paid full but no Reservation).
+    # Manual links: charge_id index + claimed set (mirrors reservations()).
+    cp_by_charge_id = {cp.stripe_charge_id: cp for cp in ordered_cps if cp.stripe_charge_id}
+    manually_linked_charge_ids = {
+        r.circle_payment_id for r in rows
+        if r.circle_payment_id and r.circle_payment_id in cp_by_charge_id
+    }
+
+    # Orphans for the JSON payload (paid full but no Reservation, AND not
+    # claimed by a manual link from any Reservation).
     from app.services.payment_inference import infer_from_payment
     reservation_emails = {r.email.lower() for r in rows if r.email}
     orphan_seen = set()
@@ -6890,6 +7165,8 @@ def reservations_json():
             continue
         key = cp.email.lower()
         if key in reservation_emails or key in orphan_seen:
+            continue
+        if cp.stripe_charge_id in manually_linked_charge_ids:
             continue
         orphan_seen.add(key)
         inferred = infer_from_payment(cp)
@@ -6920,8 +7197,19 @@ def reservations_json():
 
     rows_payload = []
     for r in rows:
-        cp = circle_by_email.get(r.email.lower()) if r.email else None
-        order_idx = order_index_by_email.get(r.email.lower()) if r.email else None
+        # Manual link wins over email match — the admin curated this.
+        cp = None
+        link_source = None
+        if r.circle_payment_id and r.circle_payment_id in cp_by_charge_id:
+            cp = cp_by_charge_id[r.circle_payment_id]
+            link_source = "manual"
+        elif r.email and r.email.lower() in circle_by_email:
+            cp = circle_by_email[r.email.lower()]
+            link_source = "email"
+        # Order index follows the CirclePayment's own email (paid rank
+        # belongs to the payer, not the reservation email).
+        order_key = cp.email.lower() if (cp and cp.email) else (r.email.lower() if r.email else None)
+        order_idx = order_index_by_email.get(order_key) if order_key else None
         cp_inferred = infer_from_payment(cp) if cp else None
         rows_payload.append({
             "id": r.id,
@@ -6954,6 +7242,8 @@ def reservations_json():
             # so the admin can compare what the buyer ELECTED on the form
             # vs what they actually PAID for in Stripe.
             "circle_payment": ({
+                "id": cp.id,
+                "email": cp.email,
                 "amount_cents": cp.amount_cents or 0,
                 "paid_at": cp.paid_at.isoformat() if cp.paid_at else None,
                 "description": cp.description or "",
@@ -6962,6 +7252,7 @@ def reservations_json():
                 "inferred_program": cp_inferred["program"] if cp_inferred else None,
                 "inferred_modality": cp_inferred["modality"] if cp_inferred else None,
                 "inferred_payment_plan": cp_inferred["payment_plan"] if cp_inferred else None,
+                "link_source": link_source,
             } if cp else None),
             "order_index": order_idx,
             "is_top_50": (order_idx is not None and order_idx <= TOP_N_VIDEO),
@@ -7000,6 +7291,185 @@ def reservations_json():
         "rows": rows_payload,
         "orphan_rows": orphan_rows_payload,
     })
+
+
+@admin_bp.route("/reservations/circle-recent.json")
+def reservations_circle_recent():
+    """Pull recently-joined Circle community members, cross-match against
+    Reservation / CirclePayment / Ambassador, and return everything as
+    JSON. Drives the "Reconciliación Circle" panel embedded at the bottom
+    of /admin/reservations.
+
+    Query: ?days=N  (default 7, capped to 60)
+    """
+    from flask import jsonify
+    import difflib
+
+    try:
+        days = int(request.args.get("days", "7"))
+    except (TypeError, ValueError):
+        days = 7
+    days = max(1, min(days, 60))
+
+    token = os.getenv("CIRCLE_API_TOKEN", "").strip()
+    community_id = os.getenv("CIRCLE_COMMUNITY_ID", "").strip()
+    if not token or not community_id:
+        return jsonify(
+            ok=False,
+            error="CIRCLE_API_TOKEN and CIRCLE_COMMUNITY_ID must be set in environment",
+        ), 503
+
+    # Reuse the CLI tool logic — keeps Circle paging in one place.
+    try:
+        from tools.sync_circle_recent_members import fetch_recent_members
+    except Exception as e:
+        logger.exception("circle-recent: failed to import fetcher")
+        return jsonify(ok=False, error=f"fetcher import failed: {e}"), 500
+
+    try:
+        members = fetch_recent_members(days)
+    except Exception as e:
+        logger.exception("circle-recent: Circle API call failed")
+        return jsonify(ok=False, error=f"Circle API failed: {e}"), 502
+
+    # Build lookup indexes once.
+    all_reservations = Reservation.query.all()
+    res_by_email = {}
+    res_names = []  # (norm_name, reservation)
+    for r in all_reservations:
+        if r.email:
+            res_by_email.setdefault(r.email.lower(), r)
+        full = f"{(r.name or '').strip()} {(r.surname or '').strip()}".strip().lower()
+        if full:
+            res_names.append((full, r))
+
+    all_cps = CirclePayment.query.all()
+    cp_by_email = {}
+    for cp in all_cps:
+        if cp.email and _is_current_edition(cp):
+            cp_by_email.setdefault(cp.email.lower(), cp)
+
+    all_ambs = Ambassador.query.all()
+    amb_by_email = {a.email.lower(): a for a in all_ambs if a.email}
+    amb_names = [((a.name or "").strip().lower(), a) for a in all_ambs if (a.name or "").strip()]
+
+    def fuzzy_pick(target, pool, threshold=0.85):
+        """Return the closest match from pool [(norm_name, obj), ...] or None."""
+        if not target:
+            return None
+        best = None
+        best_score = 0.0
+        for norm, obj in pool:
+            score = difflib.SequenceMatcher(None, target, norm).ratio()
+            if score > best_score:
+                best_score = score
+                best = obj
+        if best_score >= threshold:
+            return best, best_score
+        # startswith fallback for short names ("Ana" ≈ "Ana López").
+        for norm, obj in pool:
+            if target and (norm.startswith(target) or target.startswith(norm)):
+                return obj, 0.80
+        return None
+
+    rows = []
+    for m in members:
+        email = (m.get("email") or "").lower()
+        name = (m.get("name") or "").strip()
+        norm_name = name.lower()
+
+        res = res_by_email.get(email)
+        res_fuzzy = None
+        if res is None and norm_name:
+            picked = fuzzy_pick(norm_name, res_names)
+            if picked:
+                res_fuzzy, _score = picked
+
+        cp = cp_by_email.get(email)
+        amb = amb_by_email.get(email)
+        amb_fuzzy = None
+        if amb is None and norm_name:
+            picked = fuzzy_pick(norm_name, amb_names)
+            if picked:
+                amb_fuzzy, _score = picked
+
+        # Decide if there's an actionable cross-link suggestion:
+        # member has a CirclePayment but a Reservation matched by name only
+        # (i.e. emails differ) → suggest linking the CP to that Reservation.
+        suggest_link = None
+        if cp and res_fuzzy is not None and res_fuzzy.email and res_fuzzy.email.lower() != email:
+            already = res_fuzzy.circle_payment_id == cp.stripe_charge_id
+            if not already:
+                suggest_link = {
+                    "reservation_id": res_fuzzy.id,
+                    "reservation_email": res_fuzzy.email,
+                    "reservation_name": f"{res_fuzzy.name or ''} {res_fuzzy.surname or ''}".strip(),
+                    "circle_payment_id": cp.id,
+                    "circle_payment_email": cp.email,
+                    "circle_payment_amount_cents": cp.amount_cents or 0,
+                }
+
+        rows.append({
+            "circle_email": email,
+            "circle_name": name,
+            "circle_member_id": m.get("id"),
+            "joined_at": m.get("created_at"),
+            "avatar_url": m.get("avatar_url") or "",
+            "reservation": (
+                {
+                    "id": res.id,
+                    "name": f"{res.name or ''} {res.surname or ''}".strip(),
+                    "email": res.email,
+                    "paid_at": res.paid_at.isoformat() if res.paid_at else None,
+                    "match": "exact",
+                }
+                if res else (
+                    {
+                        "id": res_fuzzy.id,
+                        "name": f"{res_fuzzy.name or ''} {res_fuzzy.surname or ''}".strip(),
+                        "email": res_fuzzy.email,
+                        "paid_at": res_fuzzy.paid_at.isoformat() if res_fuzzy.paid_at else None,
+                        "match": "name",
+                    }
+                    if res_fuzzy else None
+                )
+            ),
+            "circle_payment": (
+                {
+                    "id": cp.id,
+                    "email": cp.email,
+                    "amount_cents": cp.amount_cents or 0,
+                    "paid_at": cp.paid_at.isoformat() if cp.paid_at else None,
+                    "description": cp.description or "",
+                }
+                if cp else None
+            ),
+            "ambassador": (
+                {
+                    "id": amb.id,
+                    "name": amb.name,
+                    "email": amb.email,
+                    "match": "exact",
+                }
+                if amb else (
+                    {
+                        "id": amb_fuzzy.id,
+                        "name": amb_fuzzy.name,
+                        "email": amb_fuzzy.email,
+                        "match": "name",
+                    }
+                    if amb_fuzzy else None
+                )
+            ),
+            "suggest_link": suggest_link,
+        })
+
+    return jsonify(
+        ok=True,
+        days=days,
+        count=len(rows),
+        rows=rows,
+    )
 
 
 @admin_bp.route("/reservations/<int:reservation_id>/mark-refunded", methods=["POST"])

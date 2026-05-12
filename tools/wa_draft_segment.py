@@ -153,7 +153,10 @@ def main():
 
     if args.dry_run:
         for i, r in enumerate(leads, args.start_from):
-            print(f"[{i:>3}] {(r['name'] or '(no name)'):<28}  {r['phone']}")
+            bucket = (r.get("bucket") or "").upper()
+            score = r.get("score", "")
+            tag = f"  [{bucket}·{score}]" if bucket else ""
+            print(f"[{i:>3}] {(r['name'] or '(no name)'):<28}  {r['phone']}{tag}")
             msg = r["message"]
             print(f"       → {msg[:120]}{'...' if len(msg) > 120 else ''}\n")
         return
