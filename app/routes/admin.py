@@ -332,6 +332,54 @@ def _emails_in_temp_bucket(bucket: str) -> set:
     return {em for em, b in _build_email_buckets().items() if b == bucket}
 
 
+def _do_not_contact_sets():
+    """Returns (excluded_emails_lower, excluded_amb_ids) — anyone we should
+    NEVER include in an outreach segment. Single source of truth used by
+    both /admin/leads route filtering AND /admin/leads/segment.json.
+
+    Combines three exclusion sources:
+      1. Community customers (Ambassador.source='community') — already
+         paying community members, don't bother them.
+      2. Full-plan purchasers via CirclePayment (ANY row, matched by
+         email or ambassador_id). This is the authoritative signal for
+         "they bought the full plan", regardless of whether a
+         purchase_completed LeadEvent was also recorded.
+      3. 'customer' bucket from _build_email_buckets() — covers legacy/
+         manual cases where someone has a purchase_completed event but
+         no CirclePayment row. Redundant for most rows, harmless to keep.
+    """
+    from app.models import CirclePayment
+    excluded_emails = set()
+    excluded_amb_ids = set()
+
+    # 1. Community source
+    for amb_id, em in (
+        db.session.query(Ambassador.id, Ambassador.email)
+        .filter(Ambassador.source == "community")
+        .all()
+    ):
+        excluded_amb_ids.add(amb_id)
+        if em:
+            excluded_emails.add(em.lower())
+
+    # 2. Full-plan purchasers (CirclePayment row exists)
+    for em, amb_id in (
+        db.session.query(CirclePayment.email, CirclePayment.ambassador_id)
+        .all()
+    ):
+        if em:
+            excluded_emails.add(em.lower())
+        if amb_id:
+            excluded_amb_ids.add(amb_id)
+
+    # 3. 'customer' bucket from event-presence classifier
+    for em, b in _build_email_buckets().items():
+        if b == "customer":
+            excluded_emails.add(em)
+
+    return excluded_emails, excluded_amb_ids
+
+
 def _quick_temp_dist_sql():
     """Temperature distribution via the unified _build_email_buckets()
     helper. Returns dict {bucket_key: count}.
@@ -5052,14 +5100,13 @@ def leads():
             ))
             .exists()
         )
-        # Global "do not contact" exclusions applied to every segment:
-        # community customers (source) + full-purchase customers (bucket).
-        base = base.filter(Ambassador.source != "community")
-        customer_emails = {
-            em for em, b in _build_email_buckets().items() if b == "customer"
-        }
-        if customer_emails:
-            base = base.filter(~func.lower(Ambassador.email).in_(customer_emails))
+        # Global "do not contact" exclusions applied to every segment.
+        # Single source of truth — see _do_not_contact_sets() docstring.
+        _exc_emails, _exc_amb_ids = _do_not_contact_sets()
+        if _exc_emails:
+            base = base.filter(~func.lower(Ambassador.email).in_(_exc_emails))
+        if _exc_amb_ids:
+            base = base.filter(~Ambassador.id.in_(_exc_amb_ids))
 
         if seg == "deposit_paid":
             # Paid €100 reservation but NOT in customer bucket — they're
@@ -5371,14 +5418,14 @@ def leads():
     # purchased). Recomputed in one batch so cards always reflect state.
     seg_counts = {k: 0 for k in SEGMENT_LABELS}
     try:
-        # Common exclusions for ALL segments
-        _customer_emails = {
-            em for em, b in _build_email_buckets().items() if b == "customer"
-        }
+        # Common exclusions — same as the segment filter on this route.
+        _exc_em_count, _exc_id_count = _do_not_contact_sets()
         def _base_excluded():
-            q_ = Ambassador.query.filter(Ambassador.source != "community")
-            if _customer_emails:
-                q_ = q_.filter(~func.lower(Ambassador.email).in_(_customer_emails))
+            q_ = Ambassador.query
+            if _exc_em_count:
+                q_ = q_.filter(~func.lower(Ambassador.email).in_(_exc_em_count))
+            if _exc_id_count:
+                q_ = q_.filter(~Ambassador.id.in_(_exc_id_count))
             return q_
 
         # Paid-reservation sets (used by every segment)
@@ -5531,11 +5578,14 @@ def leads_segment_json():
     limit = request.args.get("limit", type=int)
 
     base = Ambassador.query.filter(Ambassador.phone_number.isnot(None))
-    base = base.filter(Ambassador.source != "community")
+
+    # Global "do not contact" exclusions (community + full-plan customers)
+    exc_emails, exc_amb_ids = _do_not_contact_sets()
+    if exc_emails:
+        base = base.filter(~func.lower(Ambassador.email).in_(exc_emails))
+    if exc_amb_ids:
+        base = base.filter(~Ambassador.id.in_(exc_amb_ids))
     buckets = _build_email_buckets()
-    customer_emails = {em for em, b in buckets.items() if b == "customer"}
-    if customer_emails:
-        base = base.filter(~func.lower(Ambassador.email).in_(customer_emails))
 
     _paid_res_exists = (
         db.session.query(Reservation.id)
