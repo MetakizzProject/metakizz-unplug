@@ -702,28 +702,34 @@ def _segment_message(seg: str, first_name: str) -> Optional[str]:
     Returning None means: don't override the auto-picker (use per-lead
     action-based templates). hot_no_reserve uses None deliberately so
     every hot lead gets an opener tailored to what they specifically did.
+
+    deposit_paid is a RE-ENGAGEMENT template (not a first touch) —
+    every €100-deposit lead has already been spoken to once. This is
+    the "I'm circling back" follow-up.
     """
     if seg == "deposit_paid":
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"Thanks for locking in your spot in MKOT 3.0 with the deposit. "
-            f"Wanted to check in. Have you had a chance to look at the full program details? "
-            f"Anything specific you'd want to nail down before we kick off? "
-            f"Happy to walk you through whatever's not clear."
+            f"Hey {first_name}, Jesus circling back. "
+            f"You locked in your €100 deposit and we already chatted about the full plan, "
+            f"but I haven't heard from you since. Just want to check where your head's at. "
+            f"Is something I said the first time not landing, or have new questions popped up? "
+            f"Tell me straight, no need to soften it."
         )
     if seg == "watched_no_reserve":
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"Saw you've been watching some of the launch content. "
-            f"What did you make of it? Is there something making you hesitate about joining MKOT 3.0? "
-            f"Tell me straight, that way I can actually help."
+            f"Hey {first_name}, Jesus from MetaKizz. "
+            f"You've been watching the launch classes but haven't reserved a spot yet. "
+            f"Genuinely curious. What's the gap between what you saw in the content "
+            f"and what would make MKOT 3.0 a yes for you? "
+            f"Tell me straight so I can actually be useful instead of just pitching."
         )
     if seg == "no_engagement":
         return (
             f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"You signed up a while back but I haven't seen you dip into any of the content yet. "
-            f"Did an email get lost on you, or just bad timing? "
-            f"If you want, I can send you the direct link, no commitment."
+            f"You signed up a while back but I haven't seen you open any of the content. "
+            f"Usually it's one of three things: emails went to spam, life got in the way, "
+            f"or you signed up and changed your mind. Which one is it? "
+            f"Either way, just want to know where you stand."
         )
     # hot_no_reserve → fall through, auto-picker handles per-action messaging
     return None
@@ -764,87 +770,91 @@ def build_whatsapp_message(ambassador, temp_result, app_lang: str = "en",
         if seg_msg:
             return seg_msg
 
-    # 1. Paid customer — close the loop, not pitch.
+    # 1. Paid customer — re-engagement (every deposit-payer has been spoken to once).
     if has_paid:
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"Thanks for reserving your spot in MKOT 3.0. "
-            f"Anything you need from me before we kick off? "
-            f"If you've got 5 min, happy to jump on a quick call and clear up anything that's not crystal. "
-            f"No pressure, just making sure you've got everything you need."
+            f"Hey {first_name}, Jesus circling back. "
+            f"You're locked in with the deposit and we already talked once about the full plan, "
+            f"but I haven't heard back from you. Where's your head at right now? "
+            f"Anything from our first chat that didn't sit right, or new doubts that came up?"
         )
 
-    # 2. Long live attendance — strong emotional anchor.
+    # 2. Long live attendance — rare commitment, lean on it.
     if webinar_dur and webinar_dur >= 60:
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"I saw you stayed all the way through the live ({webinar_dur} min), that meant a lot. "
-            f"What did you take away? Is there anything that didn't click, "
-            f"or something holding you back from reserving your spot? "
-            f"No pressure, just curious."
+            f"Hey {first_name}, Jesus from MetaKizz. "
+            f"I was looking through the live attendance. You stuck around the full {webinar_dur} minutes, "
+            f"which barely anyone does, most people drop off way earlier. "
+            f"Real question: which part hit hardest for you? "
+            f"And what's the one thing still keeping you from locking in your spot?"
         )
     if webinar_dur and webinar_dur >= 30:
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"Saw you stayed for a good chunk of the live ({webinar_dur} min), thanks for being there. "
-            f"What did you make of it? Any questions still floating around, happy to answer."
+            f"Hey {first_name}, Jesus from MetaKizz. "
+            f"You caught a solid chunk of the live ({webinar_dur} min), enough to see what we're actually building. "
+            f"Curious. Which bit did you want us to go deeper on? "
+            f"Asking for real, I'm shaping what comes next around answers like yours."
         )
 
-    # 3. Class 3 (replay) — distinct narrative from class 1/2.
+    # 3. Class 3 (replay) — high-intent rewatch signal.
     if max_pct.get(3, 0) >= 95:
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"Saw you finished the masterclass replay all the way through. "
-            f"What did you make of it? Favorite moment? "
-            f"If anything's still unclear, happy to help you sort it out."
+            f"Hey {first_name}, Jesus from MetaKizz. "
+            f"The masterclass replay is 90+ minutes and you watched it end to end. That takes real intent. "
+            f"What grabbed you most? "
+            f"And what's the bit of your own kizz you're most trying to crack right now?"
         )
     if max_pct.get(3, 0) >= 50:
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"Saw you started watching the masterclass replay. "
-            f"How's it going? Anything that hasn't clicked yet?"
+            f"Hey {first_name}, Jesus from MetaKizz. "
+            f"You started the masterclass replay but haven't finished it yet. "
+            f"Two quick questions: what's stopping you from getting through it (timing, content, something else)? "
+            f"And what were you hoping to walk away with?"
         )
 
     # 4. Multiple classes completed — progress recognition.
     if completed:
         clases_str = ", ".join(str(c) for c in completed)
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"Saw you watched class {clases_str} all the way through, that's real focus. "
-            f"Curious. What stuck with you? "
-            f"What part of your kizz are you trying to push forward right now?"
+            f"Hey {first_name}, Jesus from MetaKizz. "
+            f"You watched class {clases_str} end to end, that's more focus than 90% of folks. "
+            f"Serious question. What's the part of your kizz you're trying to crack right now? "
+            f"Tell me straight and I'll tell you whether MKOT 3.0 is the right move for you or not."
         )
 
     # 5. 2+ classes started — engagement check-in.
     if len(classes_watched) >= 2:
         clases_str = ", ".join(str(c) for c in classes_watched)
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"Saw you've already started classes {clases_str}. "
-            f"How's it landing for you? Is there a specific piece you'd want us to go deeper on?"
+            f"Hey {first_name}, Jesus from MetaKizz. "
+            f"You dipped into classes {clases_str} but haven't finished either. "
+            f"What's pulling your attention away? "
+            f"If there's a specific thing in the classes that didn't click, that's the conversation I want to have."
         )
 
     # 6. Single class started — "what stopped you" prompt.
     if classes_watched:
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"Saw you started class {classes_watched[0]}, that's a good first move. "
-            f"Anything holding you back from finishing it? "
-            f"If it's a timing or content thing, happy to help."
+            f"Hey {first_name}, Jesus from MetaKizz. "
+            f"You started class {classes_watched[0]} but stopped partway. "
+            f"Two minutes of honest feedback would help me a lot. Was it the content, the timing, or just life? "
+            f"Whatever it is, I'd rather know."
         )
 
     # 7. Past-masterclass tag — reactivation.
     if "attended past masterclass" in signals:
         return (
-            f"Hey {first_name}, Jesus from MetaKizz here. "
-            f"You joined our masterclass back in March and we just kicked off "
-            f"\"Hacking the Urbankiz Code\". Wanted to make sure you saw the new classes are live. "
-            f"Have you had a chance to check them out?"
+            f"Hey {first_name}, Jesus from MetaKizz. "
+            f"You came to our masterclass back in March, good to see you still in the loop. "
+            f"We just dropped \"Hacking the Urbankiz Code\" with three new classes. "
+            f"Have you had time to check them out? "
+            f"And honest question: has your kizz moved at all since March?"
         )
 
-    # 8. Generic fallback.
+    # 8. Generic fallback — primes them to think about their own goal.
     return (
-        f"Hey {first_name}, Jesus from MetaKizz here. "
-        f"Just dropping in to see how you're getting on with the launch content. "
-        f"If there's anything we can help with, hit me up."
+        f"Hey {first_name}, Jesus from MetaKizz. "
+        f"We've been dropping new content all week and I wanted to make sure you've actually seen it. "
+        f"What's the one thing you're trying to fix in your kizz right now? "
+        f"Tell me and I'll point you straight to the class that helps."
     )
