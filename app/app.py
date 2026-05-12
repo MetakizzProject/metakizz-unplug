@@ -314,6 +314,7 @@ def create_app():
     from app.routes.dashboard import dashboard_bp
     from app.routes.leaderboard import leaderboard_bp
     from app.routes.admin import admin_bp
+    from app.routes.admin_pulse import admin_pulse_bp
     from app.routes.webhook import webhook_bp
     from app.routes.cron import cron_bp
     from app.routes.reservation import reservation_bp
@@ -326,6 +327,7 @@ def create_app():
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(leaderboard_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(admin_pulse_bp)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(cron_bp)
     app.register_blueprint(reservation_bp)

@@ -21,6 +21,10 @@
 
         <nav class="admin-nav">
             {% set active = active_section or '' %}
+            <a href="{{ url_for('admin_pulse.index') }}" class="admin-nav-link {{ 'active' if active == 'pulse' }}" title="Curated executive dashboard">
+                <span class="nav-icon">◉</span>
+                <span class="nav-label">Pulse</span>
+            </a>
             <a href="{{ url_for('admin.index') }}" class="admin-nav-link {{ 'active' if active == 'overview' }}">
                 <span class="nav-icon">▌</span>
                 <span class="nav-label">Overview</span>

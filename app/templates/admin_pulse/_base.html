@@ -1,0 +1,33 @@
+{% extends "admin_base.html" %}
+
+{# Common shell for every Pulse page: sub-nav strip + content slot.
+   Child templates override {% block pulse_content %} only — the sub-nav
+   stays consistent across the section. #}
+
+{% block admin_content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pulse.css') }}">
+
+<div class="pulse-shell">
+  <header class="pulse-header">
+    <div class="pulse-header-titles">
+      <h1 class="pulse-h1">PULSE</h1>
+      <p class="pulse-subtitle">// {{ page_title or 'MetaKizz' }} · executive view</p>
+    </div>
+    <nav class="pulse-subnav" role="tablist">
+      {% for key, label, emoji in pulse_pages %}
+        <a href="{{ url_for('admin_pulse.' + key) }}"
+           class="pulse-tab{% if pulse_active == key %} active{% endif %}"
+           role="tab"
+           aria-selected="{{ 'true' if pulse_active == key else 'false' }}">
+          <span class="pulse-tab-emoji">{{ emoji }}</span>
+          <span class="pulse-tab-label">{{ label }}</span>
+        </a>
+      {% endfor %}
+    </nav>
+  </header>
+
+  <main class="pulse-main" id="pulse-main">
+    {% block pulse_content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}

@@ -1,0 +1,274 @@
+/* ============================================================
+   PULSE — executive dashboard styles
+   Layered on top of admin_base.html. Reuses brand tokens
+   (verde MetaKizz #2EDB99, Orbitron, Share Tech Mono, dark bg).
+   Tokens here are scoped to .pulse-shell so they never leak.
+   ============================================================ */
+
+.pulse-shell {
+  --pulse-bg: #050a08;
+  --pulse-fg: #E8F0EC;
+  --pulse-muted: #6B7280;
+  --pulse-border: rgba(46, 219, 153, 0.18);
+  --pulse-border-strong: rgba(46, 219, 153, 0.42);
+  --pulse-accent: #2EDB99;
+  --pulse-accent-soft: rgba(46, 219, 153, 0.10);
+  --pulse-card-bg: rgba(0, 0, 0, 0.40);
+  --pulse-card-bg-hover: rgba(46, 219, 153, 0.04);
+
+  /* Bucket accents — same hex as temperature.py:BUCKET_LABELS */
+  --pulse-burning: #DC2626;
+  --pulse-hot: #F97316;
+  --pulse-warm: #FFC857;
+  --pulse-cool: #60A5FA;
+  --pulse-cold: #6B7280;
+  --pulse-customer: #A78BFA;
+
+  padding: 20px 24px 48px;
+  max-width: 1480px;
+  margin: 0 auto;
+  color: var(--pulse-fg);
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+.pulse-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--pulse-border);
+  margin-bottom: 24px;
+}
+
+.pulse-header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pulse-h1 {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  font-size: 26px;
+  letter-spacing: 0.30em;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(46, 219, 153, 0.35);
+  margin: 0;
+}
+
+.pulse-subtitle {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--pulse-muted);
+  margin: 0;
+}
+
+/* ── Sub-nav ────────────────────────────────────────────────── */
+.pulse-subnav {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--pulse-border);
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.pulse-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #9CA3AF;
+  text-decoration: none;
+  border-radius: 6px;
+  transition: all 140ms ease;
+}
+
+.pulse-tab:hover {
+  color: #fff;
+  background: var(--pulse-accent-soft);
+}
+
+.pulse-tab.active {
+  color: #000;
+  background: var(--pulse-accent);
+  box-shadow: 0 0 16px rgba(46, 219, 153, 0.45);
+}
+
+.pulse-tab-emoji {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* ── Main content slot ──────────────────────────────────────── */
+.pulse-main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Section headings (inside a page) ──────────────────────── */
+.pulse-section-h2 {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 0.18em;
+  color: #fff;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.pulse-section-lead {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--pulse-muted);
+  max-width: 70ch;
+  margin: 0 0 18px;
+}
+
+/* ── Placeholder (used during scaffold; deleted as pages fill) */
+.pulse-placeholder {
+  padding: 8px 0;
+}
+
+.pulse-empty-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--pulse-card-bg);
+  border: 1px dashed var(--pulse-border);
+  border-radius: 12px;
+  padding: 22px 24px;
+  color: var(--pulse-muted);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+}
+
+.pulse-empty-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+/* ── KPI primitive (will be used heavily in next iterations) ── */
+.pulse-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.pulse-kpi {
+  background: var(--pulse-card-bg);
+  border: 1px solid var(--pulse-border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 92px;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+
+.pulse-kpi:hover {
+  border-color: var(--pulse-border-strong);
+  transform: translateY(-1px);
+}
+
+.pulse-kpi-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--pulse-muted);
+}
+
+.pulse-kpi-value {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+  font-size: 28px;
+  letter-spacing: 0.02em;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.pulse-kpi-delta {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--pulse-muted);
+}
+
+.pulse-kpi-delta.up { color: var(--pulse-accent); }
+.pulse-kpi-delta.down { color: var(--pulse-burning); }
+
+/* ── Generic card primitive ─────────────────────────────────── */
+.pulse-card {
+  background: var(--pulse-card-bg);
+  border: 1px solid var(--pulse-border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.pulse-card-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--pulse-muted);
+  margin: 0 0 14px;
+}
+
+/* ── Status pill (used for "scaffold" / "draft" / "live" states) ─ */
+.pulse-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: rgba(255, 200, 87, 0.10);
+  border: 1px solid rgba(255, 200, 87, 0.35);
+  color: var(--pulse-warm);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.pulse-status-pill.live {
+  background: rgba(46, 219, 153, 0.10);
+  border-color: var(--pulse-border-strong);
+  color: var(--pulse-accent);
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  /* Below 720px the sub-nav stacks to a single horizontal scroll row
+     so labels are never truncated. Less elegant than wrap, but reliable
+     even when we add 5+ tabs in future iterations. */
+  .pulse-subnav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .pulse-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .pulse-shell { padding: 14px 12px 36px; }
+  .pulse-h1 { font-size: 20px; letter-spacing: 0.22em; }
+  .pulse-kpi-value { font-size: 24px; }
+  .pulse-header { gap: 12px; }
+}
