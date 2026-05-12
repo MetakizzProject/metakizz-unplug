@@ -732,8 +732,9 @@ def _segment_message(seg: str, first_name: str) -> Optional[str]:
         return (
             f"Hey {first_name}, Alvaro from MetaKizz. "
             f"Saw you've been watching some of the launch content. "
+            f"We're asking for honest feedback from people in your spot. "
             f"Would you be open to sharing what's on your mind about MKOT 3.0 right now? "
-            f"Whether you end up joining or not, your take genuinely helps me make this better."
+            f"Whether you end up joining or not, your input is genuinely valuable for us to make this better."
         )
     if seg == "no_engagement":
         return (
