@@ -5497,6 +5497,124 @@ def leads():
 
 
 # ════════════════════════════════════════════════════════════════════
+# SEGMENT JSON — feeds the WA-drafter CLI (tools/wa_draft_segment.py)
+# ════════════════════════════════════════════════════════════════════
+
+@admin_bp.route("/leads/segment.json")
+def leads_segment_json():
+    """Return a JSON list of leads in a segment with their WA opener
+    pre-rendered. Mirrors the filter logic + message generation used by
+    /admin/leads so the CLI drafter sees exactly what the 💬 WA button
+    would draft.
+
+    Query params:
+      seg       — segment key (required, see SEGMENT_LABELS)
+      limit     — cap returned rows (optional)
+
+    Response:
+      {"seg": "...", "count": N, "rows": [
+          {"id": ..., "name": "...", "phone": "+34...", "email": "...",
+           "message": "Hey ..."},
+          ...
+      ]}
+    """
+    from app.services.temperature import (
+        SEGMENT_LABELS, build_whatsapp_message, compute_temperature,
+        fetch_signals_bulk, bulk_webinar_durations, bulk_paid_reservations,
+    )
+    from app.models import LeadEvent, Reservation
+
+    seg = (request.args.get("seg") or "").strip().lower()
+    if seg not in SEGMENT_LABELS:
+        return jsonify({"error": f"unknown segment, valid: {list(SEGMENT_LABELS)}"}), 400
+    limit = request.args.get("limit", type=int)
+
+    base = Ambassador.query.filter(Ambassador.phone_number.isnot(None))
+    base = base.filter(Ambassador.source != "community")
+    buckets = _build_email_buckets()
+    customer_emails = {em for em, b in buckets.items() if b == "customer"}
+    if customer_emails:
+        base = base.filter(~func.lower(Ambassador.email).in_(customer_emails))
+
+    _paid_res_exists = (
+        db.session.query(Reservation.id)
+        .filter(Reservation.paid_at.isnot(None))
+        .filter(or_(
+            Reservation.ambassador_id == Ambassador.id,
+            func.lower(Reservation.email) == func.lower(Ambassador.email),
+        ))
+        .exists()
+    )
+
+    if seg == "deposit_paid":
+        base = base.filter(_paid_res_exists)
+    elif seg == "hot_no_reserve":
+        hot_emails = {em for em, b in buckets.items() if b in ("burning", "hot")}
+        if hot_emails:
+            base = base.filter(func.lower(Ambassador.email).in_(hot_emails))
+        else:
+            base = base.filter(Ambassador.id == -1)
+        base = base.filter(~_paid_res_exists)
+    elif seg == "watched_no_reserve":
+        any_class_progress = [
+            f"class{n}_progress_{p}" for n in (1, 2, 3) for p in (25, 50, 75, 95)
+        ] + [f"class{n}_completed" for n in (1, 2, 3)]
+        _watched = (
+            db.session.query(LeadEvent.id)
+            .filter(func.lower(LeadEvent.email) == func.lower(Ambassador.email))
+            .filter(LeadEvent.event_type.in_(any_class_progress))
+            .exists()
+        )
+        base = base.filter(_watched).filter(~_paid_res_exists)
+    elif seg == "no_engagement":
+        _has_any_event = (
+            db.session.query(LeadEvent.id)
+            .filter(or_(
+                LeadEvent.ambassador_id == Ambassador.id,
+                func.lower(LeadEvent.email) == func.lower(Ambassador.email),
+            ))
+            .exists()
+        )
+        base = base.filter(~_has_any_event).filter(~_paid_res_exists)
+
+    amb_list = base.all()
+    if limit is not None:
+        amb_list = amb_list[:limit]
+    if not amb_list:
+        return jsonify({"seg": seg, "count": 0, "rows": []})
+
+    amb_ids = [a.id for a in amb_list]
+    lead_evts_by_id, email_evts_by_id = fetch_signals_bulk(amb_ids, max_ids=None)
+    webinar_dur_by_amb, webinar_dur_by_email = bulk_webinar_durations(amb_list)
+    paid_amb_ids, paid_emails_set = bulk_paid_reservations(amb_list)
+    ref_counts = _get_referral_counts()
+
+    rows = []
+    for a in amb_list:
+        em_lower = (a.email or "").lower()
+        webinar_dur = webinar_dur_by_amb.get(a.id) or webinar_dur_by_email.get(em_lower)
+        has_paid = (a.id in paid_amb_ids) or (em_lower and em_lower in paid_emails_set)
+        t = compute_temperature(
+            a,
+            lead_events=lead_evts_by_id.get(a.id, []),
+            email_events=email_evts_by_id.get(a.id, []),
+            referral_count=ref_counts.get(a.id, 0),
+            webinar_duration_min=webinar_dur,
+            has_paid_reservation=has_paid,
+        )
+        msg = build_whatsapp_message(a, t, force_segment=seg)
+        rows.append({
+            "id": a.id,
+            "name": a.name or "",
+            "phone": a.phone_number or "",
+            "email": a.email or "",
+            "message": msg,
+        })
+
+    return jsonify({"seg": seg, "count": len(rows), "rows": rows})
+
+
+# ════════════════════════════════════════════════════════════════════
 # OUTREACH TRACKING — manual mark-as-contacted per lead
 # ════════════════════════════════════════════════════════════════════
 
