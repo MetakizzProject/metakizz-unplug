@@ -5518,6 +5518,7 @@ def leads_segment_json():
           ...
       ]}
     """
+    from flask import jsonify
     from app.services.temperature import (
         SEGMENT_LABELS, build_whatsapp_message, compute_temperature,
         fetch_signals_bulk, bulk_webinar_durations, bulk_paid_reservations,
