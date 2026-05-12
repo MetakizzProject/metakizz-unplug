@@ -5034,9 +5034,13 @@ def leads():
         base = base.filter(Ambassador.last_outreach_at.is_(None))
 
     # ── Segment filter (?seg=NAME) ──
-    # Each segment is a named filter combo that the WA button matches
-    # with a specific Spanish template (see _segment_message). Designed
-    # for the "segment first, then send" workflow on /admin/leads.
+    # Each segment = filter combo + (optionally) a forced WA template.
+    # See _segment_message for templates. Global rule: NEVER include
+    # community-source leads (already paying community customers — don't
+    # disturb them) nor people who already fully purchased MKOT 3.0
+    # (customer bucket — they're done). Deposit_paid is the one segment
+    # that DOES include €100-deposit folks (because the deposit alone
+    # doesn't mean full purchase — they still need closing).
     if seg:
         from app.models import Reservation as _Res
         _paid_res_exists = (
@@ -5048,12 +5052,22 @@ def leads():
             ))
             .exists()
         )
-        if seg == "client_community":
-            # Community = imported community members (already paid prior
-            # programs, not part of the MKOT 3.0 reservation flow).
-            base = base.filter(Ambassador.source == "community")
+        # Global "do not contact" exclusions applied to every segment:
+        # community customers (source) + full-purchase customers (bucket).
+        base = base.filter(Ambassador.source != "community")
+        customer_emails = {
+            em for em, b in _build_email_buckets().items() if b == "customer"
+        }
+        if customer_emails:
+            base = base.filter(~func.lower(Ambassador.email).in_(customer_emails))
+
+        if seg == "deposit_paid":
+            # Paid €100 reservation but NOT in customer bucket — they're
+            # half-committed, need closing on the full plan.
+            base = base.filter(_paid_res_exists)
         elif seg == "hot_no_reserve":
             # Burning/hot bucket who haven't put €100 down yet.
+            # WA template = auto-picker (per-action opener).
             hot_emails = {
                 em for em, b in _build_email_buckets().items()
                 if b in ("burning", "hot")
@@ -5064,8 +5078,7 @@ def leads():
                 base = base.filter(Ambassador.id == -1)
             base = base.filter(~_paid_res_exists)
         elif seg == "watched_no_reserve":
-            # Touched any class progress event (≥25% watched), but no
-            # paid reservation. The "almost there" segment.
+            # Touched any class progress event (≥25% watched), no deposit.
             any_class_progress = [
                 f"class{n}_progress_{p}" for n in (1, 2, 3)
                 for p in (25, 50, 75, 95)
@@ -5078,7 +5091,7 @@ def leads():
             )
             base = base.filter(_watched).filter(~_paid_res_exists)
         elif seg == "no_engagement":
-            # No LeadEvent at all (signed up, never engaged). No reservation.
+            # No LeadEvent at all. No deposit.
             _has_any_event = (
                 db.session.query(LeadEvent.id)
                 .filter(or_(
@@ -5353,16 +5366,22 @@ def leads():
     }
 
     # ── Segment audience counts ──
-    # Quick approximations for the segment cards. Same filter semantics
-    # as the seg=NAME branch above; recomputed in one batch so the cards
-    # always reflect current state regardless of which seg is active.
+    # Same filter semantics as the seg=NAME branch above. Every segment
+    # excludes community-source leads AND customer-bucket folks (already
+    # purchased). Recomputed in one batch so cards always reflect state.
     seg_counts = {k: 0 for k in SEGMENT_LABELS}
     try:
-        # client_community
-        seg_counts["client_community"] = (
-            Ambassador.query.filter(Ambassador.source == "community").count()
-        )
-        # paid-reservation email/id sets (reused across hot/watched/no_eng)
+        # Common exclusions for ALL segments
+        _customer_emails = {
+            em for em, b in _build_email_buckets().items() if b == "customer"
+        }
+        def _base_excluded():
+            q_ = Ambassador.query.filter(Ambassador.source != "community")
+            if _customer_emails:
+                q_ = q_.filter(~func.lower(Ambassador.email).in_(_customer_emails))
+            return q_
+
+        # Paid-reservation sets (used by every segment)
         from app.models import Reservation as _R
         paid_rows = (
             _R.query.filter(_R.paid_at.isnot(None))
@@ -5371,20 +5390,28 @@ def leads():
         paid_amb_ids_set = {r[0] for r in paid_rows if r[0]}
         paid_emails_set  = {(r[1] or "").lower() for r in paid_rows if r[1]}
 
-        # hot_no_reserve: burning/hot bucket minus paid
+        # deposit_paid: paid €100 deposit (and excluded if customer / community)
+        q_dp = _base_excluded()
+        deposit_conds = []
+        if paid_amb_ids_set:
+            deposit_conds.append(Ambassador.id.in_(paid_amb_ids_set))
+        if paid_emails_set:
+            deposit_conds.append(func.lower(Ambassador.email).in_(paid_emails_set))
+        if deposit_conds:
+            seg_counts["deposit_paid"] = q_dp.filter(or_(*deposit_conds)).count()
+
+        # hot_no_reserve: burning/hot bucket, no deposit
         hot_emails = {
             em for em, b in _build_email_buckets().items()
             if b in ("burning", "hot")
         } - paid_emails_set
         if hot_emails:
-            seg_counts["hot_no_reserve"] = (
-                Ambassador.query
-                .filter(func.lower(Ambassador.email).in_(hot_emails))
-                .filter(~Ambassador.id.in_(paid_amb_ids_set) if paid_amb_ids_set else True)
-                .count()
-            )
+            q_hot = _base_excluded().filter(func.lower(Ambassador.email).in_(hot_emails))
+            if paid_amb_ids_set:
+                q_hot = q_hot.filter(~Ambassador.id.in_(paid_amb_ids_set))
+            seg_counts["hot_no_reserve"] = q_hot.count()
 
-        # watched_no_reserve: anyone with ≥25% on any class, no paid res
+        # watched_no_reserve: any class progress ≥25%, no deposit
         any_class_progress = [
             f"class{n}_progress_{p}" for n in (1, 2, 3) for p in (25, 50, 75, 95)
         ] + [f"class{n}_completed" for n in (1, 2, 3)]
@@ -5397,14 +5424,12 @@ def leads():
             .all() if r[0]
         } - paid_emails_set
         if watched_emails:
-            seg_counts["watched_no_reserve"] = (
-                Ambassador.query
-                .filter(func.lower(Ambassador.email).in_(watched_emails))
-                .filter(~Ambassador.id.in_(paid_amb_ids_set) if paid_amb_ids_set else True)
-                .count()
-            )
+            q_w = _base_excluded().filter(func.lower(Ambassador.email).in_(watched_emails))
+            if paid_amb_ids_set:
+                q_w = q_w.filter(~Ambassador.id.in_(paid_amb_ids_set))
+            seg_counts["watched_no_reserve"] = q_w.count()
 
-        # no_engagement: any ambassador with NO LeadEvent and no paid res
+        # no_engagement: no LeadEvent + no deposit
         engaged_amb_ids = {
             r[0] for r in
             db.session.query(LeadEvent.ambassador_id)
@@ -5417,7 +5442,7 @@ def leads():
             .filter(LeadEvent.email.isnot(None))
             .distinct().all() if r[0]
         }
-        q_ne = Ambassador.query
+        q_ne = _base_excluded()
         if engaged_amb_ids:
             q_ne = q_ne.filter(~Ambassador.id.in_(engaged_amb_ids))
         if engaged_emails:

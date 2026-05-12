@@ -689,44 +689,43 @@ def temp_label_to_key(label: str) -> str:
 # (2) add the template here, (3) add the card in admin_leads.html.
 
 SEGMENT_LABELS = {
-    "client_community":   ("💎", "Clientes comunidad",     "#A78BFA"),
-    "hot_no_reserve":     ("🔥", "Calientes sin reservar",  "#DC2626"),
-    "watched_no_reserve": ("📺", "Vieron clases sin reservar", "#F97316"),
-    "no_engagement":      ("🌑", "Sin engagement",           "#6B7280"),
+    "deposit_paid":       ("🛒", "Deposit paid · no full purchase",     "#A78BFA"),
+    "hot_no_reserve":     ("🔥", "Hot leads · no deposit",              "#DC2626"),
+    "watched_no_reserve": ("📺", "Watched classes · no deposit",        "#F97316"),
+    "no_engagement":      ("🌑", "No engagement · signed up only",      "#6B7280"),
 }
 
 
 def _segment_message(seg: str, first_name: str) -> Optional[str]:
-    """Return the WA message text for a forced segment, or None if seg
-    is unknown (caller falls back to auto-pick)."""
-    if seg == "client_community":
+    """Return the WA message text for a forced segment, or None.
+
+    Returning None means: don't override the auto-picker (use per-lead
+    action-based templates). hot_no_reserve uses None deliberately so
+    every hot lead gets an opener tailored to what they specifically did.
+    """
+    if seg == "deposit_paid":
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Pasaba a saludar y ver cómo va tu kizz desde que estás con nosotros. "
-            f"¿Hay algo en lo que podamos echarte un cable ahora mismo? "
-            f"Sin presión, cualquier cosa que te ronde por la cabeza me dices."
-        )
-    if seg == "hot_no_reserve":
-        return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"He visto que estás siguiendo el lanzamiento bastante de cerca y la verdad me alegra. "
-            f"Quería preguntarte directamente. ¿Qué te está frenando para reservar tu spot en MKOT 3.0? "
-            f"Si hay alguna duda concreta, me la sueltas y la resolvemos."
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"Thanks for locking in your spot in MKOT 3.0 with the deposit. "
+            f"Wanted to check in. Have you had a chance to look at the full program details? "
+            f"Anything specific you'd want to nail down before we kick off? "
+            f"Happy to walk you through whatever's not clear."
         )
     if seg == "watched_no_reserve":
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Vi que has estado viendo parte del contenido de las clases y quería preguntarte qué te ha parecido. "
-            f"¿Hay algo que te haya hecho dudar a la hora de unirte a MKOT 3.0? "
-            f"Cuéntame sin filtro, así te puedo ayudar mejor."
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"Saw you've been watching some of the launch content. "
+            f"What did you make of it? Is there something making you hesitate about joining MKOT 3.0? "
+            f"Tell me straight, that way I can actually help."
         )
     if seg == "no_engagement":
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Te apuntaste hace un rato y aún no te he visto entrar en el contenido. "
-            f"¿Te lié con algún email o se te pasó? Si quieres, te paso el acceso directo "
-            f"y le echas un ojo sin compromiso."
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"You signed up a while back but I haven't seen you dip into any of the content yet. "
+            f"Did an email get lost on you, or just bad timing? "
+            f"If you want, I can send you the direct link, no commitment."
         )
+    # hot_no_reserve → fall through, auto-picker handles per-action messaging
     return None
 
 
@@ -768,84 +767,84 @@ def build_whatsapp_message(ambassador, temp_result, app_lang: str = "en",
     # 1. Paid customer — close the loop, not pitch.
     if has_paid:
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Gracias por reservar tu spot en MKOT 3.0. "
-            f"¿Necesitas algo de mí antes de que arranquemos? "
-            f"Si te van bien 5 min, te llamo y aclaramos lo que sea. "
-            f"Sin presión, solo asegurarme de que tienes todo claro."
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"Thanks for reserving your spot in MKOT 3.0. "
+            f"Anything you need from me before we kick off? "
+            f"If you've got 5 min, happy to jump on a quick call and clear up anything that's not crystal. "
+            f"No pressure, just making sure you've got everything you need."
         )
 
     # 2. Long live attendance — strong emotional anchor.
     if webinar_dur and webinar_dur >= 60:
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Te vi en la live hasta el final ({webinar_dur} min) y la verdad me hizo ilusión. "
-            f"¿Qué te llevaste? ¿Hay algo que no te haya quedado claro o que te frene "
-            f"a la hora de reservar tu spot? Sin presión, solo curiosidad."
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"I saw you stayed all the way through the live ({webinar_dur} min), that meant a lot. "
+            f"What did you take away? Is there anything that didn't click, "
+            f"or something holding you back from reserving your spot? "
+            f"No pressure, just curious."
         )
     if webinar_dur and webinar_dur >= 30:
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Vi que estuviste en la live un buen rato ({webinar_dur} min), gracias por estar. "
-            f"¿Qué te pareció? Cualquier duda que te haya quedado, te respondo encantado."
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"Saw you stayed for a good chunk of the live ({webinar_dur} min), thanks for being there. "
+            f"What did you make of it? Any questions still floating around, happy to answer."
         )
 
     # 3. Class 3 (replay) — distinct narrative from class 1/2.
     if max_pct.get(3, 0) >= 95:
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Vi que terminaste el replay de la masterclass entero. "
-            f"¿Qué te pareció? ¿Cuál fue tu momento favorito? "
-            f"Si te quedó alguna duda, te la resuelvo sin problema."
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"Saw you finished the masterclass replay all the way through. "
+            f"What did you make of it? Favorite moment? "
+            f"If anything's still unclear, happy to help you sort it out."
         )
     if max_pct.get(3, 0) >= 50:
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Vi que has empezado a ver el replay de la masterclass. "
-            f"¿Cómo lo llevas? ¿Hay algo que no te haya quedado claro?"
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"Saw you started watching the masterclass replay. "
+            f"How's it going? Anything that hasn't clicked yet?"
         )
 
     # 4. Multiple classes completed — progress recognition.
     if completed:
         clases_str = ", ".join(str(c) for c in completed)
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Vi que te terminaste las clases {clases_str} enteras, eso es focus de verdad. "
-            f"Tengo curiosidad. ¿Qué se te quedó grabado? "
-            f"¿En qué parte de tu kizz estás intentando avanzar ahora mismo?"
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"Saw you watched class {clases_str} all the way through, that's real focus. "
+            f"Curious. What stuck with you? "
+            f"What part of your kizz are you trying to push forward right now?"
         )
 
     # 5. 2+ classes started — engagement check-in.
     if len(classes_watched) >= 2:
         clases_str = ", ".join(str(c) for c in classes_watched)
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Vi que ya empezaste las clases {clases_str}. "
-            f"¿Cómo te están aterrizando? ¿Hay alguna parte concreta en la que "
-            f"quieras que profundicemos más?"
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"Saw you've already started classes {clases_str}. "
+            f"How's it landing for you? Is there a specific piece you'd want us to go deeper on?"
         )
 
     # 6. Single class started — "what stopped you" prompt.
     if classes_watched:
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Vi que empezaste la clase {classes_watched[0]}, buen primer paso. "
-            f"¿Algo te está frenando para terminarla? Si es tema de tiempo o de "
-            f"contenido, te echamos un cable."
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"Saw you started class {classes_watched[0]}, that's a good first move. "
+            f"Anything holding you back from finishing it? "
+            f"If it's a timing or content thing, happy to help."
         )
 
     # 7. Past-masterclass tag — reactivation.
     if "attended past masterclass" in signals:
         return (
-            f"Hola {first_name}, soy Jesús de MetaKizz. "
-            f"Viniste a nuestra masterclass de marzo y acabamos de arrancar "
-            f"\"Hacking the Urbankiz Code\". Quería asegurarme de que sabes que las "
-            f"clases nuevas ya están abiertas. ¿Les has podido echar un ojo?"
+            f"Hey {first_name}, Jesus from MetaKizz here. "
+            f"You joined our masterclass back in March and we just kicked off "
+            f"\"Hacking the Urbankiz Code\". Wanted to make sure you saw the new classes are live. "
+            f"Have you had a chance to check them out?"
         )
 
     # 8. Generic fallback.
     return (
-        f"Hola {first_name}, soy Jesús de MetaKizz. "
-        f"Pasaba a saludar y ver cómo llevas el contenido del lanzamiento. "
-        f"Si hay cualquier cosa en la que podamos ayudarte, dime y te leo."
+        f"Hey {first_name}, Jesus from MetaKizz here. "
+        f"Just dropping in to see how you're getting on with the launch content. "
+        f"If there's anything we can help with, hit me up."
     )
