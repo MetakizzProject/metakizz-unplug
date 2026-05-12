@@ -284,6 +284,8 @@
       <button data-filter="paid"          class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">💰 Paid deposit</button>
       <button data-filter="paid_full"     class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">✓ Full plan</button>
       <button data-filter="not_paid_full" class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition">⏳ Missing full</button>
+      <button data-filter="priority"      class="filter-btn text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border transition"
+              title="Pagaron depósito + sin plan completo + sin contactar todavía. La cola que más urge.">🔥 Priority</button>
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <span class="text-[10px] uppercase tracking-widest text-gray-600 font-mono mr-2 w-20 inline-block">▌ Profile</span>
@@ -937,7 +939,13 @@
     if (f === 'all')                    pass = true;
     else if (f === 'paid')              pass = row.dataset.paid === '1';
     else if (f === 'paid_full')         pass = row.dataset.paidFull === '1';
-    else if (f === 'not_paid_full')     pass = row.dataset.paidFull === '0';
+    // 'Missing full' = HOT chase list: paid the €100 deposit but hasn't
+    // closed the full plan yet. Excludes cold leads who didn't even pay
+    // the deposit — those are a different audience.
+    else if (f === 'not_paid_full')     pass = row.dataset.paid === '1' && row.dataset.paidFull === '0';
+    // 'Priority' = TOP of the chase list: hot leads (paid €100, missing
+    // full plan) that haven't been contacted yet. The most urgent queue.
+    else if (f === 'priority')          pass = row.dataset.paid === '1' && row.dataset.paidFull === '0' && row.dataset.contacted === '0';
 
     // PROFILE — closed combinations of program + modality. Excludes
     // orphans (they have empty program/modality, never match).
