@@ -99,7 +99,7 @@
 
   {# ─── Revenue by payment plan ────────────────────────────── #}
   <div class="pulse-card" style="margin-top: 18px;">
-    <h3 class="pulse-card-title">▌ Revenue by payment plan · 1× vs 6×</h3>
+    <h3 class="pulse-card-title">▌ Revenue by payment plan · single payment vs 6 installments</h3>
     {% if summary.revenue_by_plan|selectattr('cents','>',0)|list %}
       {% set _max_plan = summary.revenue_by_plan|selectattr('cents','>',0)|map(attribute='cents')|max or 1 %}
       <ol class="pulse-mix-list">
@@ -126,13 +126,19 @@
   {# ─── Revenue timeline 30d ───────────────────────────────── #}
   <div class="pulse-card" style="margin-top: 18px;">
     <h3 class="pulse-card-title">▌ Daily revenue · last 30 days · deposits vs full plan</h3>
-    {% if summary.timeline_30d.labels %}
+    {% set _total_revenue_30d = (summary.timeline_30d.deposits|sum) + (summary.timeline_30d.full|sum) %}
+    {% if summary.timeline_30d.labels and _total_revenue_30d > 0 %}
       <div class="pulse-chart-wrap">
         <canvas id="pulseRevenueChart"
                 data-labels='{{ summary.timeline_30d.labels|tojson }}'
                 data-deposits='{{ summary.timeline_30d.deposits|tojson }}'
                 data-full='{{ summary.timeline_30d.full|tojson }}'
                 aria-label="Daily revenue (cents) over the last 30 days, deposits and full plan"></canvas>
+      </div>
+    {% else %}
+      <div class="pulse-empty-card">
+        <span class="pulse-empty-icon">📉</span>
+        <p>No revenue activity in the last 30 days yet.</p>
       </div>
     {% endif %}
   </div>

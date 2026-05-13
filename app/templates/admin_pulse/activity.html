@@ -104,14 +104,22 @@
     return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
   }
 
+  function makeSpan(cls, text) {
+    const s = document.createElement('span');
+    s.className = cls;
+    s.textContent = text || '';
+    return s;
+  }
+
   function rowFor(e) {
+    // Build with textContent (not innerHTML) so a lead with an email
+    // like <img src=x onerror=alert(1)>@x can never execute.
     const li = document.createElement('li');
     li.className = 'pulse-feed-item pulse-feed--' + (e.type || 'other').replace('_', '-');
-    li.innerHTML =
-      '<span class="pulse-feed-ts">' + fmtTs(e.ts) + '</span>' +
-      '<span class="pulse-feed-type">' + (e.type || '') + '</span>' +
-      '<span class="pulse-feed-actor">' + (e.actor || '') + '</span>' +
-      '<span class="pulse-feed-detail">' + (e.detail || '') + '</span>';
+    li.appendChild(makeSpan('pulse-feed-ts',     fmtTs(e.ts)));
+    li.appendChild(makeSpan('pulse-feed-type',   e.type || ''));
+    li.appendChild(makeSpan('pulse-feed-actor',  e.actor || ''));
+    li.appendChild(makeSpan('pulse-feed-detail', e.detail || ''));
     return li;
   }
 

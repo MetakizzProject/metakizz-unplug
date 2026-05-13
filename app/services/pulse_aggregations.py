@@ -727,9 +727,6 @@ def activity_summary() -> dict:
     h24 = now - timedelta(hours=24)
     h48 = now - timedelta(hours=48)
 
-    def _count_between(query, since, until):
-        return query.filter(since).filter(until).count()
-
     # Signups (Ambassador.created_at)
     signups_24h = Ambassador.query.filter(Ambassador.created_at >= h24).count()
     signups_prev = (
