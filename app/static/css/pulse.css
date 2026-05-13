@@ -54,7 +54,12 @@
   font-size: 26px;
   letter-spacing: 0.30em;
   color: #fff;
-  text-shadow: 0 0 18px rgba(46, 219, 153, 0.35);
+  /* Two-layer glow: tight 8px definition for 1× DPI + soft 18px halo
+     for 2× DPI. Single layer dropped to nearly invisible on matte
+     monitors at 1×. */
+  text-shadow:
+    0 0 8px rgba(46, 219, 153, 0.30),
+    0 0 18px rgba(46, 219, 153, 0.35);
   margin: 0;
 }
 
@@ -90,6 +95,7 @@
   color: #9CA3AF;
   text-decoration: none;
   border-radius: 6px;
+  border: 1px solid rgba(46, 219, 153, 0.10);
   transition: all 140ms ease;
 }
 
@@ -101,6 +107,7 @@
 .pulse-tab.active {
   color: #000;
   background: var(--pulse-accent);
+  border-color: var(--pulse-accent);
   box-shadow: 0 0 16px rgba(46, 219, 153, 0.45);
 }
 
@@ -162,7 +169,7 @@
 /* ── KPI primitive (will be used heavily in next iterations) ── */
 .pulse-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
 }
 
