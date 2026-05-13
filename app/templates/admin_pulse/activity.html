@@ -79,7 +79,10 @@
       ▌ Live feed · last 24h
       <span class="pulse-feed-live" id="pulseFeedLive">● live</span>
     </h3>
-    <ul class="pulse-feed-list" id="pulseFeedList" data-feed-url="{{ url_for('admin_pulse.activity_json') }}">
+    <ul class="pulse-feed-list" id="pulseFeedList"
+        data-feed-url="{{ url_for('admin_pulse.activity_json') }}"
+        aria-live="polite"
+        aria-label="Live activity feed updating every 60 seconds">
       {% for e in feed %}
         {% include "admin_pulse/_feed_item.html" %}
       {% endfor %}

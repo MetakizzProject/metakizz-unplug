@@ -111,6 +111,15 @@
   box-shadow: 0 0 16px rgba(46, 219, 153, 0.45);
 }
 
+/* ── A11y · focus rings for keyboard nav ─────────────────────── */
+.pulse-tab:focus-visible,
+.pulse-queue-cell:focus-visible,
+.pulse-rank-row a:focus-visible,
+.pulse-source-row a:focus-visible {
+  outline: 2px solid var(--pulse-accent);
+  outline-offset: 2px;
+}
+
 .pulse-tab-emoji {
   font-size: 13px;
   line-height: 1;
