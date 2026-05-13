@@ -5,12 +5,41 @@ handlers stay thin (HTTP → call helper → render). Each function returns
 a JSON-serializable dict shaped exactly for the template that consumes
 it. Add a new dashboard panel = add a function here.
 
-Caching strategy: in-process memo with short TTL via functools.lru_cache
-patterns is intentionally NOT used yet — Pulse pages will be hit by one
-operator (Álvaro) so even uncached queries are fine. Add caching only
-when a specific aggregation gets slow.
+Caching: a tiny in-process TTL memo (`_cached(seconds)`) decorates the
+helpers whose underlying queries are expensive enough that re-running
+them on every pageload would matter. Activity is intentionally NOT
+cached — that page promises "live" data. Per-worker, no Redis.
 """
 from __future__ import annotations
+
+import time
+from functools import wraps
+
+
+def _cached(ttl_seconds: int):
+    """In-process TTL memo for parameterless aggregation functions.
+
+    The cache is per Python process (per Gunicorn worker on Render),
+    NOT cross-worker. Acceptable here: Pulse is admin-only, traffic is
+    tiny, eventual consistency within `ttl_seconds` is fine. If the
+    user opens a Pulse page and immediately reloads, the second load
+    is instant; new signups will appear after `ttl_seconds`.
+    """
+    def decorator(fn):
+        state = {"value": None, "expires": 0.0}
+        @wraps(fn)
+        def wrapped():
+            now = time.time()
+            if state["value"] is not None and now < state["expires"]:
+                return state["value"]
+            value = fn()
+            state["value"] = value
+            state["expires"] = now + ttl_seconds
+            return value
+        wrapped.cache_clear = lambda: state.update({"value": None, "expires": 0.0})
+        return wrapped
+    return decorator
+
 
 # Stubs for each page — filled in during the page-specific iterations.
 # Keeping them here so route handlers can already import them, and the
@@ -18,6 +47,7 @@ from __future__ import annotations
 # to look for "where does this number come from".
 
 
+@_cached(ttl_seconds=60)
 def acquisition_summary() -> dict:
     """KPIs for /admin/pulse/acquisition. Returns:
       {
@@ -335,6 +365,7 @@ def acquisition_summary() -> dict:
     }
 
 
+@_cached(ttl_seconds=60)
 def conversion_summary() -> dict:
     """KPIs for /admin/pulse/conversion. Returns:
       {
@@ -531,6 +562,7 @@ def conversion_summary() -> dict:
     }
 
 
+@_cached(ttl_seconds=60)
 def revenue_summary() -> dict:
     """KPIs for /admin/pulse/revenue. Returns:
       {
@@ -703,6 +735,7 @@ def revenue_summary() -> dict:
     }
 
 
+@_cached(ttl_seconds=15)
 def activity_summary() -> dict:
     """KPIs for /admin/pulse/activity. Returns:
       {
