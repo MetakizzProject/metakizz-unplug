@@ -6,13 +6,92 @@ that coexists with the existing /admin/* surface. The legacy admin
 keeps working untouched; this is the "what an operator actually wants
 to see" view, built iteratively with self-evaluation.
 
-Boundary: this module imports helpers from existing admin/services
-code but never modifies them. If a query is missing, it gets added
-to app/services/pulse_aggregations.py, not to existing files.
+═══════════════════════════════════════════════════════════════════════
+INFORMATION ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════
 
-How to add a page: define the route here, add a template in
-app/templates/admin_pulse/, push the data via pulse_aggregations.py.
-Then add the nav link in templates/admin_pulse/_base.html.
+  /admin/pulse                  → redirects to /acquisition
+  /admin/pulse/acquisition      → Where do leads come from
+                                  (KPIs · sources · timeline · top
+                                   referrers · countries · per-source
+                                   funnel)
+  /admin/pulse/conversion       → How do leads turn into buyers
+                                  (KPIs · launch funnel · temperature
+                                   distribution · action queue ·
+                                   weekly cohorts)
+  /admin/pulse/revenue          → Cash collected & revenue mix
+                                  (NET cash · reconciliation · by
+                                   program · by payment plan · 30d
+                                   timeline)
+  /admin/pulse/activity         → Operational pulse (last 24h)
+                                  (KPI strip · live event feed with
+                                   60s polling)
+  /admin/pulse/activity.json    → Live feed JSON polled by activity
+                                  page (NOT cached — always fresh)
+
+═══════════════════════════════════════════════════════════════════════
+BOUNDARY DISCIPLINE
+═══════════════════════════════════════════════════════════════════════
+
+This module imports helpers from existing admin/services code but
+NEVER modifies them. Only two files outside the pulse module were
+touched at boot time:
+  - app/app.py        · 1 line to register admin_pulse_bp
+  - admin_base.html   · 1 link added to the sidebar
+
+If a query is missing, add it to app/services/pulse_aggregations.py,
+not to existing services. If a CSS rule is needed, put it in
+app/static/css/pulse.css scoped under .pulse-shell.
+
+═══════════════════════════════════════════════════════════════════════
+HOW TO ADD A NEW PAGE
+═══════════════════════════════════════════════════════════════════════
+
+  1. Add an entry to `_pulse_layout_context()` `pulse_pages` list:
+       ("retention", "Retention", "📊"),
+  2. Define an aggregation function in pulse_aggregations.py:
+       @_cached(ttl_seconds=60)
+       def retention_summary() -> dict: ...
+  3. Define a route here:
+       @admin_pulse_bp.route("/retention")
+       def retention():
+           from app.services.pulse_aggregations import retention_summary
+           return render_template(
+               "admin_pulse/retention.html",
+               active_section="pulse", pulse_active="retention",
+               page_title="Pulse · Retention",
+               summary=retention_summary(),
+               **_pulse_layout_context(),
+           )
+  4. Create the template `app/templates/admin_pulse/retention.html`:
+       {% extends "admin_pulse/_base.html" %}
+       {% block pulse_content %} ... {% endblock %}
+  5. Reuse existing primitives from pulse.css (.pulse-kpi, .pulse-card,
+     .pulse-mix-list, .pulse-funnel-list, etc) before adding new ones.
+
+═══════════════════════════════════════════════════════════════════════
+CACHING
+═══════════════════════════════════════════════════════════════════════
+
+Each aggregation function is wrapped in `@_cached(ttl_seconds=N)`:
+  - acquisition_summary  · 60s
+  - conversion_summary   · 60s
+  - revenue_summary      · 60s
+  - activity_summary     · 15s  (KPIs only; feed JSON stays live)
+
+Cache is per-worker in-process. Multiple Gunicorn workers warm
+independently. Call `<func>.cache_clear()` to invalidate on demand.
+
+═══════════════════════════════════════════════════════════════════════
+HOW TO ROLL THIS BACK (KILL SWITCH)
+═══════════════════════════════════════════════════════════════════════
+
+Remove ONE line in app/app.py:
+    app.register_blueprint(admin_pulse_bp)
+
+That's the kill switch. Files in app/routes/admin_pulse.py and
+app/templates/admin_pulse/ become dead code but harmless. Legacy
+admin keeps working untouched.
 """
 from flask import Blueprint, render_template, redirect, url_for, session, request, jsonify
 

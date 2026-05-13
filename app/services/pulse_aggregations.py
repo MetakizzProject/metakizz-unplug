@@ -306,14 +306,6 @@ def acquisition_summary() -> dict:
         ) if r[0]
     }
 
-    # Now per-source step counts (re-uses the bucket grouping from above).
-    funnel_by_source = []
-    for bk, bucket_data in series_buckets.items():
-        # We need the email set per bucket. Re-query: it's a single
-        # Ambassador.email pull filtered to that bucket's keys.
-        # Simpler: walk all rows once more with classify_source.
-        pass
-
     # Walk all ambassadors (not just last-30d) to compute the full-history
     # funnel by source. Use a separate query that includes email.
     funnel_rows = Ambassador.query.with_entities(
