@@ -364,7 +364,18 @@ def conversion_summary() -> dict:
     funnel_data = _compute_launch_funnel(total)
 
     # ── Temperature distribution ──
-    buckets = _build_email_buckets()
+    # _build_email_buckets relies on the `purchase_completed` LeadEvent
+    # which isn't always written when a CirclePayment row lands. Overlay
+    # CirclePayment.email → customer so the dashboard reflects reality.
+    buckets = dict(_build_email_buckets())
+    for (em,) in (
+        db.session.query(CirclePayment.email)
+        .filter(CirclePayment.email.isnot(None))
+        .distinct().all()
+    ):
+        if em:
+            buckets[em.lower()] = "customer"
+
     temp_counts = defaultdict(int)
     for em, b in buckets.items():
         temp_counts[b] += 1
@@ -442,6 +453,69 @@ def conversion_summary() -> dict:
     burning_uncontacted = _uncontacted_count(burning_emails)
     hot_uncontacted = _uncontacted_count(hot_emails)
 
+    # ── Weekly cohort retention ────────────────────────────────
+    # Per signup week (last 8 weeks), count signups + how many ever
+    # converted to deposit / full. NOT a true day-7/14/30 active model
+    # (that would need walking LeadEvents per row); this is a simpler
+    # "did this cohort eventually pay?" view which is the question
+    # Alvaro actually asks when looking at lead quality by week.
+    cutoff_8w = now - timedelta(weeks=8)
+    cohort_rows = (
+        db.session.query(Ambassador.id, Ambassador.email, Ambassador.created_at)
+        .filter(Ambassador.created_at >= cutoff_8w)
+        .all()
+    )
+    # All deposit + full email sets, lowercased
+    deposit_emails = {
+        r[0].lower() for r in (
+            db.session.query(Reservation.email)
+            .filter(Reservation.paid_at.isnot(None))
+            .filter(Reservation.email.isnot(None))
+            .distinct().all()
+        ) if r[0]
+    }
+    full_emails_cohort = {
+        r[0].lower() for r in (
+            db.session.query(CirclePayment.email)
+            .filter(CirclePayment.email.isnot(None))
+            .distinct().all()
+        ) if r[0]
+    }
+
+    def _iso_week(dt):
+        if dt is None: return None
+        if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
+        # Anchor on Monday of that week
+        d = dt.date()
+        monday = d - timedelta(days=d.weekday())
+        return monday
+
+    cohort_map = {}  # week_monday → {signups, deposit, full}
+    for amb_id, em, created in cohort_rows:
+        wk = _iso_week(created)
+        if wk is None:
+            continue
+        if wk not in cohort_map:
+            cohort_map[wk] = {"signups": 0, "deposit": 0, "full": 0}
+        cohort_map[wk]["signups"] += 1
+        em_low = (em or "").lower()
+        if em_low in deposit_emails: cohort_map[wk]["deposit"] += 1
+        if em_low in full_emails_cohort: cohort_map[wk]["full"] += 1
+
+    cohorts = []
+    for wk in sorted(cohort_map.keys(), reverse=True):
+        c = cohort_map[wk]
+        base = c["signups"] or 1
+        cohorts.append({
+            "week": wk.isoformat(),
+            "label": wk.strftime("%b %-d"),
+            "signups": c["signups"],
+            "deposit": c["deposit"],
+            "deposit_pct": round(c["deposit"] * 100 / base, 1),
+            "full": c["full"],
+            "full_pct": round(c["full"] * 100 / base, 1),
+        })
+
     return {
         "funnel": funnel_data,
         "temperature_dist": temperature_dist,
@@ -453,6 +527,7 @@ def conversion_summary() -> dict:
             "contacted_today": contacted_today,
             "in_queue_total": burning_uncontacted + hot_uncontacted,
         },
+        "cohorts": cohorts,
     }
 
 

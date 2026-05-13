@@ -139,13 +139,33 @@
     <p class="pulse-funnel-note">Click any tile to jump straight into /admin/leads with the filter pre-applied.</p>
   </div>
 
-  {# ─── Pending: cohorts (next iteration) ──────────────────── #}
+  {# ─── Cohort retention (weekly conversion) ───────────────── #}
   <div class="pulse-card" style="margin-top: 18px;">
-    <h3 class="pulse-card-title">▌ Cohort retention · do they come back? (queued)</h3>
-    <div class="pulse-empty-card">
-      <span class="pulse-empty-icon">📅</span>
-      <p>Weekly cohort retention (signups week X → still active at day 7, 14, 30) lands in iteration 6.</p>
-    </div>
+    <h3 class="pulse-card-title">▌ Weekly cohorts · which signup week paid best</h3>
+    {% if summary.cohorts %}
+      <div class="pulse-cohort-table">
+        <div class="pulse-cohort-head">
+          <span>Week starting</span>
+          <span>Signups</span>
+          <span>→ Deposit</span>
+          <span>→ Full plan</span>
+        </div>
+        {% for c in summary.cohorts %}
+          <div class="pulse-cohort-row">
+            <span class="pulse-cohort-wk">{{ c.label }}</span>
+            <span class="pulse-cohort-cell"><b>{{ c.signups }}</b></span>
+            <span class="pulse-cohort-cell"><b>{{ c.deposit }}</b><i>{{ c.deposit_pct }}%</i></span>
+            <span class="pulse-cohort-cell"><b>{{ c.full }}</b><i>{{ c.full_pct }}%</i></span>
+          </div>
+        {% endfor %}
+      </div>
+      <p class="pulse-funnel-note">
+        Conversion % is "eventually paid", not "paid within the week".
+        Compares cohort quality — which weeks brought leads that actually buy.
+      </p>
+    {% else %}
+      <p class="pulse-muted">No signups in the last 8 weeks.</p>
+    {% endif %}
   </div>
 
 </section>
