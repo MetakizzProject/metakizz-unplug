@@ -94,11 +94,13 @@ def conversion():
 @admin_pulse_bp.route("/revenue")
 def revenue():
     """Cash collected, billed, deposit→full conversion, revenue mix."""
+    from app.services.pulse_aggregations import revenue_summary
     return render_template(
         "admin_pulse/revenue.html",
         active_section="pulse",
         pulse_active="revenue",
         page_title="Pulse · Revenue",
+        summary=revenue_summary(),
         **_pulse_layout_context(),
     )
 

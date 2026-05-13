@@ -1,18 +1,185 @@
 {% extends "admin_pulse/_base.html" %}
 
+{% macro eur(cents) -%}
+  €{{ "{:,}".format(((cents or 0)/100)|round|int).replace(",", ".") }}
+{%- endmacro %}
+
 {% block pulse_content %}
-<section class="pulse-placeholder" data-pulse-section="revenue">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-    <h2 class="pulse-section-h2" style="margin:0;">Cash collected &amp; revenue mix</h2>
-    <span class="pulse-status-pill">⏳ Scaffold</span>
+<section data-pulse-section="revenue">
+
+  <div class="pulse-section-head">
+    <h2 class="pulse-section-h2">Cash collected &amp; revenue mix</h2>
+    <p class="pulse-section-lead">
+      Net cash equals deposits + full plan − refunds. Total billed is the
+      sum of issued invoices and may differ — deposits aren't invoiced,
+      refunds don't subtract from billed.
+    </p>
   </div>
-  <p class="pulse-section-lead">
-    Net cash, total billed, deposit-to-full conversion rate, and the
-    revenue split by program and payment plan.
-  </p>
-  <div class="pulse-empty-card">
-    <span class="pulse-empty-icon">💎</span>
-    <p>Revenue dashboard scaffolded · data wiring in progress.</p>
+
+  {# ─── Headline KPIs ──────────────────────────────────────── #}
+  <div class="pulse-kpi-grid" style="margin-bottom: 28px;">
+    <div class="pulse-kpi pulse-kpi--hero">
+      <span class="pulse-kpi-label">💰 Cash collected · NET</span>
+      <span class="pulse-kpi-value pulse-kpi-value--accent">{{ eur(summary.cash_collected_net_cents) }}</span>
+      <span class="pulse-kpi-delta">After refunds</span>
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">🧾 Total billed</span>
+      <span class="pulse-kpi-value">{{ eur(summary.total_billed_cents) }}</span>
+      <span class="pulse-kpi-delta">Sum of issued invoices</span>
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">🔁 Deposit → Full %</span>
+      <span class="pulse-kpi-value">{{ summary.deposit_to_full_pct }}%</span>
+      <span class="pulse-kpi-delta">Of deposit payers, who bought full</span>
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">↩ Refunds</span>
+      <span class="pulse-kpi-value pulse-kpi-value--burning">{{ eur(summary.refunds_out_cents) }}</span>
+      <span class="pulse-kpi-delta">{{ summary.refund_count }} reservations</span>
+    </div>
   </div>
+
+  {# ─── Reconciliation panel ──────────────────────────────── #}
+  <div class="pulse-card">
+    <h3 class="pulse-card-title">▌ Reconciliation · how cash net adds up</h3>
+    <div class="pulse-recon-grid">
+      <div class="pulse-recon-cell pulse-recon-add">
+        <span class="pulse-recon-op">+</span>
+        <span class="pulse-recon-label">Deposits</span>
+        <span class="pulse-recon-amount">{{ eur(summary.deposits_in_cents) }}</span>
+        <span class="pulse-recon-sub">{{ summary.deposits_paid_count }} reservations</span>
+      </div>
+      <div class="pulse-recon-cell pulse-recon-add">
+        <span class="pulse-recon-op">+</span>
+        <span class="pulse-recon-label">Full plan</span>
+        <span class="pulse-recon-amount">{{ eur(summary.full_in_cents) }}</span>
+        <span class="pulse-recon-sub">{{ summary.full_paid_count }} Circle payments</span>
+      </div>
+      <div class="pulse-recon-cell pulse-recon-sub-cell">
+        <span class="pulse-recon-op">−</span>
+        <span class="pulse-recon-label">Refunds</span>
+        <span class="pulse-recon-amount">{{ eur(summary.refunds_out_cents) }}</span>
+        <span class="pulse-recon-sub">{{ summary.refund_count }} reservations</span>
+      </div>
+      <div class="pulse-recon-cell pulse-recon-net">
+        <span class="pulse-recon-op">=</span>
+        <span class="pulse-recon-label">Net cash</span>
+        <span class="pulse-recon-amount pulse-kpi-value--accent">{{ eur(summary.cash_collected_net_cents) }}</span>
+        <span class="pulse-recon-sub">Today</span>
+      </div>
+    </div>
+  </div>
+
+  {# ─── Revenue by program ─────────────────────────────────── #}
+  <div class="pulse-card" style="margin-top: 18px;">
+    <h3 class="pulse-card-title">▌ Revenue by program · who's buying what</h3>
+    {% if summary.revenue_by_program|selectattr('cents','>',0)|list %}
+      {% set _max = summary.revenue_by_program[0].cents or 1 %}
+      <ol class="pulse-mix-list">
+        {% for p in summary.revenue_by_program %}
+          {% if p.cents > 0 %}
+            {% set width = (100.0 * p.cents / _max) %}
+            <li class="pulse-mix-row">
+              <span class="pulse-mix-swatch" style="background: {{ p.color }};" aria-hidden="true"></span>
+              <span class="pulse-mix-label">{{ p.label }}</span>
+              <div class="pulse-mix-bar-track">
+                <div class="pulse-mix-bar-fill" style="width: {{ width }}%; background: {{ p.color }};"></div>
+              </div>
+              <span class="pulse-mix-amount">{{ eur(p.cents) }}</span>
+              <span class="pulse-mix-count">{{ p.count }} dep.</span>
+            </li>
+          {% endif %}
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="pulse-muted">No program revenue yet.</p>
+    {% endif %}
+  </div>
+
+  {# ─── Revenue by payment plan ────────────────────────────── #}
+  <div class="pulse-card" style="margin-top: 18px;">
+    <h3 class="pulse-card-title">▌ Revenue by payment plan · 1× vs 6×</h3>
+    {% if summary.revenue_by_plan|selectattr('cents','>',0)|list %}
+      {% set _max_plan = summary.revenue_by_plan|selectattr('cents','>',0)|map(attribute='cents')|max or 1 %}
+      <ol class="pulse-mix-list">
+        {% for p in summary.revenue_by_plan %}
+          {% if p.cents > 0 %}
+            {% set width = (100.0 * p.cents / _max_plan) %}
+            <li class="pulse-mix-row">
+              <span class="pulse-mix-swatch" style="background: {{ p.color }};" aria-hidden="true"></span>
+              <span class="pulse-mix-label">{{ p.label }}</span>
+              <div class="pulse-mix-bar-track">
+                <div class="pulse-mix-bar-fill" style="width: {{ width }}%; background: {{ p.color }};"></div>
+              </div>
+              <span class="pulse-mix-amount">{{ eur(p.cents) }}</span>
+              <span class="pulse-mix-count">{{ p.count }} dep.</span>
+            </li>
+          {% endif %}
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="pulse-muted">No payment-plan revenue yet.</p>
+    {% endif %}
+  </div>
+
+  {# ─── Revenue timeline 30d ───────────────────────────────── #}
+  <div class="pulse-card" style="margin-top: 18px;">
+    <h3 class="pulse-card-title">▌ Daily revenue · last 30 days · deposits vs full plan</h3>
+    {% if summary.timeline_30d.labels %}
+      <div class="pulse-chart-wrap">
+        <canvas id="pulseRevenueChart"
+                data-labels='{{ summary.timeline_30d.labels|tojson }}'
+                data-deposits='{{ summary.timeline_30d.deposits|tojson }}'
+                data-full='{{ summary.timeline_30d.full|tojson }}'
+                aria-label="Daily revenue (cents) over the last 30 days, deposits and full plan"></canvas>
+      </div>
+    {% endif %}
+  </div>
+
 </section>
+
+<script>
+(function () {
+  const canvas = document.getElementById('pulseRevenueChart');
+  if (!canvas || !window.Chart) return;
+  const labels   = JSON.parse(canvas.dataset.labels   || '[]');
+  const deposits = JSON.parse(canvas.dataset.deposits || '[]').map(c => c / 100);
+  const full     = JSON.parse(canvas.dataset.full     || '[]').map(c => c / 100);
+  if (!labels.length) return;
+
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Deposits', data: deposits, backgroundColor: '#A78BFA', stack: 'rev', borderRadius: 2 },
+        { label: 'Full plan', data: full,     backgroundColor: '#2EDB99', stack: 'rev', borderRadius: 2 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', align: 'end',
+          labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 14,
+            font: { family: 'Share Tech Mono, monospace', size: 11 } } },
+        tooltip: {
+          padding: 10,
+          callbacks: {
+            label: (ctx) => ' ' + ctx.dataset.label + ': €' +
+              (ctx.parsed.y || 0).toLocaleString('es-ES', { maximumFractionDigits: 0 }),
+          },
+        },
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true,
+             ticks: { callback: (v) => '€' + v.toLocaleString('es-ES') } },
+      },
+    },
+  });
+})();
+</script>
 {% endblock %}

@@ -535,17 +535,172 @@ def revenue_summary() -> dict:
     """KPIs for /admin/pulse/revenue. Returns:
       {
         "cash_collected_net_cents": int,
+        "cash_gross_cents":         int,
         "total_billed_cents":       int,
         "deposits_in_cents":        int,
         "full_in_cents":            int,
         "refunds_out_cents":        int,
+        "deposits_paid_count":      int,
+        "full_paid_count":          int,
+        "refund_count":             int,
         "deposit_to_full_pct":      float,
-        "revenue_by_program":   [{label, cents}, ...],
-        "revenue_by_plan":      [{label, cents}, ...],
-        "timeline_30d":         {labels: [...], values: [...]},
+        "revenue_by_program":   [{label, cents, count}, ...],
+        "revenue_by_plan":      [{label, cents, count}, ...],
+        "timeline_30d":         {labels: [...], deposits: [...], full: [...]},
       }
+
+    Reuses the exact same formula as /admin/reservations (NET cash =
+    deposits + full − refunds) so numbers reconcile when comparing.
     """
-    return {}
+    from datetime import datetime, timedelta, timezone
+    from collections import defaultdict
+    from app.models import db, Reservation, CirclePayment
+
+    now = datetime.now(timezone.utc)
+
+    # ── Headline ───────────────────────────────────────────────
+    paid_res = Reservation.query.filter(Reservation.paid_at.isnot(None)).all()
+    deposits_in_cents = sum(r.amount_cents or 0 for r in paid_res)
+    deposits_count = len(paid_res)
+
+    cps = CirclePayment.query.all()
+    full_in_cents = sum(cp.amount_cents or 0 for cp in cps)
+    full_count = len(cps)
+
+    refunded = [r for r in paid_res if r.refund_status == "success"]
+    refunds_out_cents = sum(r.refund_amount_cents or 0 for r in refunded)
+    refund_count = len(refunded)
+
+    cash_gross = deposits_in_cents + full_in_cents
+    cash_net = cash_gross - refunds_out_cents
+
+    # Total billed = sum of CirclePayment amounts that have an invoice
+    # sent (matches the /admin/invoices billing card).
+    total_billed_cents = sum(
+        (cp.amount_cents or 0) for cp in cps if cp.invoice_sent_at
+    )
+
+    # Deposit-to-full conversion rate: of the unique-email deposit payers,
+    # what % also have a CirclePayment row (full plan).
+    deposit_emails = {(r.email or "").lower() for r in paid_res if r.email}
+    full_emails = {(cp.email or "").lower() for cp in cps if cp.email}
+    converted = deposit_emails & full_emails
+    base = len(deposit_emails) or 1
+    deposit_to_full_pct = round(len(converted) * 100.0 / base, 1)
+
+    # ── Revenue by program (combines program_choice + modality_choice) ──
+    program_map = {
+        ("dancers", "solo"):       ("Solo Dancer", "#2EDB99"),
+        ("dancers", "duo"):        ("Couple Dancer", "#A78BFA"),
+        ("instructors", "solo"):   ("Solo Instructor", "#F97316"),
+        ("instructors", "duo"):    ("Couple Instructor", "#DC2626"),
+    }
+    by_program = defaultdict(lambda: {"cents": 0, "count": 0})
+    for r in paid_res:
+        key = ((r.program_choice or "").lower(), (r.modality_choice or "").lower())
+        label_color = program_map.get(key)
+        if not label_color:
+            continue
+        by_program[key]["cents"] += (r.amount_cents or 0)
+        by_program[key]["count"] += 1
+        # Add the associated CirclePayment (if matched by email)
+    # Now overlay CirclePayment amounts per program: pair CP to a
+    # Reservation by email (most common case) and add to its program.
+    res_by_email = {(r.email or "").lower(): r for r in paid_res if r.email}
+    for cp in cps:
+        em = (cp.email or "").lower()
+        r = res_by_email.get(em)
+        if not r:
+            continue
+        key = ((r.program_choice or "").lower(), (r.modality_choice or "").lower())
+        if key not in program_map:
+            continue
+        by_program[key]["cents"] += (cp.amount_cents or 0)
+
+    revenue_by_program = []
+    for key, label_color in program_map.items():
+        label, color = label_color
+        d = by_program.get(key, {"cents": 0, "count": 0})
+        revenue_by_program.append({
+            "label": label,
+            "color": color,
+            "cents": d["cents"],
+            "count": d["count"],
+        })
+    revenue_by_program.sort(key=lambda x: -x["cents"])
+
+    # ── Revenue by payment plan (1× vs 6×) ──
+    plan_map = {
+        "one_payment":      ("Plan 1× · single payment", "#A78BFA"),
+        "six_installments": ("Plan 6× · installments",   "#F97316"),
+        "not_sure":         ("Undecided",                "#6B7280"),
+    }
+    by_plan = defaultdict(lambda: {"cents": 0, "count": 0})
+    for r in paid_res:
+        key = (r.payment_plan or "").lower()
+        if key not in plan_map:
+            continue
+        by_plan[key]["cents"] += (r.amount_cents or 0)
+        by_plan[key]["count"] += 1
+    for cp in cps:
+        em = (cp.email or "").lower()
+        r = res_by_email.get(em)
+        if not r:
+            continue
+        key = (r.payment_plan or "").lower()
+        if key not in plan_map:
+            continue
+        by_plan[key]["cents"] += (cp.amount_cents or 0)
+
+    revenue_by_plan = []
+    for key, label_color in plan_map.items():
+        label, color = label_color
+        d = by_plan.get(key, {"cents": 0, "count": 0})
+        revenue_by_plan.append({
+            "label": label,
+            "color": color,
+            "cents": d["cents"],
+            "count": d["count"],
+        })
+
+    # ── Timeline 30d ──
+    cutoff = (now - timedelta(days=30)).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = now.date()
+    days = [(today - timedelta(days=i)) for i in range(29, -1, -1)]
+    day_index = {d: i for i, d in enumerate(days)}
+    deposits_series = [0] * 30
+    full_series = [0] * 30
+    for r in paid_res:
+        d = r.paid_at.date() if r.paid_at else None
+        idx = day_index.get(d) if d else None
+        if idx is not None:
+            deposits_series[idx] += (r.amount_cents or 0)
+    for cp in cps:
+        d = cp.paid_at.date() if cp.paid_at else None
+        idx = day_index.get(d) if d else None
+        if idx is not None:
+            full_series[idx] += (cp.amount_cents or 0)
+    timeline = {
+        "labels": [d.strftime("%b %-d") for d in days],
+        "deposits": deposits_series,
+        "full": full_series,
+    }
+
+    return {
+        "cash_collected_net_cents": cash_net,
+        "cash_gross_cents": cash_gross,
+        "total_billed_cents": total_billed_cents,
+        "deposits_in_cents": deposits_in_cents,
+        "full_in_cents": full_in_cents,
+        "refunds_out_cents": refunds_out_cents,
+        "deposits_paid_count": deposits_count,
+        "full_paid_count": full_count,
+        "refund_count": refund_count,
+        "deposit_to_full_pct": deposit_to_full_pct,
+        "revenue_by_program": revenue_by_program,
+        "revenue_by_plan": revenue_by_plan,
+        "timeline_30d": timeline,
+    }
 
 
 def activity_summary() -> dict:
