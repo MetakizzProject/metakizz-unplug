@@ -706,19 +706,204 @@ def revenue_summary() -> dict:
 def activity_summary() -> dict:
     """KPIs for /admin/pulse/activity. Returns:
       {
-        "last_24h": {signups: int, deposits: int, full_purchases: int,
-                     emails_sent: int, opens: int, clicks: int},
-        "outreach_today": {contacted: int, in_queue: int},
-        "latest_webinar": {name: str, attendees: int, avg_duration_min: float} | None,
+        "last_24h": {signups, deposits, full_purchases, emails_sent, opens, clicks},
+        "last_24h_prev": {...same shape...},   # day-before-yesterday baseline
+        "outreach_today": {contacted, in_queue},
+        "latest_webinar": {name, attendees, avg_duration_min} | None,
       }
+
+    All counts are over rolling 24h windows, NOT midnight-aligned.
+    Comparison uses the immediately-prior 24h block as baseline.
     """
-    return {}
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import func
+    from app.models import (
+        db, Ambassador, Reservation, CirclePayment,
+        EmailEvent, LeadEvent,
+    )
+    from app.routes.admin import _build_email_buckets
+
+    now = datetime.now(timezone.utc)
+    h24 = now - timedelta(hours=24)
+    h48 = now - timedelta(hours=48)
+
+    def _count_between(query, since, until):
+        return query.filter(since).filter(until).count()
+
+    # Signups (Ambassador.created_at)
+    signups_24h = Ambassador.query.filter(Ambassador.created_at >= h24).count()
+    signups_prev = (
+        Ambassador.query
+        .filter(Ambassador.created_at >= h48)
+        .filter(Ambassador.created_at < h24)
+        .count()
+    )
+
+    # Deposit paid (Reservation.paid_at)
+    deposits_24h = Reservation.query.filter(Reservation.paid_at >= h24).count()
+    deposits_prev = (
+        Reservation.query
+        .filter(Reservation.paid_at >= h48)
+        .filter(Reservation.paid_at < h24)
+        .count()
+    )
+
+    # Full purchases (CirclePayment.paid_at OR created_at as fallback)
+    full_24h = CirclePayment.query.filter(CirclePayment.paid_at >= h24).count()
+    full_prev = (
+        CirclePayment.query
+        .filter(CirclePayment.paid_at >= h48)
+        .filter(CirclePayment.paid_at < h24)
+        .count()
+    )
+
+    # Email events
+    def _email_count(et, since, until):
+        q = EmailEvent.query.filter(EmailEvent.event_type == et).filter(EmailEvent.created_at >= since)
+        if until is not None:
+            q = q.filter(EmailEvent.created_at < until)
+        return q.count()
+
+    emails_sent_24h = _email_count("sent", h24, None)
+    emails_sent_prev = _email_count("sent", h48, h24)
+    opens_24h = _email_count("opened", h24, None)
+    opens_prev = _email_count("opened", h48, h24)
+    clicks_24h = _email_count("clicked", h24, None)
+    clicks_prev = _email_count("clicked", h48, h24)
+
+    # Outreach status (rolling 24h)
+    contacted_24h = (
+        Ambassador.query
+        .filter(Ambassador.last_outreach_at >= h24)
+        .count()
+    )
+    buckets = _build_email_buckets()
+    burning_hot = {em for em, b in buckets.items() if b in ("burning", "hot")}
+    in_queue = 0
+    if burning_hot:
+        in_queue = (
+            Ambassador.query
+            .filter(func.lower(Ambassador.email).in_(burning_hot))
+            .filter(Ambassador.last_outreach_at.is_(None))
+            .filter(Ambassador.unsubscribed_at.is_(None))
+            .count()
+        )
+
+    # Latest webinar (any webinar_joined event in last 7 days)
+    last_week = now - timedelta(days=7)
+    recent_webinar = (
+        db.session.query(
+            func.count(LeadEvent.id).label("attendees"),
+            func.avg(LeadEvent.webinar_duration_min).label("avg_dur"),
+            func.max(LeadEvent.created_at).label("when"),
+        )
+        .filter(LeadEvent.event_type == "webinar_joined")
+        .filter(LeadEvent.created_at >= last_week)
+        .first()
+    )
+    latest_webinar = None
+    if recent_webinar and recent_webinar.attendees and recent_webinar.attendees > 0:
+        latest_webinar = {
+            "attendees": int(recent_webinar.attendees),
+            "avg_duration_min": round(float(recent_webinar.avg_dur or 0), 1),
+            "when": recent_webinar.when.isoformat() if recent_webinar.when else None,
+        }
+
+    return {
+        "last_24h": {
+            "signups": signups_24h,
+            "deposits": deposits_24h,
+            "full_purchases": full_24h,
+            "emails_sent": emails_sent_24h,
+            "opens": opens_24h,
+            "clicks": clicks_24h,
+        },
+        "last_24h_prev": {
+            "signups": signups_prev,
+            "deposits": deposits_prev,
+            "full_purchases": full_prev,
+            "emails_sent": emails_sent_prev,
+            "opens": opens_prev,
+            "clicks": clicks_prev,
+        },
+        "outreach_today": {
+            "contacted": contacted_24h,
+            "in_queue": in_queue,
+        },
+        "latest_webinar": latest_webinar,
+    }
 
 
 def activity_feed(limit: int = 30) -> list:
-    """Returns a chronologically-ordered list of recent events for the
-    real-time feed on /admin/pulse/activity. Each event:
-      {"ts": iso, "type": "signup|deposit|full_purchase|email_open|email_click",
-       "actor": "name", "detail": "human-readable"}
+    """Recent activity events for the live feed on /admin/pulse/activity.
+    Each event: {"ts": iso, "type": "signup|deposit|full|email", "actor", "detail"}
+    Pulled from 4 sources (Ambassador.created_at, Reservation.paid_at,
+    CirclePayment.paid_at, EmailEvent of type opened|clicked|sent) and
+    merged + sorted desc.
     """
-    return []
+    from datetime import datetime, timedelta, timezone
+    from app.models import Ambassador, Reservation, CirclePayment, EmailEvent
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=24)
+    events = []
+
+    for a in (
+        Ambassador.query
+        .filter(Ambassador.created_at >= cutoff)
+        .order_by(Ambassador.created_at.desc())
+        .limit(limit).all()
+    ):
+        if not a.created_at: continue
+        events.append({
+            "ts": a.created_at.isoformat(),
+            "type": "signup",
+            "actor": a.name or a.email or "(unknown)",
+            "detail": f"signed up · {a.email or ''}",
+        })
+
+    for r in (
+        Reservation.query
+        .filter(Reservation.paid_at >= cutoff)
+        .order_by(Reservation.paid_at.desc())
+        .limit(limit).all()
+    ):
+        if not r.paid_at: continue
+        events.append({
+            "ts": r.paid_at.isoformat(),
+            "type": "deposit",
+            "actor": r.name or r.email or "(unknown)",
+            "detail": f"paid €100 deposit · {r.program_choice or '?'} / {r.modality_choice or '?'}",
+        })
+
+    for cp in (
+        CirclePayment.query
+        .filter(CirclePayment.paid_at >= cutoff)
+        .order_by(CirclePayment.paid_at.desc())
+        .limit(limit).all()
+    ):
+        if not cp.paid_at: continue
+        events.append({
+            "ts": cp.paid_at.isoformat(),
+            "type": "full",
+            "actor": cp.customer_name or cp.email or "(unknown)",
+            "detail": f"full plan · €{(cp.amount_cents or 0)/100:,.0f}",
+        })
+
+    for ev in (
+        EmailEvent.query
+        .filter(EmailEvent.created_at >= cutoff)
+        .filter(EmailEvent.event_type.in_(("opened", "clicked")))
+        .order_by(EmailEvent.created_at.desc())
+        .limit(limit * 2).all()
+    ):
+        if not ev.created_at: continue
+        events.append({
+            "ts": ev.created_at.isoformat(),
+            "type": f"email_{ev.event_type}",
+            "actor": ev.to_email or "(unknown)",
+            "detail": f"{ev.template_key or 'email'} · {ev.event_type}",
+        })
+
+    events.sort(key=lambda e: e["ts"], reverse=True)
+    return events[:limit]

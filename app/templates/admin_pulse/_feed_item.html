@@ -1,0 +1,9 @@
+{# Single event row in the Pulse activity feed. Shared between the
+   server-rendered initial paint and (loosely) the JS-built rows so
+   styling stays one place. The JS path uses the same class names. #}
+<li class="pulse-feed-item pulse-feed--{{ (e.type or 'other')|replace('_', '-') }}">
+  <span class="pulse-feed-ts">{{ e.ts.split('T')[1][:5] if 'T' in e.ts else e.ts }}</span>
+  <span class="pulse-feed-type">{{ e.type }}</span>
+  <span class="pulse-feed-actor">{{ e.actor }}</span>
+  <span class="pulse-feed-detail">{{ e.detail }}</span>
+</li>

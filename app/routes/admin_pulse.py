@@ -108,18 +108,26 @@ def revenue():
 @admin_pulse_bp.route("/activity")
 def activity():
     """Operational pulse — last 24h events, outreach status, live feed."""
+    from app.services.pulse_aggregations import activity_summary, activity_feed
     return render_template(
         "admin_pulse/activity.html",
         active_section="pulse",
         pulse_active="activity",
         page_title="Pulse · Activity",
+        summary=activity_summary(),
+        feed=activity_feed(limit=30),
         **_pulse_layout_context(),
     )
 
 
-# ─── JSON polling endpoints (filled in per-page iterations) ──────────
+# ─── JSON polling endpoints ──────────────────────────────────────────
 
 @admin_pulse_bp.route("/activity.json")
 def activity_json():
     """Recent activity feed — refreshed every ~60s by the page."""
-    return jsonify({"events": [], "ts": None})
+    from datetime import datetime, timezone
+    from app.services.pulse_aggregations import activity_feed
+    return jsonify({
+        "events": activity_feed(limit=30),
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })

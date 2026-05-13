@@ -1,18 +1,135 @@
 {% extends "admin_pulse/_base.html" %}
 
+{% macro delta_chip(curr, prev) -%}
+  {% set diff = curr - prev %}
+  {% if diff > 0 %}<span class="pulse-kpi-delta up">▲ +{{ diff }} vs prior 24h</span>
+  {% elif diff < 0 %}<span class="pulse-kpi-delta down">▼ {{ diff }} vs prior 24h</span>
+  {% else %}<span class="pulse-kpi-delta">― flat vs prior 24h</span>{% endif %}
+{%- endmacro %}
+
 {% block pulse_content %}
-<section class="pulse-placeholder" data-pulse-section="activity">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-    <h2 class="pulse-section-h2" style="margin:0;">Operational pulse</h2>
-    <span class="pulse-status-pill">⏳ Scaffold</span>
+<section data-pulse-section="activity">
+
+  <div class="pulse-section-head">
+    <h2 class="pulse-section-h2">Operational pulse · last 24h</h2>
+    <p class="pulse-section-lead">
+      Rolling 24-hour window (not midnight-aligned). Compares against the
+      immediately-prior 24-hour block. Feed auto-refreshes every 60s.
+    </p>
   </div>
-  <p class="pulse-section-lead">
-    Last-24h activity, outreach status, and a live event feed for the
-    current business operations.
-  </p>
-  <div class="pulse-empty-card">
-    <span class="pulse-empty-icon">⚡</span>
-    <p>Activity dashboard scaffolded · data wiring in progress.</p>
+
+  {# ─── KPI strip — last 24h ───────────────────────────────── #}
+  <div class="pulse-kpi-grid" style="margin-bottom: 18px;">
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">📝 New signups</span>
+      <span class="pulse-kpi-value">{{ summary.last_24h.signups }}</span>
+      {{ delta_chip(summary.last_24h.signups, summary.last_24h_prev.signups) }}
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">💰 Deposits paid</span>
+      <span class="pulse-kpi-value">{{ summary.last_24h.deposits }}</span>
+      {{ delta_chip(summary.last_24h.deposits, summary.last_24h_prev.deposits) }}
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">💎 Full purchases</span>
+      <span class="pulse-kpi-value">{{ summary.last_24h.full_purchases }}</span>
+      {{ delta_chip(summary.last_24h.full_purchases, summary.last_24h_prev.full_purchases) }}
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">📲 1:1 contacted</span>
+      <span class="pulse-kpi-value">{{ summary.outreach_today.contacted }}</span>
+      <span class="pulse-kpi-delta">In queue: {{ summary.outreach_today.in_queue }}</span>
+    </div>
   </div>
+
+  <div class="pulse-kpi-grid" style="margin-bottom: 28px;">
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">✉ Emails sent</span>
+      <span class="pulse-kpi-value">{{ summary.last_24h.emails_sent }}</span>
+      {{ delta_chip(summary.last_24h.emails_sent, summary.last_24h_prev.emails_sent) }}
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">👀 Email opens</span>
+      <span class="pulse-kpi-value">{{ summary.last_24h.opens }}</span>
+      {{ delta_chip(summary.last_24h.opens, summary.last_24h_prev.opens) }}
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">🖱 Email clicks</span>
+      <span class="pulse-kpi-value">{{ summary.last_24h.clicks }}</span>
+      {{ delta_chip(summary.last_24h.clicks, summary.last_24h_prev.clicks) }}
+    </div>
+    {% if summary.latest_webinar %}
+      <div class="pulse-kpi">
+        <span class="pulse-kpi-label">🎤 Last webinar · 7d</span>
+        <span class="pulse-kpi-value">{{ summary.latest_webinar.attendees }}</span>
+        <span class="pulse-kpi-delta">Avg {{ summary.latest_webinar.avg_duration_min }} min</span>
+      </div>
+    {% else %}
+      <div class="pulse-kpi">
+        <span class="pulse-kpi-label">🎤 Last webinar · 7d</span>
+        <span class="pulse-kpi-value">—</span>
+        <span class="pulse-kpi-delta">No recent webinars</span>
+      </div>
+    {% endif %}
+  </div>
+
+  {# ─── Live feed (server-rendered initially, JS polling refresh) ── #}
+  <div class="pulse-card">
+    <h3 class="pulse-card-title">
+      ▌ Live feed · last 24h
+      <span class="pulse-feed-live" id="pulseFeedLive">● live</span>
+    </h3>
+    <ul class="pulse-feed-list" id="pulseFeedList" data-feed-url="{{ url_for('admin_pulse.activity_json') }}">
+      {% for e in feed %}
+        {% include "admin_pulse/_feed_item.html" %}
+      {% endfor %}
+    </ul>
+    {% if not feed %}
+      <p class="pulse-muted">No events in the last 24h yet.</p>
+    {% endif %}
+  </div>
+
 </section>
+
+<script>
+(function () {
+  const list = document.getElementById('pulseFeedList');
+  if (!list) return;
+  const url = list.dataset.feedUrl;
+  const live = document.getElementById('pulseFeedLive');
+
+  function fmtTs(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function rowFor(e) {
+    const li = document.createElement('li');
+    li.className = 'pulse-feed-item pulse-feed--' + (e.type || 'other').replace('_', '-');
+    li.innerHTML =
+      '<span class="pulse-feed-ts">' + fmtTs(e.ts) + '</span>' +
+      '<span class="pulse-feed-type">' + (e.type || '') + '</span>' +
+      '<span class="pulse-feed-actor">' + (e.actor || '') + '</span>' +
+      '<span class="pulse-feed-detail">' + (e.detail || '') + '</span>';
+    return li;
+  }
+
+  async function tick() {
+    try {
+      const r = await fetch(url, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('http ' + r.status);
+      const data = await r.json();
+      const events = data.events || [];
+      list.innerHTML = '';
+      events.forEach(e => list.appendChild(rowFor(e)));
+      if (live) live.classList.remove('stale');
+    } catch (err) {
+      if (live) live.classList.add('stale');
+    }
+  }
+
+  setInterval(tick, 60_000);
+})();
+</script>
 {% endblock %}
