@@ -197,6 +197,130 @@ def acquisition_summary() -> dict:
             "count": cnt,
         })
 
+    # ─── Country distribution ──────────────────────────────────
+    # Group by Ambassador.country_code (ISO 3166-1 alpha-2). Top 15 +
+    # bucket the rest into "other".
+    from app.services.phone import lookup_country
+    country_rows = (
+        db.session.query(
+            Ambassador.country_code, func.count(Ambassador.id).label("cnt"),
+        )
+        .filter(Ambassador.country_code.isnot(None))
+        .filter(Ambassador.country_code != "")
+        .group_by(Ambassador.country_code)
+        .order_by(func.count(Ambassador.id).desc())
+        .all()
+    )
+    country_dist = []
+    total_with_country = sum(c[1] for c in country_rows)
+    for iso, cnt in country_rows[:15]:
+        name, flag = lookup_country(iso)
+        country_dist.append({
+            "iso": iso,
+            "name": name,
+            "flag": flag,
+            "count": cnt,
+            "share_pct": round(cnt * 100.0 / total_with_country, 1) if total_with_country else 0.0,
+        })
+    if len(country_rows) > 15:
+        other_cnt = sum(c[1] for c in country_rows[15:])
+        country_dist.append({
+            "iso": "—",
+            "name": f"Other ({len(country_rows) - 15} countries)",
+            "flag": "🌐",
+            "count": other_cnt,
+            "share_pct": round(other_cnt * 100.0 / total_with_country, 1) if total_with_country else 0.0,
+        })
+
+    # ─── Per-source funnel ─────────────────────────────────────
+    # For each top-5 source bucket, compute step counts:
+    #   signups  → watched ≥1 class → attended live → paid €100 → paid full
+    #
+    # We re-walk ambassadors in Python because the source bucket key is
+    # derived (classify_source). For ~2.9k rows this is sub-second.
+    # Watched-class and live-attended come from LeadEvents; paid-deposit
+    # from Reservation; paid-full from CirclePayment.
+    from app.models import LeadEvent, Reservation, CirclePayment
+
+    # Bulk fetch the signal sets (one query each, indexed by lowercased
+    # email so we never iterate inside the per-ambassador loop).
+    watched_emails = {
+        r[0].lower() for r in (
+            db.session.query(LeadEvent.email)
+            .filter(LeadEvent.email.isnot(None))
+            .filter(LeadEvent.event_type.like("class%_progress_%"))
+            .distinct().all()
+        ) if r[0]
+    }
+    live_emails = {
+        r[0].lower() for r in (
+            db.session.query(LeadEvent.email)
+            .filter(LeadEvent.email.isnot(None))
+            .filter(LeadEvent.event_type == "webinar_joined")
+            .distinct().all()
+        ) if r[0]
+    }
+    paid_emails = {
+        r[0].lower() for r in (
+            db.session.query(Reservation.email)
+            .filter(Reservation.paid_at.isnot(None))
+            .filter(Reservation.email.isnot(None))
+            .distinct().all()
+        ) if r[0]
+    }
+    full_emails = {
+        r[0].lower() for r in (
+            db.session.query(CirclePayment.email)
+            .filter(CirclePayment.email.isnot(None))
+            .distinct().all()
+        ) if r[0]
+    }
+
+    # Now per-source step counts (re-uses the bucket grouping from above).
+    funnel_by_source = []
+    for bk, bucket_data in series_buckets.items():
+        # We need the email set per bucket. Re-query: it's a single
+        # Ambassador.email pull filtered to that bucket's keys.
+        # Simpler: walk all rows once more with classify_source.
+        pass
+
+    # Walk all ambassadors (not just last-30d) to compute the full-history
+    # funnel by source. Use a separate query that includes email.
+    funnel_rows = Ambassador.query.with_entities(
+        Ambassador.email,
+        Ambassador.utm_source, Ambassador.utm_medium, Ambassador.utm_campaign,
+        Ambassador.fbclid, Ambassador.gclid, Ambassador.ttclid,
+    ).all()
+
+    bucket_stats = {}  # bk → {signups, watched, live, paid, full}
+    for r in funnel_rows:
+        email = (r[0] or "").lower()
+        info = classify_source(_Shim(r[1:]))
+        bk, blabel, bcolor = _bucket_for_chart(info["key"])
+        if bk not in bucket_stats:
+            bucket_stats[bk] = {
+                "label": blabel, "color": bcolor,
+                "signups": 0, "watched": 0, "live": 0, "paid": 0, "full": 0,
+            }
+        s = bucket_stats[bk]
+        s["signups"] += 1
+        if email and email in watched_emails: s["watched"] += 1
+        if email and email in live_emails:    s["live"] += 1
+        if email and email in paid_emails:    s["paid"] += 1
+        if email and email in full_emails:    s["full"] += 1
+
+    funnel_by_source = sorted(
+        bucket_stats.values(),
+        key=lambda b: -b["signups"],
+    )[:5]
+    # Add conversion % per step (relative to signups so all bars share a base).
+    for b in funnel_by_source:
+        base = b["signups"] or 1
+        b["watched_pct"] = round(b["watched"] * 100 / base, 1)
+        b["live_pct"]    = round(b["live"]    * 100 / base, 1)
+        b["paid_pct"]    = round(b["paid"]    * 100 / base, 1)
+        b["full_pct"]    = round(b["full"]    * 100 / base, 1)
+
     return {
         "total_leads": total,
         "new_7d": new_7d,
@@ -206,6 +330,8 @@ def acquisition_summary() -> dict:
         "source_breakdown": source_breakdown,
         "timeline_30d_by_source": timeline_30d,
         "top_referrers": top_referrers,
+        "country_distribution": country_dist,
+        "funnel_by_source": funnel_by_source,
     }
 
 

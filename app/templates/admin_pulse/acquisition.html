@@ -105,22 +105,59 @@
     {% endif %}
   </div>
 
-  {# ─── Geographic placeholder (next iter) ─────────────────── #}
+  {# ─── Geographic distribution ────────────────────────────── #}
   <div class="pulse-card" style="margin-top: 18px;">
-    <h3 class="pulse-card-title">▌ Geographic spread · where in the world they are</h3>
-    <div class="pulse-empty-card">
-      <span class="pulse-empty-icon">🌍</span>
-      <p>Country breakdown lands next iteration (uses the existing <code>lookup_country</code> helper).</p>
-    </div>
+    <h3 class="pulse-card-title">▌ Geographic spread · top countries</h3>
+    {% if summary.country_distribution %}
+      <div class="pulse-country-grid">
+        {% for c in summary.country_distribution %}
+          <div class="pulse-country-row" data-iso="{{ c.iso }}">
+            <span class="pulse-country-flag" aria-hidden="true">{{ c.flag }}</span>
+            <span class="pulse-country-name">{{ c.name }}</span>
+            <span class="pulse-country-count">{{ "{:,}".format(c.count).replace(",", ".") }}</span>
+            <span class="pulse-country-pct">{{ c.share_pct }}%</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="pulse-muted">No country data captured yet.</p>
+    {% endif %}
   </div>
 
-  {# ─── Per-source funnel placeholder ──────────────────────── #}
+  {# ─── Per-source funnel ──────────────────────────────────── #}
   <div class="pulse-card" style="margin-top: 18px;">
-    <h3 class="pulse-card-title">▌ Per-source funnel · signup → masterclass → deposit → full</h3>
-    <div class="pulse-empty-card">
-      <span class="pulse-empty-icon">🚧</span>
-      <p>Per-source conversion funnel queued for iteration 4. The pieces are in place: <code>SOURCE_BUCKETS</code> + <code>_build_email_buckets()</code> already wired.</p>
-    </div>
+    <h3 class="pulse-card-title">▌ Per-source funnel · signup → watched class → live → deposit → full</h3>
+    {% if summary.funnel_by_source %}
+      <div class="pulse-funnel-table">
+        <div class="pulse-funnel-head">
+          <span class="pulse-funnel-h-source">Source</span>
+          <span class="pulse-funnel-h-step">Signups</span>
+          <span class="pulse-funnel-h-step">Watched ≥1</span>
+          <span class="pulse-funnel-h-step">Joined live</span>
+          <span class="pulse-funnel-h-step">Paid €100</span>
+          <span class="pulse-funnel-h-step">Full plan</span>
+        </div>
+        {% for b in summary.funnel_by_source %}
+          <div class="pulse-funnel-row">
+            <div class="pulse-funnel-source">
+              <span class="pulse-funnel-swatch" style="background: {{ b.color }};" aria-hidden="true"></span>
+              <span class="pulse-funnel-label">{{ b.label }}</span>
+            </div>
+            <span class="pulse-funnel-cell"><b>{{ b.signups }}</b><i>100%</i></span>
+            <span class="pulse-funnel-cell"><b>{{ b.watched }}</b><i>{{ b.watched_pct }}%</i></span>
+            <span class="pulse-funnel-cell"><b>{{ b.live }}</b><i>{{ b.live_pct }}%</i></span>
+            <span class="pulse-funnel-cell"><b>{{ b.paid }}</b><i>{{ b.paid_pct }}%</i></span>
+            <span class="pulse-funnel-cell"><b>{{ b.full }}</b><i>{{ b.full_pct }}%</i></span>
+          </div>
+        {% endfor %}
+      </div>
+      <p class="pulse-funnel-note">
+        % values relative to that source's signup count, so different sources are
+        comparable at a glance. Top 5 sources by volume.
+      </p>
+    {% else %}
+      <p class="pulse-muted">Not enough data yet to compute per-source funnels.</p>
+    {% endif %}
   </div>
 
 </section>

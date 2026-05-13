@@ -439,6 +439,158 @@
   .pulse-rank-unit { display: none; }
 }
 
+/* ── Country grid (geographic spread) ───────────────────────── */
+.pulse-country-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 6px;
+}
+
+.pulse-country-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  transition: border-color 120ms ease;
+}
+
+.pulse-country-row:hover {
+  border-color: var(--pulse-border-strong);
+}
+
+.pulse-country-flag {
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+}
+
+.pulse-country-name {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: var(--pulse-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pulse-country-count {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+}
+
+.pulse-country-pct {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  color: var(--pulse-muted);
+  min-width: 38px;
+  text-align: right;
+}
+
+/* ── Funnel table (per-source) ──────────────────────────────── */
+.pulse-funnel-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pulse-funnel-head {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.4fr) repeat(5, 1fr);
+  gap: 10px;
+  padding: 6px 14px 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--pulse-muted);
+  border-bottom: 1px solid var(--pulse-border);
+}
+
+.pulse-funnel-head > span { text-align: right; }
+.pulse-funnel-h-source { text-align: left !important; }
+
+.pulse-funnel-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.4fr) repeat(5, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+}
+
+.pulse-funnel-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pulse-funnel-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.pulse-funnel-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: var(--pulse-fg);
+}
+
+.pulse-funnel-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  font-family: 'Share Tech Mono', monospace;
+  text-align: right;
+}
+
+.pulse-funnel-cell b {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+  font-style: normal;
+}
+
+.pulse-funnel-cell i {
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--pulse-muted);
+}
+
+.pulse-funnel-note {
+  margin: 12px 0 0;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--pulse-muted);
+}
+
+@media (max-width: 760px) {
+  .pulse-funnel-head,
+  .pulse-funnel-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .pulse-funnel-head > span,
+  .pulse-funnel-cell {
+    text-align: left;
+    align-items: flex-start;
+  }
+}
+
 /* ── Status pill (used for "scaffold" / "draft" / "live" states) ─ */
 .pulse-status-pill {
   display: inline-flex;
