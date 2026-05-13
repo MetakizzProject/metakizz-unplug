@@ -591,6 +591,229 @@
   }
 }
 
+/* ── Funnel list (Conversion page) ─────────────────────────── */
+.pulse-funnel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pulse-funnel-step {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.4fr) minmax(220px, 2fr) 84px;
+  align-items: center;
+  gap: 14px;
+}
+
+.pulse-funnel-step-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pulse-funnel-step-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: var(--pulse-fg);
+}
+
+.pulse-funnel-step-count {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+  color: #fff;
+}
+
+.pulse-funnel-step-pct {
+  font-family: 'Share Tech Mono', monospace;
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--pulse-muted);
+  margin-left: 6px;
+  letter-spacing: 0.05em;
+}
+
+.pulse-funnel-step-track {
+  position: relative;
+  height: 14px;
+  background: rgba(46, 219, 153, 0.05);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pulse-funnel-step-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 6px;
+  opacity: 0.85;
+  transition: width 240ms ease;
+}
+
+.pulse-funnel-step-drop {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-align: right;
+}
+
+.pulse-funnel-step-drop.drop-low  { color: var(--pulse-accent); }
+.pulse-funnel-step-drop.drop-mid  { color: var(--pulse-warm); }
+.pulse-funnel-step-drop.drop-high { color: var(--pulse-burning); }
+
+.pulse-muted-inline {
+  color: var(--pulse-muted);
+  font-size: 10px;
+  margin-left: 6px;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 760px) {
+  .pulse-funnel-step {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .pulse-funnel-step-drop { text-align: left; }
+}
+
+/* ── Temperature bar (segmented horizontal stack) ─────────── */
+.pulse-temp-bar {
+  display: flex;
+  width: 100%;
+  height: 36px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.40);
+  border: 1px solid var(--pulse-border);
+}
+
+.pulse-temp-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 8px;
+  color: rgba(0, 0, 0, 0.85);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.pulse-temp-seg-label { font-weight: 600; }
+.pulse-temp-seg-pct { font-size: 8px; opacity: 0.85; }
+
+.pulse-temp-legend {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px 18px;
+}
+
+.pulse-temp-legend-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.pulse-temp-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.pulse-temp-legend-label { color: var(--pulse-fg); }
+
+.pulse-temp-legend-count {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  color: #fff;
+}
+
+.pulse-temp-legend-pct {
+  color: var(--pulse-muted);
+  font-size: 10px;
+  min-width: 44px;
+  text-align: right;
+}
+
+/* ── Queue grid (action queue tiles) ──────────────────────── */
+.pulse-queue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.pulse-queue-cell {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 22px;
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid var(--pulse-border);
+  border-radius: 10px;
+  text-decoration: none;
+  transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+.pulse-queue-cell:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.40);
+}
+
+.pulse-queue-cell--burning {
+  border-color: rgba(220, 38, 38, 0.50);
+}
+.pulse-queue-cell--burning:hover { border-color: var(--pulse-burning); }
+
+.pulse-queue-cell--hot {
+  border-color: rgba(249, 115, 22, 0.50);
+}
+.pulse-queue-cell--hot:hover { border-color: var(--pulse-hot); }
+
+.pulse-queue-cell--contacted {
+  border-color: var(--pulse-border-strong);
+}
+.pulse-queue-cell--contacted:hover { border-color: var(--pulse-accent); }
+
+.pulse-queue-emoji {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.pulse-queue-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pulse-queue-num {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+  font-size: 26px;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.pulse-queue-lbl {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--pulse-muted);
+}
+
 /* ── Status pill (used for "scaffold" / "draft" / "live" states) ─ */
 .pulse-status-pill {
   display: inline-flex;

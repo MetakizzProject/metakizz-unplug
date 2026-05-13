@@ -338,15 +338,122 @@ def acquisition_summary() -> dict:
 def conversion_summary() -> dict:
     """KPIs for /admin/pulse/conversion. Returns:
       {
-        "funnel": [{label, count, drop_pct}, ...],
-        "temperature_dist": [{bucket, count, pct, color}, ...],
+        "funnel": {steps: [{label, count, pct_of_total, dropoff_pct, color, key}], visited: {1,2,3}},
+        "temperature_dist": [{key, label, color, count, pct}, ...],
         "avg_time_to_deposit_days": float | None,
         "avg_time_to_full_days":    float | None,
-        "queue": {burning_uncontacted: int, hot_uncontacted: int, contacted_today: int},
-        "cohorts": {weeks: [...], rows: [{week, signups, day7, day14, day30}]},
+        "queue": {burning_uncontacted, hot_uncontacted, contacted_today, in_queue_total},
       }
+
+    Funnel reuses `_compute_launch_funnel()` from admin.py so the
+    counts match /admin/leads_insights exactly. Temperature distribution
+    uses `_build_email_buckets()` (same classifier as the temp filter
+    on /admin/leads).
     """
-    return {}
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import func
+    from collections import defaultdict
+    from app.models import db, Ambassador, Reservation, CirclePayment
+    from app.services.temperature import BUCKET_LABELS
+    from app.routes.admin import _compute_launch_funnel, _build_email_buckets
+
+    now = datetime.now(timezone.utc)
+    total = Ambassador.query.count()
+
+    # ── Funnel ──
+    funnel_data = _compute_launch_funnel(total)
+
+    # ── Temperature distribution ──
+    buckets = _build_email_buckets()
+    temp_counts = defaultdict(int)
+    for em, b in buckets.items():
+        temp_counts[b] += 1
+    # cold = total - everyone-with-any-event (since cold ambassadors have
+    # no events and aren't in the bucket dict). We surface cold separately
+    # so the distribution adds up to total leads.
+    untracked = total - len(buckets)
+    if untracked > 0:
+        temp_counts["cold"] = temp_counts.get("cold", 0) + untracked
+
+    temp_total = sum(temp_counts.values()) or 1
+    bucket_order = ["customer", "burning", "hot", "warm", "cool", "cold"]
+    temperature_dist = []
+    for key in bucket_order:
+        cnt = temp_counts.get(key, 0)
+        label, color = BUCKET_LABELS.get(key, (key, "#9CA3AF"))
+        temperature_dist.append({
+            "key": key,
+            "label": label,
+            "color": color,
+            "count": cnt,
+            "pct": round(cnt * 100.0 / temp_total, 1),
+        })
+
+    # ── Avg time-to-deposit (days from Ambassador.created_at → Reservation.paid_at) ──
+    paid_rows = (
+        db.session.query(Ambassador.created_at, Reservation.paid_at)
+        .join(Reservation, func.lower(Reservation.email) == func.lower(Ambassador.email))
+        .filter(Reservation.paid_at.isnot(None))
+        .filter(Ambassador.created_at.isnot(None))
+        .all()
+    )
+    def _aware(dt):
+        return dt if (dt and dt.tzinfo) else (dt.replace(tzinfo=timezone.utc) if dt else None)
+    deltas_deposit = []
+    for created, paid in paid_rows:
+        c = _aware(created); p = _aware(paid)
+        if c and p and p >= c:
+            deltas_deposit.append((p - c).total_seconds() / 86400.0)
+    avg_to_deposit = round(sum(deltas_deposit) / len(deltas_deposit), 1) if deltas_deposit else None
+
+    # ── Avg time-to-full-plan (created_at → CirclePayment.paid_at) ──
+    full_rows = (
+        db.session.query(Ambassador.created_at, CirclePayment.paid_at)
+        .join(CirclePayment, func.lower(CirclePayment.email) == func.lower(Ambassador.email))
+        .filter(CirclePayment.paid_at.isnot(None))
+        .filter(Ambassador.created_at.isnot(None))
+        .all()
+    )
+    deltas_full = []
+    for created, paid in full_rows:
+        c = _aware(created); p = _aware(paid)
+        if c and p and p >= c:
+            deltas_full.append((p - c).total_seconds() / 86400.0)
+    avg_to_full = round(sum(deltas_full) / len(deltas_full), 1) if deltas_full else None
+
+    # ── Outreach action queue ──
+    one_day_ago = now - timedelta(hours=24)
+    contacted_today = Ambassador.query.filter(
+        Ambassador.last_outreach_at >= one_day_ago,
+    ).count()
+
+    burning_emails = {em for em, b in buckets.items() if b == "burning"}
+    hot_emails = {em for em, b in buckets.items() if b == "hot"}
+    def _uncontacted_count(email_set):
+        if not email_set:
+            return 0
+        return (
+            Ambassador.query
+            .filter(func.lower(Ambassador.email).in_(email_set))
+            .filter(Ambassador.last_outreach_at.is_(None))
+            .filter(Ambassador.unsubscribed_at.is_(None))
+            .count()
+        )
+    burning_uncontacted = _uncontacted_count(burning_emails)
+    hot_uncontacted = _uncontacted_count(hot_emails)
+
+    return {
+        "funnel": funnel_data,
+        "temperature_dist": temperature_dist,
+        "avg_time_to_deposit_days": avg_to_deposit,
+        "avg_time_to_full_days": avg_to_full,
+        "queue": {
+            "burning_uncontacted": burning_uncontacted,
+            "hot_uncontacted": hot_uncontacted,
+            "contacted_today": contacted_today,
+            "in_queue_total": burning_uncontacted + hot_uncontacted,
+        },
+    }
 
 
 def revenue_summary() -> dict:

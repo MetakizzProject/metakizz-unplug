@@ -80,11 +80,13 @@ def acquisition():
 @admin_pulse_bp.route("/conversion")
 def conversion():
     """Funnel + temperature distribution — how leads turn into buyers."""
+    from app.services.pulse_aggregations import conversion_summary
     return render_template(
         "admin_pulse/conversion.html",
         active_section="pulse",
         pulse_active="conversion",
         page_title="Pulse · Conversion",
+        summary=conversion_summary(),
         **_pulse_layout_context(),
     )
 

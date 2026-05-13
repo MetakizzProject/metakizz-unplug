@@ -1,18 +1,152 @@
 {% extends "admin_pulse/_base.html" %}
 
 {% block pulse_content %}
-<section class="pulse-placeholder" data-pulse-section="conversion">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-    <h2 class="pulse-section-h2" style="margin:0;">Funnel &amp; temperature</h2>
-    <span class="pulse-status-pill">⏳ Scaffold</span>
+<section data-pulse-section="conversion">
+
+  <div class="pulse-section-head">
+    <h2 class="pulse-section-h2">Funnel &amp; temperature</h2>
+    <p class="pulse-section-lead">
+      Where leads drop off, how they're distributed by intent, and who
+      needs contacting right now. Drop-off % is computed at each step
+      relative to the previous step.
+    </p>
   </div>
-  <p class="pulse-section-lead">
-    Drop-off at every funnel step, lead temperature distribution, and
-    the action queue for who needs contacting next.
-  </p>
-  <div class="pulse-empty-card">
-    <span class="pulse-empty-icon">🎯</span>
-    <p>Conversion dashboard scaffolded · data wiring in progress.</p>
+
+  {# ─── KPI strip ─────────────────────────────────────────── #}
+  <div class="pulse-kpi-grid" style="margin-bottom: 28px;">
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">🔥 Priority queue</span>
+      <span class="pulse-kpi-value">{{ summary.queue.in_queue_total }}</span>
+      <span class="pulse-kpi-delta">Burning + Hot, no outreach yet</span>
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">📲 Contacted last 24h</span>
+      <span class="pulse-kpi-value">{{ summary.queue.contacted_today }}</span>
+      <span class="pulse-kpi-delta">Rolling, not midnight-aligned</span>
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">⏱ Avg · signup → €100</span>
+      <span class="pulse-kpi-value">
+        {% if summary.avg_time_to_deposit_days is not none %}{{ summary.avg_time_to_deposit_days }}d{% else %}—{% endif %}
+      </span>
+      <span class="pulse-kpi-delta">Days median to deposit</span>
+    </div>
+    <div class="pulse-kpi">
+      <span class="pulse-kpi-label">⏱ Avg · signup → full plan</span>
+      <span class="pulse-kpi-value">
+        {% if summary.avg_time_to_full_days is not none %}{{ summary.avg_time_to_full_days }}d{% else %}—{% endif %}
+      </span>
+      <span class="pulse-kpi-delta">Days median to full purchase</span>
+    </div>
   </div>
+
+  {# ─── Funnel ────────────────────────────────────────────── #}
+  <div class="pulse-card">
+    <h3 class="pulse-card-title">▌ Launch funnel · drop-off at each step</h3>
+    {% if summary.funnel.steps %}
+      {% set _max = summary.funnel.steps[0].count if summary.funnel.steps[0].count else 1 %}
+      <ol class="pulse-funnel-list">
+        {% for s in summary.funnel.steps %}
+          {% set width_pct = (100.0 * s.count / _max) if _max else 0 %}
+          {% set drop_class = 'low' if s.dropoff_pct < 25 else ('mid' if s.dropoff_pct < 60 else 'high') %}
+          <li class="pulse-funnel-step">
+            <div class="pulse-funnel-step-meta">
+              <span class="pulse-funnel-step-label">{{ s.label }}</span>
+              <span class="pulse-funnel-step-count">{{ "{:,}".format(s.count).replace(",", ".") }}<span class="pulse-funnel-step-pct">({{ s.pct_of_total }}%)</span></span>
+            </div>
+            <div class="pulse-funnel-step-track">
+              <div class="pulse-funnel-step-fill"
+                   style="width: {{ width_pct }}%; background: {{ s.color }};"></div>
+            </div>
+            <div class="pulse-funnel-step-drop drop-{{ drop_class }}">
+              {% if not loop.first %}↓{{ s.dropoff_pct }}%{% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ol>
+      {% if summary.funnel.visited and (summary.funnel.visited[1] or summary.funnel.visited[2]) %}
+        <p class="pulse-funnel-note">
+          👁 Page-loaders without play:
+          <b>C1 · {{ summary.funnel.visited[1] }}</b> ·
+          <b>C2 · {{ summary.funnel.visited[2] }}</b> ·
+          <b>C3 · {{ summary.funnel.visited.get(3, 0) }}</b>
+          <span class="pulse-muted-inline">(opened the page, didn't press play)</span>
+        </p>
+      {% endif %}
+    {% else %}
+      <p class="pulse-muted">No funnel data yet.</p>
+    {% endif %}
+  </div>
+
+  {# ─── Temperature distribution ────────────────────────────── #}
+  <div class="pulse-card" style="margin-top: 18px;">
+    <h3 class="pulse-card-title">▌ Temperature distribution · all leads bucketed</h3>
+    <div class="pulse-temp-bar">
+      {% for b in summary.temperature_dist %}
+        {% if b.count > 0 %}
+          <div class="pulse-temp-segment"
+               style="flex: {{ b.count }}; background: {{ b.color }};"
+               title="{{ b.label }} · {{ b.count }} ({{ b.pct }}%)">
+            <span class="pulse-temp-seg-label">{{ b.label }}</span>
+            <span class="pulse-temp-seg-pct">{{ b.pct }}%</span>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <ol class="pulse-temp-legend">
+      {% for b in summary.temperature_dist %}
+        <li class="pulse-temp-legend-row">
+          <span class="pulse-temp-dot" style="background: {{ b.color }};" aria-hidden="true"></span>
+          <span class="pulse-temp-legend-label">{{ b.label }}</span>
+          <span class="pulse-temp-legend-count">{{ "{:,}".format(b.count).replace(",", ".") }}</span>
+          <span class="pulse-temp-legend-pct">{{ b.pct }}%</span>
+        </li>
+      {% endfor %}
+    </ol>
+  </div>
+
+  {# ─── Action queue breakdown ──────────────────────────────── #}
+  <div class="pulse-card" style="margin-top: 18px;">
+    <h3 class="pulse-card-title">▌ Action queue · who needs contacting next</h3>
+    <div class="pulse-queue-grid">
+      <a class="pulse-queue-cell pulse-queue-cell--burning"
+         href="{{ url_for('admin.leads') }}?temp=burning&not_contacted=1&sort=temp"
+         title="Open in /admin/leads for outreach">
+        <span class="pulse-queue-emoji">🔥</span>
+        <div class="pulse-queue-text">
+          <span class="pulse-queue-num">{{ summary.queue.burning_uncontacted }}</span>
+          <span class="pulse-queue-lbl">Burning · uncontacted</span>
+        </div>
+      </a>
+      <a class="pulse-queue-cell pulse-queue-cell--hot"
+         href="{{ url_for('admin.leads') }}?temp=hot&not_contacted=1&sort=temp"
+         title="Open in /admin/leads for outreach">
+        <span class="pulse-queue-emoji">🚀</span>
+        <div class="pulse-queue-text">
+          <span class="pulse-queue-num">{{ summary.queue.hot_uncontacted }}</span>
+          <span class="pulse-queue-lbl">Hot · uncontacted</span>
+        </div>
+      </a>
+      <a class="pulse-queue-cell pulse-queue-cell--contacted"
+         href="{{ url_for('admin.leads') }}?sort=recent">
+        <span class="pulse-queue-emoji">📲</span>
+        <div class="pulse-queue-text">
+          <span class="pulse-queue-num">{{ summary.queue.contacted_today }}</span>
+          <span class="pulse-queue-lbl">Contacted last 24h</span>
+        </div>
+      </a>
+    </div>
+    <p class="pulse-funnel-note">Click any tile to jump straight into /admin/leads with the filter pre-applied.</p>
+  </div>
+
+  {# ─── Pending: cohorts (next iteration) ──────────────────── #}
+  <div class="pulse-card" style="margin-top: 18px;">
+    <h3 class="pulse-card-title">▌ Cohort retention · do they come back? (queued)</h3>
+    <div class="pulse-empty-card">
+      <span class="pulse-empty-icon">📅</span>
+      <p>Weekly cohort retention (signups week X → still active at day 7, 14, 30) lands in iteration 6.</p>
+    </div>
+  </div>
+
 </section>
 {% endblock %}
