@@ -6,6 +6,8 @@
 
 {% block admin_content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pulse.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/pulse_charts.js') }}"></script>
 
 <div class="pulse-shell">
   <header class="pulse-header">

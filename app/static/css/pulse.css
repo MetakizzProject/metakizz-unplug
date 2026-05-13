@@ -338,6 +338,107 @@
   }
 }
 
+/* ── Chart wrap (sets a stable height for responsive Chart.js) ── */
+.pulse-chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 280px;
+}
+
+@media (min-width: 1024px) {
+  .pulse-chart-wrap { height: 320px; }
+}
+
+/* ── Ranked list (top referrers, leaderboards, top performers) ── */
+.pulse-rank-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pulse-rank-row {
+  display: grid;
+  grid-template-columns: 36px 1fr minmax(60px, auto) minmax(72px, auto);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.pulse-rank-row:hover {
+  border-color: var(--pulse-border-strong);
+  background: var(--pulse-card-bg-hover);
+}
+
+.pulse-rank-pos {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--pulse-accent);
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.pulse-rank-row:nth-child(1) .pulse-rank-pos { color: #FFD24A; }    /* gold */
+.pulse-rank-row:nth-child(2) .pulse-rank-pos { color: #D9DEE2; }    /* silver */
+.pulse-rank-row:nth-child(3) .pulse-rank-pos { color: #E0986A; }    /* bronze */
+
+.pulse-rank-id {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pulse-rank-name {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+  color: var(--pulse-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pulse-rank-email {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--pulse-muted);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pulse-rank-count {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  color: #fff;
+  text-align: right;
+}
+
+.pulse-rank-unit {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--pulse-muted);
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .pulse-rank-row {
+    grid-template-columns: 32px 1fr auto;
+  }
+  .pulse-rank-unit { display: none; }
+}
+
 /* ── Status pill (used for "scaffold" / "draft" / "live" states) ─ */
 .pulse-status-pill {
   display: inline-flex;

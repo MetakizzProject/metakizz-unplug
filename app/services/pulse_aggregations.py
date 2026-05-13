@@ -34,7 +34,8 @@ def acquisition_summary() -> dict:
     counters. No extra DB schema needed.
     """
     from datetime import datetime, timedelta, timezone
-    from app.models import Ambassador
+    from sqlalchemy import func
+    from app.models import db, Ambassador
     from app.services.temperature import classify_source, SOURCE_BUCKETS
 
     now = datetime.now(timezone.utc)
@@ -104,6 +105,98 @@ def acquisition_summary() -> dict:
             "share_pct": round(count * 100.0 / total_for_share, 1),
         })
 
+    # ─── Timeline 30d stacked by source ────────────────────────
+    # Last 30 calendar days, count signups/day, broken out by source.
+    cutoff_30d = now - timedelta(days=30)
+    recent_rows = (
+        Ambassador.query.with_entities(
+            Ambassador.created_at,
+            Ambassador.utm_source, Ambassador.utm_medium, Ambassador.utm_campaign,
+            Ambassador.fbclid, Ambassador.gclid, Ambassador.ttclid,
+        )
+        .filter(Ambassador.created_at >= cutoff_30d)
+        .all()
+    )
+    # Build a contiguous date axis (last 30 days inclusive of today).
+    today = now.date()
+    days = [(today - timedelta(days=i)) for i in range(29, -1, -1)]
+    day_index = {d: i for i, d in enumerate(days)}
+
+    # Bucket sources to a smaller set for chart readability.
+    # Merge variants ("instagram" + "instagram_ad" → "Instagram", etc).
+    def _bucket_for_chart(key):
+        if key.startswith("instagram"):
+            return ("instagram", "Instagram", "#E1306C")
+        if key.startswith("facebook"):
+            return ("facebook", "Facebook", "#1877F2")
+        if key.startswith("google"):
+            return ("google", "Google", "#FBBC04")
+        if key.startswith("tiktok"):
+            return ("tiktok", "TikTok", "#FE2C55")
+        if key == "referral":
+            return ("referral", "Referral", "#A78BFA")
+        if key == "email":
+            return ("email", "Email", "#60A5FA")
+        if key == "direct":
+            return ("direct", "Direct", "#9CA3AF")
+        return ("other", "Other", "#6B7280")
+
+    series_buckets = {}  # bucket_key → {label, color, values:[30]}
+    for r in recent_rows:
+        ts = r[0]
+        if ts is None:
+            continue
+        d = ts.date() if hasattr(ts, "date") else ts
+        idx = day_index.get(d)
+        if idx is None:
+            continue
+        info = classify_source(_Shim(r[1:]))
+        bk, blabel, bcolor = _bucket_for_chart(info["key"])
+        if bk not in series_buckets:
+            series_buckets[bk] = {"label": blabel, "color": bcolor, "values": [0] * 30}
+        series_buckets[bk]["values"][idx] += 1
+
+    # Sort series by total descending so the biggest sits at the bottom
+    # of the stack (Chart.js renders datasets bottom-up).
+    series_sorted = sorted(
+        series_buckets.values(),
+        key=lambda s: -sum(s["values"]),
+    )
+    timeline_30d = {
+        "labels": [d.strftime("%b %-d") for d in days],
+        "series": series_sorted,
+    }
+
+    # ─── Top referrers ─────────────────────────────────────────
+    # Group referrals by ambassador, top 10 with at least 1 referral.
+    from app.models import Referral
+    referrer_rows = (
+        db.session.query(
+            Referral.ambassador_id,
+            func.count(Referral.id).label("cnt"),
+        )
+        .group_by(Referral.ambassador_id)
+        .order_by(func.count(Referral.id).desc())
+        .limit(10)
+        .all()
+    )
+    top_amb_ids = [r[0] for r in referrer_rows]
+    amb_lookup = {}
+    if top_amb_ids:
+        for a in Ambassador.query.filter(Ambassador.id.in_(top_amb_ids)).all():
+            amb_lookup[a.id] = a
+    top_referrers = []
+    for amb_id, cnt in referrer_rows:
+        a = amb_lookup.get(amb_id)
+        if not a:
+            continue
+        top_referrers.append({
+            "id": a.id,
+            "name": a.name or "(no name)",
+            "email": a.email or "",
+            "count": cnt,
+        })
+
     return {
         "total_leads": total,
         "new_7d": new_7d,
@@ -111,6 +204,8 @@ def acquisition_summary() -> dict:
         "delta_7d": delta,
         "delta_7d_pct": round(delta_pct, 1),
         "source_breakdown": source_breakdown,
+        "timeline_30d_by_source": timeline_30d,
+        "top_referrers": top_referrers,
     }
 
 

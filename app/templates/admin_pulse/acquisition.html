@@ -68,30 +68,118 @@
     {% endif %}
   </div>
 
-  {# ─── Pending panels (clearly labeled scaffold) ─────────── #}
+  {# ─── Timeline 30d stacked by source ─────────────────────── #}
   <div class="pulse-card" style="margin-top: 18px;">
-    <h3 class="pulse-card-title">▌ Per-source funnel · signup → masterclass → deposit → full</h3>
-    <div class="pulse-empty-card">
-      <span class="pulse-empty-icon">🚧</span>
-      <p>Funnel rendering ships in the next iteration. Source data is already wired (see above) — funnel adds the per-source conversion steps.</p>
-    </div>
+    <h3 class="pulse-card-title">▌ Daily signups · last 30 days · stacked by source</h3>
+    {% if summary.timeline_30d_by_source.series %}
+      <div class="pulse-chart-wrap">
+        <canvas id="pulseTimelineChart"
+                data-labels='{{ summary.timeline_30d_by_source.labels|tojson }}'
+                data-series='{{ summary.timeline_30d_by_source.series|tojson }}'
+                aria-label="Daily signups stacked by source over the last 30 days"></canvas>
+      </div>
+    {% else %}
+      <p class="pulse-muted">No signups in the last 30 days.</p>
+    {% endif %}
   </div>
 
+  {# ─── Top referrers ──────────────────────────────────────── #}
   <div class="pulse-card" style="margin-top: 18px;">
-    <h3 class="pulse-card-title">▌ Top referrers · individuals who brought the most</h3>
-    <div class="pulse-empty-card">
-      <span class="pulse-empty-icon">🤝</span>
-      <p>Top 10 referrers list coming in the next iteration.</p>
-    </div>
+    <h3 class="pulse-card-title">▌ Top referrers · the 10 who brought the most</h3>
+    {% if summary.top_referrers %}
+      <ol class="pulse-rank-list">
+        {% for r in summary.top_referrers %}
+          <li class="pulse-rank-row">
+            <span class="pulse-rank-pos">{{ loop.index }}</span>
+            <div class="pulse-rank-id">
+              <span class="pulse-rank-name">{{ r.name }}</span>
+              <span class="pulse-rank-email">{{ r.email }}</span>
+            </div>
+            <span class="pulse-rank-count">{{ r.count }}</span>
+            <span class="pulse-rank-unit">brought</span>
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="pulse-muted">No referrals tracked yet.</p>
+    {% endif %}
   </div>
 
+  {# ─── Geographic placeholder (next iter) ─────────────────── #}
   <div class="pulse-card" style="margin-top: 18px;">
     <h3 class="pulse-card-title">▌ Geographic spread · where in the world they are</h3>
     <div class="pulse-empty-card">
       <span class="pulse-empty-icon">🌍</span>
-      <p>Country breakdown lands in iteration 3 (uses existing <code>lookup_country</code> helper).</p>
+      <p>Country breakdown lands next iteration (uses the existing <code>lookup_country</code> helper).</p>
+    </div>
+  </div>
+
+  {# ─── Per-source funnel placeholder ──────────────────────── #}
+  <div class="pulse-card" style="margin-top: 18px;">
+    <h3 class="pulse-card-title">▌ Per-source funnel · signup → masterclass → deposit → full</h3>
+    <div class="pulse-empty-card">
+      <span class="pulse-empty-icon">🚧</span>
+      <p>Per-source conversion funnel queued for iteration 4. The pieces are in place: <code>SOURCE_BUCKETS</code> + <code>_build_email_buckets()</code> already wired.</p>
     </div>
   </div>
 
 </section>
+
+<script>
+(function () {
+  const canvas = document.getElementById('pulseTimelineChart');
+  if (!canvas || !window.Chart) return;
+  const labels = JSON.parse(canvas.dataset.labels || '[]');
+  const series = JSON.parse(canvas.dataset.series || '[]');
+  if (!labels.length || !series.length) return;
+
+  const datasets = series.map(s => ({
+    label: s.label,
+    data: s.values,
+    backgroundColor: s.color,
+    borderColor: s.color,
+    borderWidth: 0,
+    stack: 'sources',
+    borderRadius: 2,
+    barPercentage: 0.96,
+    categoryPercentage: 0.86,
+  }));
+
+  new Chart(canvas, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          align: 'end',
+          labels: {
+            usePointStyle: true,
+            pointStyle: 'rectRounded',
+            padding: 14,
+            font: { family: 'Share Tech Mono, monospace', size: 11 },
+          },
+        },
+        tooltip: { padding: 10 },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { display: false },
+          ticks: { maxRotation: 0, autoSkip: true, autoSkipPadding: 8 },
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          ticks: { precision: 0 },
+        },
+      },
+    },
+  });
+})();
+</script>
 {% endblock %}
