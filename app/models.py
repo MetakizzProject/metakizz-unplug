@@ -75,6 +75,7 @@ class Ambassador(db.Model):
     class1_rewatch_reminder_sent_at = db.Column(db.DateTime, nullable=True)
     class2_rewatch_reminder_sent_at = db.Column(db.DateTime, nullable=True)
     class3_rewatch_reminder_sent_at = db.Column(db.DateTime, nullable=True)
+    musicality_replay_sent_at = db.Column(db.DateTime, nullable=True)
 
     # Personal outreach tracking — when the founder/team contacted this lead
     # via a 1:1 channel (WhatsApp DM, email, phone call, SMS). Used to:

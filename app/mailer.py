@@ -655,6 +655,42 @@ def send_class3_rewatch_reminder_email(ambassador, app_url):
     return send_class_rewatch_reminder_email(ambassador, app_url, 3)
 
 
+def send_musicality_replay_email(ambassador, app_url):
+    """Manual admin send: musicality-masterclass replay drop.
+
+    Audience is the `public_winners` segment (5+ unplugs, source=public) —
+    the dancers who unlocked the live by completing the Hacking the
+    Urbankizz Code challenge. Replay URL comes from MUSICALITY_REPLAY_URL
+    env var (so we don't bake the URL into code).
+    """
+    if is_unsubscribed(ambassador):
+        return False
+
+    replay_url = os.getenv(
+        "MUSICALITY_REPLAY_URL",
+        "https://inevitable.metakizzproject.com/directo-musicality",
+    ).strip()
+
+    html = render_template(
+        "emails/musicality_replay.html",
+        first_name=_first_name(ambassador),
+        replay_url=replay_url,
+        unsubscribe_url=_unsubscribe_url(ambassador, app_url),
+        app_url=app_url.rstrip("/"),
+    )
+
+    first = ambassador.name.split()[0] if ambassador.name else "Hey"
+    subject = f"{first}, the masterclass replay is up — open for 5 days"
+
+    return _send(
+        ambassador.email,
+        subject,
+        html,
+        template_key="musicality_replay",
+        ambassador=ambassador,
+    )
+
+
 def _masterclass_calendar_urls(app_url):
     """Return (ics_url, google_calendar_url, outlook_calendar_url) for
     the masterclass, all driven by the same MASTERCLASS_* env vars so a

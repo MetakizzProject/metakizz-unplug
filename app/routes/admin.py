@@ -40,6 +40,7 @@ from app.mailer import (
     send_class1_rewatch_reminder_email,
     send_class2_rewatch_reminder_email,
     send_class3_rewatch_reminder_email,
+    send_musicality_replay_email,
     send_reservation_first50_email,
     send_custom_html_email,
     render_custom_html_preview,
@@ -1202,6 +1203,7 @@ EMAIL_TEMPLATES_META = [
     ("last_6h",              "Last 6h",            "Cron one-shot · 2026-05-07 13:00 Madrid",          "cron one-shot"),
     ("results_announcement", "Results",            "Cron one-shot · 2026-05-08 10:00 Madrid",          "cron one-shot"),
     ("you_won",              "You Won",            "Cron one-shot · 2026-05-08 10:30 Madrid",          "cron one-shot"),
+    ("musicality_replay",    "Musicality Replay",  "Admin manual · sends replay link to public winners", "admin manual"),
     ("broadcast",            "Broadcast",          "Admin manual via /admin (broadcast modal)",        "admin"),
 ]
 
@@ -1987,6 +1989,7 @@ def emails():
         ("webinar_reminder", "webinar_reminder_sent_at"),
         ("final_signal",     "final_signal_sent_at"),
         ("live_imminent",    "live_imminent_sent_at"),
+        ("musicality_replay", "musicality_replay_sent_at"),
     ]
 
     # Single union query: every (email, event_type) pair that could trigger
@@ -2423,6 +2426,16 @@ _SEGMENT_TEMPLATES = {
         "default_segment": "sleepers_class3",
         "flag": "class3_rewatch_reminder_sent_at",
         "label": "Class 3 rewatch reminder (weekend re-open)",
+        "min_age_days": 0,
+    },
+    # Musicality-masterclass replay drop. Aimed at public_winners (5+ unplugs,
+    # source=public) — the dancers who unlocked the live. Replay URL is
+    # MUSICALITY_REPLAY_URL env var with a sensible default.
+    "musicality_replay": {
+        "fn": send_musicality_replay_email,
+        "default_segment": "public_winners",
+        "flag": "musicality_replay_sent_at",
+        "label": "Musicality masterclass replay (5-day window)",
         "min_age_days": 0,
     },
 }
@@ -3235,6 +3248,10 @@ def test_email():
             elif email_type == "class3_rewatch_reminder":
                 fake.referral_count = 0
                 success = send_class3_rewatch_reminder_email(fake, app_url)
+
+            elif email_type == "musicality_replay":
+                fake.referral_count = 7
+                success = send_musicality_replay_email(fake, app_url)
 
             elif email_type == "reservation_first50":
                 # Reservation-based template — build a fake Reservation row.
@@ -7972,6 +7989,30 @@ def preview_masterclass_email():
         google_calendar_url=gcal_url,
         outlook_calendar_url=outlook_url,
         dashboard_url=f"{app_url}/dashboard/preview",
+        unsubscribe_url=f"{app_url}/unsubscribe/preview",
+        app_url=app_url,
+    )
+
+
+@admin_bp.route("/preview-musicality-replay-email")
+def preview_musicality_replay_email():
+    """Render the musicality-masterclass replay email for visual review.
+
+    Query params (optional):
+      ?name=<str>  first name in the greeting (default "Carla")
+    """
+    import os as _os
+    from flask import render_template
+    first_name = (request.args.get("name") or "Carla").strip() or "Carla"
+    app_url = (current_app.config.get("APP_URL") or request.host_url or "https://example.com").rstrip("/")
+    replay_url = _os.getenv(
+        "MUSICALITY_REPLAY_URL",
+        "https://inevitable.metakizzproject.com/directo-musicality",
+    ).strip()
+    return render_template(
+        "emails/musicality_replay.html",
+        first_name=first_name,
+        replay_url=replay_url,
         unsubscribe_url=f"{app_url}/unsubscribe/preview",
         app_url=app_url,
     )

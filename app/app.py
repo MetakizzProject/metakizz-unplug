@@ -59,6 +59,7 @@ def _ensure_unsubscribe_columns(db):
             "class1_rewatch_reminder_sent_at",
             "class2_rewatch_reminder_sent_at",
             "class3_rewatch_reminder_sent_at",
+            "musicality_replay_sent_at",
             "last_outreach_at",
             "masterclass_invitation_sent_at",
             "carrots_landing_sent_at",
