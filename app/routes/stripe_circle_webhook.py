@@ -18,6 +18,15 @@ Safety:
   This lets us deploy the code, see real webhooks land, validate the
   match logic against real customers, and only flip the switch to live
   refunds once we're confident.
+
+Community guard (12-oct-2026):
+  The Circle account also sells the monthly Community subscription
+  (15-29 €). A deposit holder buying it must NOT get €100 back, so no
+  refund when the payment is smaller than the deposit, or when its
+  Stripe product is listed in STRIPE_REFUND_EXCLUDE_PRODUCT_IDS
+  (comma-separated, empty by default). Skips are logged at WARNING with
+  the reason and leave the Reservation untouched, so a later programme
+  purchase still refunds it. Logic in app/services/refund_guard.py.
 """
 
 import os
@@ -28,6 +37,12 @@ from flask import Blueprint, request, jsonify
 
 from app.models import db, Reservation, CirclePayment
 from app.mailer import send_refund_admin_alert, send_refund_confirmation_email
+from app.services.refund_guard import (
+    DEFAULT_DEPOSIT_CENTS,
+    excluded_product_ids,
+    refund_skip_reason,
+    resolve_product_ids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +231,42 @@ def stripe_circle_webhook():
         # for direct-purchase customers — nothing to refund.
         logger.info("circle webhook: no deposit reservation for email=%s — skipping refund", email)
         return jsonify(ok=True, no_deposit=True), 200
+
+    # Community guard: only a real programme purchase refunds the deposit.
+    # A €15 Community charge (or any product in the exclusion list) must
+    # not. We return before touching the Reservation so it stays eligible
+    # for a later programme purchase.
+    deposit_cents = matches[0].amount_cents or DEFAULT_DEPOSIT_CENTS
+    excluded_ids = excluded_product_ids()
+    product_ids = set()
+    if excluded_ids and refund_skip_reason(amount, deposit_cents) is None:
+        product_ids = resolve_product_ids(
+            stripe, event_type, event["data"]["object"],
+            os.getenv("STRIPE_CIRCLE_API_KEY", "").strip(),
+        )
+        if not product_ids:
+            logger.warning(
+                "circle webhook: product not resolved for charge=%s — "
+                "STRIPE_REFUND_EXCLUDE_PRODUCT_IDS not applied, amount check only",
+                circle_charge_id,
+            )
+    skip_reason = refund_skip_reason(amount, deposit_cents, product_ids, excluded_ids)
+    if skip_reason:
+        # WARNING (not INFO) so the decision shows up in Render's logs.
+        logger.warning(
+            "circle webhook: REFUND SKIPPED reason=%s charge=%s email=%s "
+            "amount=%s %s deposit=%s products=%s description=%r reservations=%s",
+            skip_reason, circle_charge_id, email, amount, currency,
+            deposit_cents, sorted(product_ids) or "-", description,
+            [r.id for r in matches],
+        )
+        return jsonify(
+            ok=True,
+            refund_skipped=True,
+            reason=skip_reason,
+            amount_cents=amount,
+            deposit_cents=deposit_cents,
+        ), 200
 
     if len(matches) > 1:
         # Should be rare. Don't auto-pick — let the admin decide.
