@@ -97,20 +97,34 @@ def list_member_access_group_ids(member_id):
     return ids
 
 
-def _resolve_target_group(buyer_group_ids, dancers_id, instructors_id):
+# MKOT Academy (sucesor de MKOT 3.0) vende desde oct-2026 con sus propios
+# grupos. El comprador puede estar en el grupo de Academy o en el antiguo de
+# MKOT 3.0; la pareja va al mismo grupo que el comprador.
+ACADEMY_DANCERS_DEFAULT = "150936"
+ACADEMY_INSTRUCTORS_DEFAULT = "150937"
+
+
+def _env_group_id(name, default=""):
+    raw = os.getenv(name, default).strip()
+    return int(raw) if raw.isdigit() else None
+
+
+def _resolve_target_group(buyer_group_ids, dancers_ids, instructors_ids):
     """Pick which access group the partner should be added to.
 
-    Returns ("dancers" | "instructors" | None, target_id_or_None).
+    dancers_ids / instructors_ids are ordered lists (Academy first, then the
+    legacy MKOT 3.0 group). Returns ("dancers" | "instructors" | None,
+    target_id_or_None): the first group of the list that the buyer is in.
 
-    If the buyer is in BOTH, prefer Dancers (more common for couples). The
-    admin alert will note it so Álvaro can correct manually if needed.
+    If the buyer is in BOTH tracks, prefer Dancers (more common for couples).
+    The admin alert will note it so Álvaro can correct manually if needed.
     """
-    in_dancers = dancers_id and dancers_id in buyer_group_ids
-    in_instructors = instructors_id and instructors_id in buyer_group_ids
-    if in_dancers:
-        return "dancers", dancers_id
-    if in_instructors:
-        return "instructors", instructors_id
+    for gid in dancers_ids:
+        if gid in buyer_group_ids:
+            return "dancers", gid
+    for gid in instructors_ids:
+        if gid in buyer_group_ids:
+            return "instructors", gid
     return None, None
 
 
@@ -127,12 +141,16 @@ def invite_partner_to_circle(buyer_email, partner_email, partner_name):
     """
     token = os.getenv("CIRCLE_API_TOKEN")
     community_id = os.getenv("CIRCLE_COMMUNITY_ID")
-    dancers_raw = os.getenv("CIRCLE_ACCESS_GROUP_DANCERS_ID", "").strip()
-    instructors_raw = os.getenv("CIRCLE_ACCESS_GROUP_INSTRUCTORS_ID", "").strip()
-    dancers_id = int(dancers_raw) if dancers_raw.isdigit() else None
-    instructors_id = int(instructors_raw) if instructors_raw.isdigit() else None
+    dancers_ids = [g for g in (
+        _env_group_id("CIRCLE_ACCESS_GROUP_ACADEMY_DANCERS_ID", ACADEMY_DANCERS_DEFAULT),
+        _env_group_id("CIRCLE_ACCESS_GROUP_DANCERS_ID"),
+    ) if g]
+    instructors_ids = [g for g in (
+        _env_group_id("CIRCLE_ACCESS_GROUP_ACADEMY_INSTRUCTORS_ID", ACADEMY_INSTRUCTORS_DEFAULT),
+        _env_group_id("CIRCLE_ACCESS_GROUP_INSTRUCTORS_ID"),
+    ) if g]
 
-    if not token or not community_id or (not dancers_id and not instructors_id):
+    if not token or not community_id or (not dancers_ids and not instructors_ids):
         msg = (
             "missing CIRCLE_API_TOKEN / CIRCLE_COMMUNITY_ID / "
             "CIRCLE_ACCESS_GROUP_DANCERS_ID / CIRCLE_ACCESS_GROUP_INSTRUCTORS_ID"
@@ -163,25 +181,24 @@ def invite_partner_to_circle(buyer_email, partner_email, partner_name):
         return "failed", {"error": f"network on access_groups list: {e}"}, None
 
     target_group, target_id = _resolve_target_group(
-        buyer_group_ids, dancers_id, instructors_id,
+        buyer_group_ids, dancers_ids, instructors_ids,
     )
     if target_id is None:
         logger.warning(
             "circle: buyer %s (id=%s) is not in Dancers (%s) or Instructors (%s); groups=%s",
-            buyer_email, buyer_id, dancers_id, instructors_id, buyer_group_ids,
+            buyer_email, buyer_id, dancers_ids, instructors_ids, buyer_group_ids,
         )
         return "buyer_no_group", {
             "buyer_email": buyer_email,
             "buyer_id": buyer_id,
             "buyer_group_ids": buyer_group_ids,
-            "dancers_id": dancers_id,
-            "instructors_id": instructors_id,
+            "dancers_ids": dancers_ids,
+            "instructors_ids": instructors_ids,
         }, None
 
     in_both = (
-        dancers_id and instructors_id
-        and dancers_id in buyer_group_ids
-        and instructors_id in buyer_group_ids
+        any(g in buyer_group_ids for g in dancers_ids)
+        and any(g in buyer_group_ids for g in instructors_ids)
     )
 
     # Step 3: create the partner. The POST /community_members body does NOT
