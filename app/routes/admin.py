@@ -56,6 +56,18 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 logger = logging.getLogger(__name__)
 
 
+def _invoice_email_enabled():
+    """Whether invoices are emailed to the customer.
+
+    OFF by default since 13-oct-2026 (Álvaro): invoices keep being numbered,
+    generated and stored here (invoice_id + invoice_pdf_bytes), but no email
+    goes out until invoicing moves to Supabase / the admin panel. Rows stored
+    this way keep invoice_sent_at NULL, so the move knows they were never
+    sent. Set INVOICE_EMAIL_ENABLED=1 in Render to send again.
+    """
+    return os.getenv("INVOICE_EMAIL_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
 def _generate_and_send_invoice(circle_payment, force=False):
     """Generate the invoice PDF for a CirclePayment and email it to the
     customer. Idempotent — returns False (without re-sending) if already
@@ -94,6 +106,17 @@ def _generate_and_send_invoice(circle_payment, force=False):
     except Exception:
         logger.exception("invoice PDF generation failed for CirclePayment %s", circle_payment.id)
         return False
+
+    if not _invoice_email_enabled():
+        # Store without emailing (see _invoice_email_enabled). Same immutable
+        # bytes as a sent invoice; invoice_sent_at stays NULL on purpose.
+        circle_payment.invoice_pdf_bytes = pdf_bytes
+        db.session.commit()
+        logger.info(
+            "invoice stored WITHOUT email (INVOICE_EMAIL_ENABLED off): cp=%s invoice_number=%s pdf_bytes=%d",
+            circle_payment.id, invoice_number, len(pdf_bytes),
+        )
+        return True
 
     try:
         sent = bool(send_invoice_email(circle_payment, invoice_number, pdf_bytes))
