@@ -192,8 +192,10 @@ def stripe_circle_webhook():
                 circle_charge_id, email, amount,
             )
 
-    # Auto-send invoice on every fresh CirclePayment. Opt out with
-    # INVOICE_AUTO_SEND=0 if we ever need to disable (e.g. debugging).
+    # Invoice every fresh CirclePayment. Opt out entirely with
+    # INVOICE_AUTO_SEND=0. Whether the invoice is also EMAILED is a separate
+    # switch, INVOICE_EMAIL_ENABLED (off since 13-oct-2026: number + PDF are
+    # still stored here, no email). See admin._invoice_email_enabled.
     if new_circle_payment is not None and os.getenv("INVOICE_AUTO_SEND", "1").strip() not in ("0", "false", "False", "no"):
         try:
             from app.routes.admin import _generate_and_send_invoice
