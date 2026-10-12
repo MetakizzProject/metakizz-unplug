@@ -16,10 +16,11 @@ import re
 import logging
 from datetime import datetime, timezone
 
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, redirect, render_template, request, jsonify
 
 from app.models import db, PartnerInvite
 from app.services.circle_invite import invite_partner_to_circle, serialize_response
+from app.services.partner_invite_redirect import new_invite_url
 from app.mailer import (
     send_partner_buyer_confirmation,
     send_partner_invite_failure_alert,
@@ -56,7 +57,13 @@ def invite_form():
     """Render the form. If `?buyer_name=…&buyer_email=…` are present and
     valid, render in pre-filled mode (only partner fields visible; buyer
     data injected as hidden inputs). Otherwise show the full 4-field form.
+
+    Since 13-oct-2026 the invite lives in the member app + admin panel: this
+    URL only redirects there (see app/services/partner_invite_redirect.py).
     """
+    target = new_invite_url(request.args)
+    if target:
+        return redirect(target, code=302)
     buyer_name = (request.args.get("buyer_name") or "").strip()
     buyer_email_raw = (request.args.get("buyer_email") or "").strip().lower()
     prefilled = bool(
