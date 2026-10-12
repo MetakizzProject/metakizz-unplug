@@ -269,11 +269,16 @@ def create_app():
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "metakizz.db"
         ),
     )
-    # Render's Postgres uses "postgres://" but SQLAlchemy requires "postgresql://"
-    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgres://"):
-        app.config["SQLALCHEMY_DATABASE_URI"] = app.config["SQLALCHEMY_DATABASE_URI"].replace(
-            "postgres://", "postgresql://", 1
-        )
+    # Render's Postgres uses "postgres://" (or "postgresql://"). Name the driver
+    # explicitly: SQLAlchemy 2.1 switched the default PostgreSQL driver to
+    # psycopg 3, and this app ships psycopg2 (that broke every deploy from
+    # 9-oct-2026 with "No module named 'psycopg'").
+    for _prefix in ("postgres://", "postgresql://"):
+        if app.config["SQLALCHEMY_DATABASE_URI"].startswith(_prefix):
+            app.config["SQLALCHEMY_DATABASE_URI"] = app.config["SQLALCHEMY_DATABASE_URI"].replace(
+                _prefix, "postgresql+psycopg2://", 1
+            )
+            break
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["APP_URL"] = os.getenv("APP_URL", "http://localhost:5000")
     app.config["LANDING_URL"] = os.getenv("LANDING_URL", "http://localhost:5000")
